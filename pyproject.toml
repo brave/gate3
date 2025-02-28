@@ -1,0 +1,27 @@
+[project]
+name = "gate3"
+version = "0.1.0"
+description = "Gate API for web3 applications at Brave"
+authors = [
+]
+license = {text = "n"}
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "fastapi[standard] (>=0.115.8,<0.116.0)",
+    "pydantic-settings (>=2.8.0,<3.0.0)",
+    "redis[hiredis] (>=5.2.1,<6.0.0)",
+    "orjson (>=3.10.15,<4.0.0)"
+]
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry]
+package-mode = false
+
+[tool.poetry.group.dev.dependencies]
+ruff = "^0.9.7"
+
