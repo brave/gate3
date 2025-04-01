@@ -3,8 +3,13 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.core.cache import Cache
-from app.api.v1.pricing.routes import router as pricing_router
-from app.api.v1.routes import router as base_router
+from app.api.pricing.routes import router as pricing_router
+from app.api.nft.routes import (
+    router as nfts_router,
+    simplehash_router as simplehash_nfts_router,
+)
+from app.api.common.routes import router as base_router
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -14,8 +19,13 @@ async def lifespan(app: FastAPI):
     yield
     await Cache.close()
 
+
 app = FastAPI(lifespan=lifespan)
 
 
-app.include_router(base_router, prefix="/v1")
-app.include_router(pricing_router, prefix="/v1")
+app.include_router(base_router, prefix="/api")
+app.include_router(pricing_router, prefix="/api")
+app.include_router(nfts_router, prefix="/api")
+
+# SimpleHash API adapter
+app.include_router(simplehash_nfts_router, prefix="/simplehash")
