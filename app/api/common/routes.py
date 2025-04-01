@@ -1,9 +1,10 @@
 from fastapi import APIRouter
 
 from app.core.cache import Cache
-from app.api.v1.models import PingResponse, HealthStatus
+from app.api.common.models import PingResponse, HealthStatus
 
 router = APIRouter()
+
 
 @router.get("/ping", response_model=PingResponse)
 async def ping():
