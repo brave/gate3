@@ -3,19 +3,22 @@ from fastapi import APIRouter, Query, Path
 from fastapi.responses import RedirectResponse
 from app.api.common.models import ChainId
 from app.api.nft.models import (
+    TraitAttribute,
     SimpleHashChain,
     SimpleHashNFT,
     SimpleHashNFTResponse,
     SimpleHashTokenType,
     SimpleHashContract,
     SimpleHashCollection,
-    SimpleHashAttribute,
     SimpleHashExtraMetadata,
     AlchemyNFTResponse,
     AlchemyNFT,
     AlchemyTokenType,
     AlchemyChain,
     SolanaAssetMerkleProof,
+    SolanaAssetResponse,
+    SolanaAsset,
+    SolanaAssetRawContent,
 )
 from app.config import settings
 
@@ -83,7 +86,7 @@ def _transform_alchemy_to_simplehash(
 
     # Transform attributes to SimpleHash format
     transformed_attributes = [
-        SimpleHashAttribute(trait_type=attr.trait_type, value=attr.value)
+        TraitAttribute(trait_type=attr.trait_type, value=attr.value)
         for attr in attributes
     ]
 
@@ -124,6 +127,80 @@ def _transform_alchemy_to_simplehash(
     )
 
 
+async def _transform_solana_asset_to_simplehash(asset: SolanaAsset) -> SimpleHashNFT:
+    # Skip burnt NFTs
+    if asset.burnt:
+        return None
+
+    name = asset.content.metadata.name
+    symbol = asset.content.metadata.symbol
+    description = asset.content.metadata.description
+
+    # Get collection info from grouping
+    collection_name = next(
+        (
+            group.collection_metadata.name
+            for group in asset.grouping
+            if group.group_key == "collection" and group.collection_metadata
+        ),
+        "",
+    )
+
+    # Extract image URL from content
+    image_url = None
+    if asset.content.links.image:
+        image_url = asset.content.links.image
+    elif asset.content.files:
+        image_url = next(
+            (
+                file.uri
+                for file in asset.content.files
+                if file.mime.startswith("image/") and file.uri
+            ),
+            None,
+        )
+
+    if not any([name, symbol, description, image_url]):
+        with httpx.AsyncClient() as client:
+            raw_content_response = await client.get(asset.content.json_uri)
+            raw_content_response.raise_for_status()
+            raw_content_data = SolanaAssetRawContent.model_validate(
+                raw_content_response.json()
+            )
+
+            name = name or raw_content_data.name
+            symbol = symbol or raw_content_data.symbol
+            description = description or raw_content_data.description
+            image_url = image_url or raw_content_data.image
+
+    return SimpleHashNFT(
+        chain=SimpleHashChain.SOLANA,
+        contract_address=asset.id,
+        token_id=None,
+        name=name,
+        description=description,
+        image_url=image_url,
+        background_color=None,
+        external_url=asset.content.links.external_url,
+        contract=SimpleHashContract(
+            type=SimpleHashTokenType.NON_FUNGIBLE,
+            name=name,
+            symbol=symbol,
+        ),
+        collection=SimpleHashCollection(
+            name=collection_name,
+            spam_score=0,
+        ),
+        extra_metadata=SimpleHashExtraMetadata(
+            attributes=asset.content.metadata.attributes,
+            properties={},
+            image_original_url=image_url,
+            animation_original_url=None,
+            metadata_original_url=asset.content.json_uri,
+        ),
+    )
+
+
 @router.get("/v1/getNFTsForOwner", response_model=SimpleHashNFTResponse)
 async def get_nfts_by_owner(
     wallet_address: str = Query(
@@ -145,30 +222,68 @@ async def get_nfts_by_owner(
 
     async with httpx.AsyncClient() as client:
         for chain_id in chains:
-            alchemy_chain = _chain_id_to_alchemy_chain(chain_id)
+            if chain_id == ChainId.SOLANA:
+                # Handle Solana NFTs differently
+                url = f"https://solana-mainnet.g.alchemy.com/v2/{settings.ALCHEMY_API_KEY}"
+                params = {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "getAssetsByOwner",
+                    "params": {
+                        "ownerAddress": wallet_address,
+                        "limit": page_size,
+                        "options": {
+                            "showUnverifiedCollections": False,
+                            "showCollectionMetadata": True,
+                        },
+                    },
+                }
+                if page_key:
+                    params["params"]["page"] = page_key
 
-            url = f"https://{alchemy_chain.value}.g.alchemy.com/nft/v3/{settings.ALCHEMY_API_KEY}/getNFTsForOwner"
-            params = httpx.QueryParams(
-                owner=wallet_address,
-                pageSize=page_size,
-                withMetadata=True,
-            )
-            if page_key:
-                params = params.set("pageKey", page_key)
+                response = await client.post(url, json=params)
+                response.raise_for_status()
+                json_response = response.json()
+                if "error" in json_response:
+                    raise ValueError(f"Alchemy API error: {json_response['error']}")
 
-            response = await client.get(url, params=params)
-            response.raise_for_status()
+                solana_response = SolanaAssetResponse.model_validate(
+                    json_response["result"]
+                )
 
-            json_response = response.json()
-            data = AlchemyNFTResponse.model_validate(json_response)
+                # Transform Solana assets to SimpleHash format
+                for asset in solana_response.items:
+                    if transformed_nft := await _transform_solana_asset_to_simplehash(
+                        asset
+                    ):
+                        nfts.append(transformed_nft)
 
-            # Transform NFTs
-            for nft in data.owned_nfts:
-                nfts.append(_transform_alchemy_to_simplehash(nft, chain_id))
+                next_page_key = page_key + 1 if page_key else None
+            else:
+                # Handle other chains as before
+                alchemy_chain = _chain_id_to_alchemy_chain(chain_id)
+                url = f"https://{alchemy_chain.value}.g.alchemy.com/nft/v3/{settings.ALCHEMY_API_KEY}/getNFTsForOwner"
+                params = httpx.QueryParams(
+                    owner=wallet_address,
+                    pageSize=page_size,
+                    withMetadata=True,
+                )
+                if page_key:
+                    params = params.set("pageKey", page_key)
 
-            # Update next page key
-            if data.page_key:
-                next_page_key = data.page_key
+                response = await client.get(url, params=params)
+                response.raise_for_status()
+
+                json_response = response.json()
+                data = AlchemyNFTResponse.model_validate(json_response)
+
+                # Transform NFTs
+                for nft in data.owned_nfts:
+                    nfts.append(_transform_alchemy_to_simplehash(nft, chain_id))
+
+                # Update next page key
+                if data.page_key:
+                    next_page_key = data.page_key
 
     return SimpleHashNFTResponse(next_cursor=next_page_key, nfts=nfts)
 

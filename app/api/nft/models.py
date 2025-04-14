@@ -32,7 +32,7 @@ class AlchemyImage(BaseModel):
         alias_generator = to_camel
 
 
-class AlchemyAttribute(BaseModel):
+class TraitAttribute(BaseModel):
     trait_type: str
     value: str | bool | int | float | None = None
 
@@ -42,7 +42,7 @@ class AlchemyRawMetadata(BaseModel):
     description: str | None = None
     image: str | None = None
     external_url: str | None = None
-    attributes: list[AlchemyAttribute] = Field(default_factory=list)
+    attributes: list[TraitAttribute] = Field(default_factory=list)
     properties: dict = Field(default_factory=dict)
 
     class Config:
@@ -104,6 +104,7 @@ class SimpleHashChain(str, Enum):
 class SimpleHashTokenType(str, Enum):
     ERC721 = "ERC721"
     ERC1155 = "ERC1155"
+    NON_FUNGIBLE = "NonFungible"
 
 
 class SimpleHashContract(BaseModel):
@@ -113,17 +114,12 @@ class SimpleHashContract(BaseModel):
 
 
 class SimpleHashCollection(BaseModel):
-    name: str
+    name: str | None = None
     spam_score: int | None = None
 
 
-class SimpleHashAttribute(BaseModel):
-    trait_type: str
-    value: str | bool | int | float | None = None
-
-
 class SimpleHashExtraMetadata(BaseModel):
-    attributes: list[SimpleHashAttribute] = Field(default_factory=list)
+    attributes: list[TraitAttribute] = Field(default_factory=list)
     properties: dict = Field(default_factory=dict)
     image_original_url: str | None = None
     animation_original_url: str | None = None
@@ -133,7 +129,7 @@ class SimpleHashExtraMetadata(BaseModel):
 class SimpleHashNFT(BaseModel):
     chain: SimpleHashChain
     contract_address: str
-    token_id: str
+    token_id: str | None = None
     name: str | None = None
     description: str | None = None
     image_url: str | None = None
@@ -155,3 +151,73 @@ class SolanaAssetMerkleProof(BaseModel):
     proof: list[str]
     root: str | None = None
     leaf: str | None = None
+
+
+class SolanaAssetRawContent(BaseModel):
+    name: str
+    symbol: str | None = None
+    description: str | None = None
+    image: str | None = None
+
+
+class SolanaAssetContentFile(BaseModel):
+    uri: str
+    mime: str
+
+
+class SolanaAssetContentLink(BaseModel):
+    image: str | None = None
+    external_url: str | None = None
+
+    class Config:
+        extra = "allow"
+        allow_population_by_field_name = True
+        json_encoders = {dict: lambda v: v if v else {}}
+
+
+class SolanaAssetContentMetadata(BaseModel):
+    name: str
+    symbol: str | None = None
+    description: str | None = None
+    attributes: list[TraitAttribute] = Field(default_factory=list)
+
+
+class SolanaAssetContent(BaseModel):
+    json_uri: str | None = None
+    files: list[SolanaAssetContentFile] = Field(default_factory=list)
+    metadata: SolanaAssetContentMetadata | None = None
+    links: SolanaAssetContentLink | None = None
+
+
+class SolanaAssetGroupingCollectionMetadata(BaseModel):
+    name: str | None = None
+    external_url: str | None = None
+    image: str | None = None
+    symbol: str | None = None
+
+    class Config:
+        extra = "allow"
+        allow_population_by_field_name = True
+        json_encoders = {dict: lambda v: v if v else {}}
+
+
+class SolanaAssetGrouping(BaseModel):
+    group_key: str
+    group_value: str
+    collection_metadata: SolanaAssetGroupingCollectionMetadata | None = None
+
+
+class SolanaAsset(BaseModel):
+    interface: str
+    id: str
+    content: SolanaAssetContent
+    grouping: list[SolanaAssetGrouping] = Field(default_factory=list)
+    mutable: bool
+    burnt: bool
+
+
+class SolanaAssetResponse(BaseModel):
+    total: int
+    limit: int
+    cursor: str | None = None
+    items: list[SolanaAsset]
