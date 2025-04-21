@@ -16,7 +16,7 @@ from app.api.common.annotations import (
 )
 
 
-router = APIRouter(prefix="/pricing")
+router = APIRouter(prefix="/api/pricing")
 
 
 @router.get("/v1/getPrice", response_model=TokenResponse)

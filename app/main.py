@@ -23,9 +23,9 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 
 
-app.include_router(base_router, prefix="/api")
-app.include_router(pricing_router, prefix="/api")
-app.include_router(nfts_router, prefix="/api")
+app.include_router(base_router)
+app.include_router(pricing_router)
+app.include_router(nfts_router)
 
 # SimpleHash API adapter
-app.include_router(simplehash_nfts_router, prefix="/simplehash")
+app.include_router(simplehash_nfts_router)

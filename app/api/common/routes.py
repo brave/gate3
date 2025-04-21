@@ -3,7 +3,7 @@ from fastapi import APIRouter
 from app.core.cache import Cache
 from app.api.common.models import PingResponse, HealthStatus
 
-router = APIRouter()
+router = APIRouter(prefix="/api")
 
 
 @router.get("/ping", response_model=PingResponse)
