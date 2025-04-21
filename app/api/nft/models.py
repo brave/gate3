@@ -51,7 +51,7 @@ class AlchemyRawMetadata(BaseModel):
 
 class AlchemyRaw(BaseModel):
     token_uri: str | None = None
-    metadata: AlchemyRawMetadata | None = None
+    metadata: AlchemyRawMetadata | str | None = None
     error: str | None = None
 
     class Config:

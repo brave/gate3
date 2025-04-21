@@ -81,8 +81,14 @@ def _transform_alchemy_to_simplehash(
     contract = alchemy_nft.contract
     image = alchemy_nft.image or {}
     raw = alchemy_nft.raw or {}
-    metadata = raw.metadata or {}
-    attributes = metadata.attributes or []
+    metadata = (
+        {}
+        if raw.metadata is None or isinstance(raw.metadata, str)
+        else raw.metadata
+    )
+    attributes = metadata.attributes if metadata else []
+    external_url = metadata.external_url if metadata else None
+    properties = metadata.properties if metadata else {}
 
     # Transform attributes to SimpleHash format
     transformed_attributes = [
@@ -104,7 +110,7 @@ def _transform_alchemy_to_simplehash(
 
     extra_metadata = SimpleHashExtraMetadata(
         attributes=transformed_attributes,
-        properties=metadata.properties,
+        properties=properties,
         image_original_url=image.original_url,
         animation_original_url=None,
         metadata_original_url=alchemy_nft.token_uri,
@@ -120,7 +126,7 @@ def _transform_alchemy_to_simplehash(
         description=alchemy_nft.description,
         image_url=image.cached_url,
         background_color=None,
-        external_url=metadata.external_url,
+        external_url=external_url,
         contract=contract_info,
         collection=collection,
         extra_metadata=extra_metadata,
