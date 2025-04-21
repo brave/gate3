@@ -1,3 +1,5 @@
+import json
+
 import httpx
 from fastapi import APIRouter, Query, Path
 from fastapi.responses import RedirectResponse
@@ -47,10 +49,21 @@ _CHAIN_ID_TO_ALCHEMY = {
     ChainId.ETHEREUM: AlchemyChain.ETHEREUM,
     ChainId.POLYGON: AlchemyChain.POLYGON,
     ChainId.BASE: AlchemyChain.BASE,
+    ChainId.AVALANCHE: AlchemyChain.AVALANCHE,
+    # BSC is not supported by Alchemy
+    # ChainId.BNB_CHAIN: AlchemyChain.BSC,
     ChainId.OPTIMISM: AlchemyChain.OPTIMISM,
     ChainId.ARBITRUM: AlchemyChain.ARBITRUM,
     ChainId.SOLANA: AlchemyChain.SOLANA,
 }
+
+def _get_spam_score_for_solana_collection(collection_name: str | None) -> int:
+    if collection_name is None:
+        return 0
+
+    spam_keywords = {"airdrop", "lucky box", "reward box"}
+    collection_name_lower = collection_name.lower()
+    return 1 if any(keyword in collection_name_lower for keyword in spam_keywords) else 0
 
 
 def _chain_id_to_simplehash(chain_id: ChainId) -> SimpleHashChain:
@@ -184,6 +197,15 @@ async def _transform_solana_asset_to_simplehash(asset: SolanaAsset) -> SimpleHas
             description = description or raw_content_data.description
             image_url = image_url or raw_content_data.image
 
+    cg_nft = next(
+        (
+            nft
+            for nft in cg_nfts
+            if nft["chain_id"] == ChainId.SOLANA and nft["contract_address"] == asset.id
+        ),
+        None,
+    )
+
     return SimpleHashNFT(
         chain=SimpleHashChain.SOLANA,
         contract_address=asset.id,
@@ -200,7 +222,7 @@ async def _transform_solana_asset_to_simplehash(asset: SolanaAsset) -> SimpleHas
         ),
         collection=SimpleHashCollection(
             name=collection_name,
-            spam_score=0,
+            spam_score=_get_spam_score_for_solana_collection(collection_name),
         ),
         extra_metadata=SimpleHashExtraMetadata(
             attributes=asset.content.metadata.attributes,

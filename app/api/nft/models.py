@@ -87,6 +87,8 @@ class AlchemyChain(str, Enum):
     OPTIMISM = "opt-mainnet"
     ARBITRUM = "arb-mainnet"
     SOLANA = "sol-mainnet"
+    BSC = "bnb-mainnet"
+    AVALANCHE = "avax-mainnet"
 
 
 # SimpleHash Models
