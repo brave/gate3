@@ -23,14 +23,19 @@ from app.api.nft.models import (
 from app.config import settings
 
 
-router = APIRouter(prefix="/nft")
-simplehash_router = APIRouter(prefix="/api/v0")
+router = APIRouter(prefix="/api/nft")
+simplehash_router = APIRouter(prefix="/simplehash/api/v0")
+
+with open("data/cg-nfts.json", "r") as f:
+    cg_nfts = json.load(f)
 
 # Chain mapping dictionaries
 _CHAIN_ID_TO_SIMPLEHASH = {
     ChainId.ETHEREUM: SimpleHashChain.ETHEREUM,
     ChainId.POLYGON: SimpleHashChain.POLYGON,
     ChainId.BASE: SimpleHashChain.BASE,
+    ChainId.AVALANCHE: SimpleHashChain.AVALANCHE,
+    ChainId.BNB_CHAIN: SimpleHashChain.BSC,
     ChainId.OPTIMISM: SimpleHashChain.OPTIMISM,
     ChainId.ARBITRUM: SimpleHashChain.ARBITRUM,
     ChainId.SOLANA: SimpleHashChain.SOLANA,
@@ -56,7 +61,7 @@ def _chain_id_to_simplehash(chain_id: ChainId) -> SimpleHashChain:
 
 def _simplehash_chain_to_chain_id(chain: SimpleHashChain) -> ChainId:
     if chain_id := _SIMPLEHASH_TO_CHAIN_ID.get(chain):
-        return chain_id
+        return chain_id.value
     raise ValueError(f"Unsupported SimpleHashChain: {chain.value}")
 
 
@@ -212,7 +217,7 @@ async def get_nfts_by_owner(
     wallet_address: str = Query(
         ..., description="The wallet address to fetch NFTs for"
     ),
-    chains: list[ChainId] = Query(..., description="List of chains to fetch NFTs from"),
+    chain_ids: list[str] = Query(..., description="List of chain IDs to fetch NFTs from"),
     page_key: str | None = Query(None, description="Page key for pagination"),
     page_size: int = Query(50, description="Number of NFTs to fetch per page"),
 ) -> SimpleHashNFTResponse:
@@ -226,9 +231,16 @@ async def get_nfts_by_owner(
     nfts = []
     next_page_key = None
 
+    # Filter chains to only include valid chain IDs
+    chains = [
+        ChainId(chain_id)
+        for chain_id in chain_ids
+        if _CHAIN_ID_TO_ALCHEMY.get(chain_id)
+    ]
+
     async with httpx.AsyncClient() as client:
-        for chain_id in chains:
-            if chain_id == ChainId.SOLANA:
+        for chain in chains:
+            if chain == ChainId.SOLANA:
                 # Handle Solana NFTs differently
                 url = f"https://solana-mainnet.g.alchemy.com/v2/{settings.ALCHEMY_API_KEY}"
                 params = {
@@ -267,7 +279,7 @@ async def get_nfts_by_owner(
                 next_page_key = page_key + 1 if page_key else None
             else:
                 # Handle other chains as before
-                alchemy_chain = _chain_id_to_alchemy_chain(chain_id)
+                alchemy_chain = _chain_id_to_alchemy_chain(chain)
                 url = f"https://{alchemy_chain.value}.g.alchemy.com/nft/v3/{settings.ALCHEMY_API_KEY}/getNFTsForOwner"
                 params = httpx.QueryParams(
                     owner=wallet_address,
@@ -285,7 +297,7 @@ async def get_nfts_by_owner(
 
                 # Transform NFTs
                 for nft in data.owned_nfts:
-                    nfts.append(_transform_alchemy_to_simplehash(nft, chain_id))
+                    nfts.append(_transform_alchemy_to_simplehash(nft, chain))
 
                 # Update next page key
                 if data.page_key:
@@ -321,14 +333,22 @@ async def get_nfts_by_owner(
     wallet_addresses: list[str] = Query(
         ..., description="The wallet addresses to fetch NFTs for"
     ),
-    chains: list[SimpleHashChain] = Query(
+    chains: list[str] | None = Query(
         ..., description="List of chains to fetch NFTs from"
     ),
     cursor: str | None = Query(None, description="Cursor for pagination"),
 ) -> SimpleHashNFTResponse:
+    # Filter chains to only include valid chain IDs
+    filtered_chains = [
+        SimpleHashChain(chain)
+        for chain_raw in chains
+        for chain in chain_raw.split(",")
+        if chain in SimpleHashChain
+    ] if chains else list(SimpleHashChain)
+
     params = httpx.QueryParams(
-        {"chains": [_simplehash_chain_to_chain_id(chain) for chain in chains]},
-        owner=wallet_addresses[0],
+        wallet_address=wallet_addresses[0],
+        chain_ids=[_simplehash_chain_to_chain_id(chain) for chain in filtered_chains],
     )
 
     if cursor:
