@@ -20,9 +20,11 @@ async def lifespan(app: FastAPI):
     await Cache.close()
 
 
-app = FastAPI(lifespan=lifespan)
+# TODO(onyb): Add lifespan to FastAPI when we actually need Redis
+app = FastAPI(lifespan=None)
 
 
+# API routers
 app.include_router(base_router)
 app.include_router(pricing_router)
 app.include_router(nfts_router)
