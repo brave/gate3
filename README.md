@@ -1,17 +1,10 @@
 # Gate3
 
-[![Build Status](https://github.com/brave/gate3/actions/workflows/ci.yml/badge.svg)](https://github.com/brave/gate3/actions/workflows/ci.yml)
+[![Build Status](https://github.com/brave-experiments/gate3/actions/workflows/ci.yml/badge.svg)](https://github.com/brave-experiments/gate3/actions/workflows/ci.yml)
+[![python](https://img.shields.io/badge/Made%20with-Python%203.13-1f425f.svg)](https://www.python.org/)
+
 
 A FastAPI-based gateway service for web3 applications at Brave.
-
-## Features
-
-- FastAPI-based REST API
-- Redis integration for caching and data storage
-- Web3 functionality integration
-- Async HTTP client support via httpx
-- Fast JSON serialization with orjson
-- Configuration management with pydantic-settings
 
 ## Prerequisites
 
