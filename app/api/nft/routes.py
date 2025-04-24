@@ -433,8 +433,10 @@ async def get_solana_asset_proof(
         response = await client.post(url, json=params)
         response.raise_for_status()
         json_response = response.json()
-        if "error" in json_response:
-            raise ValueError(f"Alchemy API error: {json_response['error']}")
+
+        if error := json_response.get("error"):
+            raise ValueError(f"Alchemy API error: {error}")
+
         return SolanaAssetMerkleProof.model_validate(json_response["result"])
 
 
