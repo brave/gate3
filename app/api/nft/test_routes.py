@@ -97,7 +97,7 @@ def mock_httpx_client(monkeypatch):
     return mock_client
 
 
-def test_get_nfts_by_owner(mock_httpx_client):
+def test_get_nfts_by_owner(mock_httpx_client, mock_settings):
     mock_response = {
         "ownedNfts": [MOCK_NFT_ALCHEMY_RESPONSE],
         "totalCount": 1,
@@ -140,7 +140,7 @@ def test_get_nfts_by_owner(mock_httpx_client):
     assert attributes[1].value == "Round"
 
 
-def test_get_nfts_by_owner_invalid_chain():
+def test_get_nfts_by_owner_invalid_chain(mock_settings):
     response = client.get(
         "/api/nft/v1/getNFTsForOwner?wallet_address=0x123&chain_ids=0x999"
     )
@@ -157,7 +157,7 @@ def test_get_nfts_by_owner_missing_api_key(mock_settings):
         client.get("/api/nft/v1/getNFTsForOwner?wallet_address=0x123&chain_ids=0x1")
 
 
-def test_get_solana_asset_proof(mock_httpx_client):
+def test_get_solana_asset_proof(mock_httpx_client, mock_settings):
     mock_response = {
         "result": {
             "proof": ["hash1", "hash2", "hash3"],
