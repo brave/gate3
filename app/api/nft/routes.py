@@ -198,15 +198,6 @@ async def _transform_solana_asset_to_simplehash(asset: SolanaAsset) -> SimpleHas
             description = description or raw_content_data.description
             image_url = image_url or raw_content_data.image
 
-    cg_nft = next(
-        (
-            nft
-            for nft in cg_nfts
-            if nft["chain_id"] == ChainId.SOLANA and nft["contract_address"] == asset.id
-        ),
-        None,
-    )
-
     return SimpleHashNFT(
         chain=SimpleHashChain.SOLANA,
         contract_address=asset.id,
@@ -331,78 +322,6 @@ async def get_nfts_by_owner(
     return SimpleHashNFTResponse(next_cursor=next_page_key, nfts=nfts)
 
 
-@router.get("/v1/getSolanaAssetProof", response_model=SolanaAssetMerkleProof)
-async def get_solana_asset_proof(
-    token_address: str = Query(
-        ..., description="The token address to fetch the proof for"
-    ),
-) -> SolanaAssetMerkleProof:
-    async with httpx.AsyncClient() as client:
-        url = f"https://solana-mainnet.g.alchemy.com/v2/{settings.ALCHEMY_API_KEY}"
-        params = {
-            "jsonrpc": "2.0",
-            "method": "getAssetProof",
-            "params": [token_address],
-            "id": 1,
-        }
-        response = await client.post(url, json=params)
-        response.raise_for_status()
-        json_response = response.json()
-        if "error" in json_response:
-            raise ValueError(f"Alchemy API error: {json_response['error']}")
-        return SolanaAssetMerkleProof.model_validate(json_response["result"])
-
-
-@simplehash_router.get("/nfts/owners", response_model=SimpleHashNFTResponse)
-async def get_nfts_by_owner(
-    wallet_addresses: list[str] = Query(
-        ..., description="The wallet addresses to fetch NFTs for"
-    ),
-    chains: list[str] | None = Query(
-        ..., description="List of chains to fetch NFTs from"
-    ),
-    cursor: str | None = Query(None, description="Cursor for pagination"),
-) -> SimpleHashNFTResponse:
-    # Filter chains to only include valid chain IDs
-    filtered_chains = (
-        [
-            SimpleHashChain(chain)
-            for chain_raw in chains
-            for chain in chain_raw.split(",")
-            if chain in SimpleHashChain
-        ]
-        if chains
-        else list(SimpleHashChain)
-    )
-
-    params = httpx.QueryParams(
-        wallet_address=wallet_addresses[0],
-        chain_ids=[_simplehash_chain_to_chain_id(chain) for chain in filtered_chains],
-    )
-
-    if cursor:
-        params = params.set("page_key", cursor)
-
-    return RedirectResponse(
-        url=router.url_path_for("get_nfts_by_owner") + f"?{params}", status_code=307
-    )
-
-
-@simplehash_router.get(
-    "/nfts/proof/solana/{token_address}", response_model=SolanaAssetMerkleProof
-)
-async def get_compressed_nft_proof(
-    token_address: str = Path(
-        ..., description="The token address to fetch the proof for"
-    ),
-) -> SolanaAssetMerkleProof:
-    return RedirectResponse(
-        url=router.url_path_for("get_solana_asset_proof")
-        + f"?token_address={token_address}",
-        status_code=307,
-    )
-
-
 @router.get("/v1/getNFTsByIds", response_model=SimpleHashNFTResponse)
 async def get_nfts_by_ids(
     ids: str = Query(
@@ -497,8 +416,80 @@ async def get_nfts_by_ids(
     return SimpleHashNFTResponse(next_cursor=None, nfts=nfts)
 
 
+@router.get("/v1/getSolanaAssetProof", response_model=SolanaAssetMerkleProof)
+async def get_solana_asset_proof(
+    token_address: str = Query(
+        ..., description="The token address to fetch the proof for"
+    ),
+) -> SolanaAssetMerkleProof:
+    async with httpx.AsyncClient() as client:
+        url = f"https://solana-mainnet.g.alchemy.com/v2/{settings.ALCHEMY_API_KEY}"
+        params = {
+            "jsonrpc": "2.0",
+            "method": "getAssetProof",
+            "params": [token_address],
+            "id": 1,
+        }
+        response = await client.post(url, json=params)
+        response.raise_for_status()
+        json_response = response.json()
+        if "error" in json_response:
+            raise ValueError(f"Alchemy API error: {json_response['error']}")
+        return SolanaAssetMerkleProof.model_validate(json_response["result"])
+
+
+@simplehash_router.get("/nfts/owners", response_model=SimpleHashNFTResponse)
+async def get_simplehash_nfts_by_owner(
+    wallet_addresses: list[str] = Query(
+        ..., description="The wallet addresses to fetch NFTs for"
+    ),
+    chains: list[str] | None = Query(
+        ..., description="List of chains to fetch NFTs from"
+    ),
+    cursor: str | None = Query(None, description="Cursor for pagination"),
+) -> SimpleHashNFTResponse:
+    # Filter chains to only include valid chain IDs
+    filtered_chains = (
+        [
+            SimpleHashChain(chain)
+            for chain_raw in chains
+            for chain in chain_raw.split(",")
+            if chain in SimpleHashChain
+        ]
+        if chains
+        else list(SimpleHashChain)
+    )
+
+    params = httpx.QueryParams(
+        wallet_address=wallet_addresses[0],
+        chain_ids=[_simplehash_chain_to_chain_id(chain) for chain in filtered_chains],
+    )
+
+    if cursor:
+        params = params.set("page_key", cursor)
+
+    return RedirectResponse(
+        url=router.url_path_for("get_nfts_by_owner") + f"?{params}", status_code=307
+    )
+
+
+@simplehash_router.get(
+    "/nfts/proof/solana/{token_address}", response_model=SolanaAssetMerkleProof
+)
+async def get_simplehash_compressed_nft_proof(
+    token_address: str = Path(
+        ..., description="The token address to fetch the proof for"
+    ),
+) -> SolanaAssetMerkleProof:
+    return RedirectResponse(
+        url=router.url_path_for("get_solana_asset_proof")
+        + f"?token_address={token_address}",
+        status_code=307,
+    )
+
+
 @simplehash_router.get("/nfts/assets", response_model=SimpleHashNFTResponse)
-async def get_nfts_by_ids(
+async def get_simplehash_nfts_by_ids(
     nft_ids: str = Query(
         ...,
         description="Comma separated list of NFT IDs in format <chain>.<address> for Solana or <chain>.<address>.<token_id> for EVM chains",
