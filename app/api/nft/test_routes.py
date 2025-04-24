@@ -125,8 +125,8 @@ def test_get_nfts_by_owner(mock_httpx_client):
     assert nft.name == "Mock NFT #1"
     assert nft.description == "A mock NFT description"
     assert nft.image_url == "https://example.com/cached.jpg"
-    assert nft.background_color == None
-    assert nft.external_url == None
+    assert nft.background_color is None
+    assert nft.external_url is None
     assert nft.contract.type == "ERC721"
     assert nft.contract.name == "MockNFT"
     assert nft.contract.symbol == "MOCK"
@@ -153,7 +153,7 @@ def test_get_nfts_by_owner_missing_api_key(mock_settings):
     # Override settings to simulate missing API key
     mock_settings.ALCHEMY_API_KEY = None
 
-    with pytest.raises(ValueError) as e:
+    with pytest.raises(ValueError):
         client.get("/api/nft/v1/getNFTsForOwner?wallet_address=0x123&chain_ids=0x1")
 
 
