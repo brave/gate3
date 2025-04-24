@@ -1,6 +1,6 @@
 from enum import Enum
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, ConfigDict
 from pydantic.alias_generators import to_camel
 
 
@@ -22,8 +22,7 @@ class AlchemyContract(BaseModel):
     is_spam: bool | None = None
     spam_classifications: list[str] = Field(default_factory=list)
 
-    class Config:
-        alias_generator = to_camel
+    model_config = ConfigDict(alias_generator=to_camel)
 
 
 class AlchemyImage(BaseModel):
@@ -39,8 +38,7 @@ class AlchemyImage(BaseModel):
     def validate_urls(cls, v: str | None) -> str | None:
         return strip_trailing_slash_validator(v)
 
-    class Config:
-        alias_generator = to_camel
+    model_config = ConfigDict(alias_generator=to_camel)
 
 
 class TraitAttribute(BaseModel):
@@ -61,8 +59,7 @@ class AlchemyRawMetadata(BaseModel):
     def validate_urls(cls, v: str | None) -> str | None:
         return strip_trailing_slash_validator(v)
 
-    class Config:
-        alias_generator = to_camel
+    model_config = ConfigDict(alias_generator=to_camel)
 
 
 class AlchemyRaw(BaseModel):
@@ -70,8 +67,7 @@ class AlchemyRaw(BaseModel):
     metadata: AlchemyRawMetadata | str | None = None
     error: str | None = None
 
-    class Config:
-        alias_generator = to_camel
+    model_config = ConfigDict(alias_generator=to_camel)
 
 
 class AlchemyNFT(BaseModel):
@@ -84,16 +80,14 @@ class AlchemyNFT(BaseModel):
     raw: AlchemyRaw | None = None
     token_uri: str | None = None
 
-    class Config:
-        alias_generator = to_camel
+    model_config = ConfigDict(alias_generator=to_camel)
 
 
 class AlchemyNFTResponse(BaseModel):
     owned_nfts: list[AlchemyNFT]
     page_key: str | None = None
 
-    class Config:
-        alias_generator = to_camel
+    model_config = ConfigDict(alias_generator=to_camel)
 
 
 class AlchemyChain(str, Enum):
@@ -175,6 +169,12 @@ class SolanaAssetMerkleProof(BaseModel):
     root: str | None = None
     leaf: str | None = None
 
+    model_config = ConfigDict(
+        extra="allow",
+        populate_by_name=True,
+        json_encoders={dict: lambda v: v if v else {}},
+    )
+
 
 class SolanaAssetRawContent(BaseModel):
     name: str
@@ -202,10 +202,11 @@ class SolanaAssetContentLink(BaseModel):
     def validate_urls(cls, v: str | None) -> str | None:
         return strip_trailing_slash_validator(v)
 
-    class Config:
-        extra = "allow"
-        populate_by_name = True
-        json_encoders = {dict: lambda v: v if v else {}}
+    model_config = ConfigDict(
+        extra="allow",
+        populate_by_name=True,
+        json_encoders={dict: lambda v: v if v else {}},
+    )
 
 
 class SolanaAssetContentMetadata(BaseModel):
@@ -233,10 +234,11 @@ class SolanaAssetGroupingCollectionMetadata(BaseModel):
     def validate_urls(cls, v: str | None) -> str | None:
         return strip_trailing_slash_validator(v)
 
-    class Config:
-        extra = "allow"
-        populate_by_name = True
-        json_encoders = {dict: lambda v: v if v else {}}
+    model_config = ConfigDict(
+        extra="allow",
+        populate_by_name=True,
+        json_encoders={dict: lambda v: v if v else {}},
+    )
 
 
 class SolanaAssetGrouping(BaseModel):
