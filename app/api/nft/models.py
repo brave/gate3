@@ -1,7 +1,13 @@
 from enum import Enum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from pydantic.alias_generators import to_camel
+
+
+def strip_trailing_slash_validator(v: str | None) -> str | None:
+    if v is not None:
+        return v.rstrip("/")
+    return v
 
 
 class AlchemyTokenType(str, Enum):
@@ -28,6 +34,11 @@ class AlchemyImage(BaseModel):
     size: int | None = None
     original_url: str | None = None
 
+    @field_validator("cached_url", "thumbnail_url", "png_url", "original_url")
+    @classmethod
+    def validate_urls(cls, v: str | None) -> str | None:
+        return strip_trailing_slash_validator(v)
+
     class Config:
         alias_generator = to_camel
 
@@ -44,6 +55,11 @@ class AlchemyRawMetadata(BaseModel):
     external_url: str | None = None
     attributes: list[TraitAttribute] = Field(default_factory=list)
     properties: dict = Field(default_factory=dict)
+
+    @field_validator("image")
+    @classmethod
+    def validate_urls(cls, v: str | None) -> str | None:
+        return strip_trailing_slash_validator(v)
 
     class Config:
         alias_generator = to_camel
@@ -141,6 +157,11 @@ class SimpleHashNFT(BaseModel):
     collection: SimpleHashCollection
     extra_metadata: SimpleHashExtraMetadata
 
+    @field_validator("image_url")
+    @classmethod
+    def validate_urls(cls, v: str | None) -> str | None:
+        return strip_trailing_slash_validator(v)
+
 
 class SimpleHashNFTResponse(BaseModel):
     next_cursor: str | None = None
@@ -166,14 +187,24 @@ class SolanaAssetContentFile(BaseModel):
     uri: str
     mime: str
 
+    @field_validator("uri")
+    @classmethod
+    def validate_urls(cls, v: str) -> str:
+        return strip_trailing_slash_validator(v)
+
 
 class SolanaAssetContentLink(BaseModel):
     image: str | None = None
     external_url: str | None = None
 
+    @field_validator("image")
+    @classmethod
+    def validate_urls(cls, v: str | None) -> str | None:
+        return strip_trailing_slash_validator(v)
+
     class Config:
         extra = "allow"
-        allow_population_by_field_name = True
+        populate_by_name = True
         json_encoders = {dict: lambda v: v if v else {}}
 
 
@@ -197,9 +228,14 @@ class SolanaAssetGroupingCollectionMetadata(BaseModel):
     image: str | None = None
     symbol: str | None = None
 
+    @field_validator("image")
+    @classmethod
+    def validate_urls(cls, v: str | None) -> str | None:
+        return strip_trailing_slash_validator(v)
+
     class Config:
         extra = "allow"
-        allow_population_by_field_name = True
+        populate_by_name = True
         json_encoders = {dict: lambda v: v if v else {}}
 
 
