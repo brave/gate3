@@ -10,6 +10,8 @@ class Settings(BaseSettings):
     REDIS_DB: int = 0
     REDIS_PASSWORD: str | None = None
 
+    PROMETHEUS_PORT: int = 8093
+
     model_config = SettingsConfigDict(env_file=".env")
 
 
