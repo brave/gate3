@@ -21,4 +21,4 @@ COPY ./data /code/data
 CMD ["fastapi", "run", "--host", "0.0.0.0", "--port", "80"]
 
 # Expose the Prometheus port
-EXPOSE 8093
+EXPOSE 8090
