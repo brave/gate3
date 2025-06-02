@@ -1,4 +1,5 @@
 from enum import Enum
+from typing import Iterator
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -21,25 +22,19 @@ class CacheStatus(str, Enum):
     MISS = "MISS"
 
 
-class TokenRequest(BaseModel):
+class TokenPriceRequest(BaseModel):
     coin_type: CoinType = Field(description=COIN_TYPE_DESCRIPTION)
     chain_id: ChainId | None = Field(default=None, description=CHAIN_ID_DESCRIPTION)
     address: str | None = Field(default=None, description=ADDRESS_DESCRIPTION)
-    vs_currency: VsCurrency = Field(
-        default=VsCurrency.USD, description=VS_CURRENCY_DESCRIPTION
-    )
 
     @model_validator(mode="after")
-    def validate_chain_specific_fields(self) -> "TokenRequest":
+    def validate_chain_specific_fields(self) -> "TokenPriceRequest":
         if self.coin_type in (CoinType.ETH, CoinType.SOL):
             if not self.chain_id:
                 raise ValueError(
                     f"chain_id is required for CoinType.{self.coin_type.name}"
                 )
-            if not self.address:
-                raise ValueError(
-                    f"address is required for CoinType.{self.coin_type.name}"
-                )
+
         return self
 
     model_config = {
@@ -49,16 +44,28 @@ class TokenRequest(BaseModel):
                     "coin_type": CoinType.ETH,
                     "chain_id": ChainId.ETHEREUM,
                     "address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
-                    "vs_currency": VsCurrency.USD,
                 },
-                {"coin_type": CoinType.BTC, "vs_currency": VsCurrency.USD},
+                {"coin_type": CoinType.BTC},
+                {
+                    "coin_type": CoinType.SOL,
+                    "chain_id": ChainId.SOLANA,
+                    "address": "",
+                },
+                {
+                    "coin_type": CoinType.SOL,
+                    "chain_id": ChainId.SOLANA,
+                    "address": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+                },
             ]
         }
     }
 
 
-class TokenResponse(TokenRequest):
+class TokenPriceResponse(TokenPriceRequest):
     price: float
+    vs_currency: VsCurrency = Field(
+        default=VsCurrency.USD, description=VS_CURRENCY_DESCRIPTION
+    )
     cache_status: CacheStatus
 
     model_config = {
@@ -75,3 +82,54 @@ class TokenResponse(TokenRequest):
             ]
         }
     }
+
+
+class BatchTokenPriceRequests(BaseModel):
+    requests: list[TokenPriceRequest] = Field(description="List of token requests")
+    vs_currency: VsCurrency = Field(
+        default=VsCurrency.USD, description=VS_CURRENCY_DESCRIPTION
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "requests": [
+                        {
+                            "coin_type": CoinType.ETH,
+                            "chain_id": ChainId.ETHEREUM,
+                            "address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+                        },
+                        {"coin_type": CoinType.BTC},
+                        {
+                            "coin_type": CoinType.SOL,
+                            "chain_id": ChainId.SOLANA,
+                            "address": "",
+                        },
+                        {
+                            "coin_type": CoinType.SOL,
+                            "chain_id": ChainId.SOLANA,
+                            "address": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+                        },
+                    ],
+                    "vs_currency": VsCurrency.USD,
+                }
+            ]
+        }
+    }
+
+    def __iter__(self) -> Iterator[TokenPriceRequest]:
+        return iter(self.requests)
+
+    def add(self, request: TokenPriceRequest) -> None:
+        self.requests.append(request)
+
+    def is_empty(self) -> bool:
+        return not self.requests
+
+    def size(self) -> int:
+        return len(self.requests)
+
+    @classmethod
+    def from_vs_currency(cls, vs_currency: VsCurrency) -> "BatchTokenPriceRequests":
+        return BatchTokenPriceRequests(requests=[], vs_currency=vs_currency)

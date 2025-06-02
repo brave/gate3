@@ -12,13 +12,13 @@ class PingResponse(BaseModel):
     redis: HealthStatus
 
 
-class CoinType(int, Enum):
-    ADA = 1815
-    BTC = 0
-    ETH = 60
-    FIL = 461
-    SOL = 501
-    ZEC = 133
+class CoinType(str, Enum):
+    ADA = "ADA"
+    BTC = "BTC"
+    ETH = "ETH"
+    FIL = "FIL"
+    SOL = "SOL"
+    ZEC = "ZEC"
 
 
 class ChainId(str, Enum):

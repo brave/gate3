@@ -31,9 +31,7 @@ async def lifespan_metrics(app: FastAPI):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # TODO(onyb): Add lifespan_cache(app) when we actually need Redis
-
-    async with lifespan_metrics(app):
+    async with lifespan_cache(app), lifespan_metrics(app):
         yield
 
 
