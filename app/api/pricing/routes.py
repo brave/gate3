@@ -1,12 +1,5 @@
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Depends, HTTPException
 
-from app.api.pricing.models import (
-    TokenRequest,
-    TokenResponse,
-    CoinType,
-    VsCurrency,
-    CacheStatus,
-)
 from app.api.common.models import ChainId
 from app.api.common.annotations import (
     CHAIN_ID_DESCRIPTION,
@@ -15,14 +8,28 @@ from app.api.common.annotations import (
     COIN_TYPE_DESCRIPTION,
 )
 
+from .coingecko import CoinGeckoClient
+from .models import (
+    BatchTokenPriceRequests,
+    TokenPriceRequest,
+    TokenPriceResponse,
+    CoinType,
+    VsCurrency,
+)
+
 
 router = APIRouter(prefix="/api/pricing")
 
 
-@router.get("/v1/getPrice", response_model=TokenResponse)
+def get_coingecko_client() -> CoinGeckoClient:
+    return CoinGeckoClient()
+
+
+@router.get("/v1/getPrice", response_model=TokenPriceResponse)
 async def get_price(
     coin_type: CoinType = Query(
-        description=COIN_TYPE_DESCRIPTION, examples=[CoinType.ETH, CoinType.BTC]
+        description=COIN_TYPE_DESCRIPTION,
+        examples=[CoinType.ETH, CoinType.BTC, CoinType.SOL],
     ),
     chain_id: ChainId | None = Query(
         default=None,
@@ -39,37 +46,39 @@ async def get_price(
         description=VS_CURRENCY_DESCRIPTION,
         examples=[VsCurrency.USD, VsCurrency.EUR],
     ),
-) -> TokenResponse:
+    coingecko_client: CoinGeckoClient = Depends(get_coingecko_client),
+) -> TokenPriceResponse:
     """
     Get token price of a token on a given chain against a specific base currency.
     Chain ID and address are required only for Ethereum and Solana tokens.
     """
-    # Create request object to trigger validation
-    request = TokenRequest(
-        coin_type=coin_type, chain_id=chain_id, address=address, vs_currency=vs_currency
-    )
+    request = TokenPriceRequest(coin_type=coin_type, chain_id=chain_id, address=address)
 
-    return TokenResponse(
-        **request.model_dump(),
-        price=100,
-        cache_status=CacheStatus.MISS,
-    )
+    batch = BatchTokenPriceRequests(requests=[request], vs_currency=vs_currency)
+
+    results = await coingecko_client.get_prices(batch)
+
+    if not results:
+        raise HTTPException(status_code=404, detail="Token price not found")
+
+    return results[0]
 
 
-@router.post("/v1/getPrices", response_model=list[TokenResponse])
-async def get_prices(tokens: list[TokenRequest]) -> list[TokenResponse]:
+@router.post("/v1/getPrices", response_model=list[TokenPriceResponse])
+async def get_prices(
+    tokens: list[TokenPriceRequest],
+    vs_currency: VsCurrency = Query(
+        default=VsCurrency.USD,
+        description=VS_CURRENCY_DESCRIPTION,
+        examples=[VsCurrency.USD, VsCurrency.EUR],
+    ),
+    coingecko_client: CoinGeckoClient = Depends(get_coingecko_client),
+) -> list[TokenPriceResponse]:
     """
     Batch retrieve prices for multiple tokens. Each token can be specified
     using a different chain and/or currency.
     """
-    return [
-        TokenResponse(
-            coin_type=token.coin_type,
-            chain_id=token.chain_id,
-            address=token.address,
-            vs_currency=token.vs_currency,
-            price=100,
-            cache_status=CacheStatus.MISS,
-        )
-        for token in tokens
-    ]
+    batch = BatchTokenPriceRequests(requests=tokens, vs_currency=vs_currency)
+
+    results = await coingecko_client.get_prices(batch)
+    return results

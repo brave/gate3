@@ -1,5 +1,8 @@
 import redis.asyncio as redis
 
+from contextlib import asynccontextmanager
+from typing import AsyncGenerator
+
 from app.config import settings
 
 
@@ -17,10 +20,15 @@ class Cache:
         )
 
     @classmethod
-    async def get_client(cls) -> redis.Redis:
+    @asynccontextmanager
+    async def get_client(cls) -> AsyncGenerator[redis.Redis, None]:
+        """Get Redis client with proper lifecycle management"""
         if cls._redis_client is None:
             await cls.init()
-        return cls._redis_client
+        try:
+            yield cls._redis_client
+        except Exception as e:
+            raise e
 
     @classmethod
     async def ping(cls) -> bool:
