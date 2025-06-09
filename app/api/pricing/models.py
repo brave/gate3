@@ -1,15 +1,14 @@
 from enum import Enum
-from typing import Iterator
 
 from pydantic import BaseModel, Field, model_validator
 
 from app.api.common.annotations import (
-    CHAIN_ID_DESCRIPTION,
     ADDRESS_DESCRIPTION,
-    VS_CURRENCY_DESCRIPTION,
+    CHAIN_ID_DESCRIPTION,
     COIN_TYPE_DESCRIPTION,
+    VS_CURRENCY_DESCRIPTION,
 )
-from app.api.common.models import CoinType, ChainId
+from app.api.common.models import ChainId, CoinType
 
 
 class VsCurrency(str, Enum):
@@ -118,9 +117,6 @@ class BatchTokenPriceRequests(BaseModel):
         }
     }
 
-    def __iter__(self) -> Iterator[TokenPriceRequest]:
-        return iter(self.requests)
-
     def add(self, request: TokenPriceRequest) -> None:
         self.requests.append(request)
 
@@ -133,3 +129,9 @@ class BatchTokenPriceRequests(BaseModel):
     @classmethod
     def from_vs_currency(cls, vs_currency: VsCurrency) -> "BatchTokenPriceRequests":
         return BatchTokenPriceRequests(requests=[], vs_currency=vs_currency)
+
+
+class CoingeckoPlatform(BaseModel):
+    id: str
+    chain_id: str | None
+    native_token_id: str
