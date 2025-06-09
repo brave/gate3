@@ -3,13 +3,14 @@ import httpx
 from app.api.common.models import ChainId, CoinType
 from app.config import settings
 
+from .cache import CoinMapCache, PlatformMapCache, TokenPriceCache
 from .models import (
+    BatchTokenPriceRequests,
+    CacheStatus,
+    CoingeckoPlatform,
     TokenPriceRequest,
     TokenPriceResponse,
-    CacheStatus,
-    BatchTokenPriceRequests,
 )
-from .cache import TokenPriceCache
 
 
 class CoinGeckoClient:
@@ -20,7 +21,8 @@ class CoinGeckoClient:
             else "https://pro-api.coingecko.com/api/v3"
         )
 
-    def _create_client(self) -> httpx.AsyncClient:
+    @staticmethod
+    def _create_client() -> httpx.AsyncClient:
         headers = (
             {"x-cg-pro-api-key": settings.COINGECKO_API_KEY}
             if settings.COINGECKO_API_KEY
@@ -28,14 +30,15 @@ class CoinGeckoClient:
         )
         return httpx.AsyncClient(timeout=10.0, headers=headers)
 
+    @staticmethod
     def _deduplicate_requests(
-        self, batch: BatchTokenPriceRequests
+        batch: BatchTokenPriceRequests,
     ) -> BatchTokenPriceRequests:
         """Remove duplicate requests from the batch based on chain_id, address, and coin_type."""
         seen = set()
         unique_requests = []
 
-        for request in batch:
+        for request in batch.requests:
             # Create a unique key for each request
             key = (request.chain_id, request.address, request.coin_type)
             if key not in seen:
@@ -60,157 +63,69 @@ class CoinGeckoClient:
         if batch_to_fetch.is_empty():
             return results
 
-        # Group tokens by type for efficient fetching
-        non_native_tokens = [
-            request
-            for request in batch_to_fetch
-            if not self._get_native_token_id(request)
-        ]
-        native_tokens = [
-            request for request in batch_to_fetch if self._get_native_token_id(request)
-        ]
+        platform_map = await self.get_platform_map()
+        coin_map = await self.get_coin_map(platform_map)
 
-        if native_tokens:
-            native_responses = await self._get_native_token_prices(
-                BatchTokenPriceRequests(
-                    requests=native_tokens, vs_currency=batch.vs_currency
+        coingecko_ids = {
+            id
+            for request in batch_to_fetch.requests
+            if (
+                id := await self._get_coingecko_id_from_request(
+                    request, platform_map, coin_map
                 )
             )
-            if native_responses:
-                await TokenPriceCache.set(native_responses)
-                results.extend(native_responses)
-
-        if non_native_tokens:
-            token_responses = await self._get_non_native_token_prices(
-                BatchTokenPriceRequests(
-                    requests=non_native_tokens, vs_currency=batch.vs_currency
-                )
-            )
-            if token_responses:
-                await TokenPriceCache.set(token_responses)
-                results.extend(token_responses)
-
-        return results
-
-    async def _get_native_token_prices(
-        self, batch: BatchTokenPriceRequests
-    ) -> list[TokenPriceResponse]:
-        if batch.is_empty():
-            return []
-
-        url = f"{self.base_url}/simple/price"
-        params = {
-            "ids": ",".join(self._get_native_token_id(request) for request in batch),
-            "vs_currencies": batch.vs_currency.value,
         }
 
+        # If no coingecko ids to fetch, return cached responses
+        if not coingecko_ids:
+            return results
+
+        # Fetch prices for all coingecko ids
+        params = {
+            "ids": ",".join(coingecko_ids),
+            "vs_currencies": batch.vs_currency.value,
+            "include_platform": True,
+        }
+
+        coingecko_responses = []
         async with self._create_client() as client:
-            response = await client.get(url, params=params)
+            response = await client.get(f"{self.base_url}/simple/price", params=params)
             response.raise_for_status()
             data = response.json()
 
-            results = []
-            for request in batch:
-                try:
-                    price = float(
-                        data[self._get_native_token_id(request)][
-                            batch.vs_currency.value
-                        ]
+            for request in batch_to_fetch.requests:
+                if (
+                    id := await self._get_coingecko_id_from_request(
+                        request, platform_map, coin_map
                     )
-                    results.append(
-                        TokenPriceResponse(
-                            **request.model_dump(),
-                            vs_currency=batch.vs_currency,
-                            price=price,
-                            cache_status=CacheStatus.MISS,
-                        )
+                ) not in data:
+                    continue
+
+                try:
+                    item = TokenPriceResponse(
+                        **request.model_dump(),
+                        vs_currency=batch.vs_currency,
+                        price=float(data[id][batch.vs_currency.value]),
+                        cache_status=CacheStatus.MISS,
                     )
                 except (KeyError, ValueError):
                     continue
 
-            return results
+                coingecko_responses.append(item)
 
-    async def _get_non_native_token_prices(
-        self, batch: BatchTokenPriceRequests
-    ) -> list[TokenPriceResponse]:
-        if batch.is_empty():
-            return []
-
-        # Group tokens by chain
-        chain_batches: dict[ChainId, BatchTokenPriceRequests] = {}
-        for request in batch:
-            # Skip native tokens
-            if self._get_native_token_id(request):
-                continue
-
-            if request.chain_id not in chain_batches:
-                chain_batches[request.chain_id] = (
-                    BatchTokenPriceRequests.from_vs_currency(batch.vs_currency)
-                )
-            chain_batches[request.chain_id].add(request)
-
-        results: list[TokenPriceResponse] = []
-
-        # Fetch prices for each chain
-        for chain_id, chain_batch in chain_batches.items():
-            platform = self._get_platform(chain_id)
-            addresses = [t.address for t in chain_batch]
-
-            url = f"{self.base_url}/simple/token_price/{platform}"
-            params = {
-                "contract_addresses": ",".join(addresses),
-                "vs_currencies": chain_batch.vs_currency.value,
-            }
-
-            async with self._create_client() as client:
-                response = await client.get(url, params=params)
-                response.raise_for_status()
-                data = response.json()
-
-                for request in chain_batch:
-                    try:
-                        price = float(
-                            data[request.address.lower()][chain_batch.vs_currency.value]
-                        )
-                        results.append(
-                            TokenPriceResponse(
-                                **request.model_dump(),
-                                vs_currency=chain_batch.vs_currency,
-                                price=price,
-                                cache_status=CacheStatus.MISS,
-                            )
-                        )
-                    except (KeyError, ValueError):
-                        # KeyError: address not found in price data
-                        # ValueError: price data is not a float
-                        continue
-
+        await TokenPriceCache.set(coingecko_responses)
+        results.extend(coingecko_responses)
         return results
 
-    @staticmethod
-    def _get_platform(chain_id: ChainId) -> str:
-        """Convert ChainId to CoinGecko platform name"""
-        platform_map = {
-            ChainId.ETHEREUM: "ethereum",
-            ChainId.BASE: "base",
-            ChainId.OPTIMISM: "optimistic-ethereum",
-            ChainId.ARBITRUM: "arbitrum-one",
-            ChainId.POLYGON: "polygon-pos",
-            ChainId.SOLANA: "solana",
-        }
-
-        if chain_id not in platform_map:
-            raise ValueError(f"Unsupported chain ID for CoinGecko: {chain_id}")
-
-        return platform_map[chain_id]
-
-    @staticmethod
-    def _get_native_token_id(request: TokenPriceRequest) -> str | None:
-        """Get native token ID for CoinGecko"""
+    async def _get_coingecko_id_from_request(
+        self,
+        request: TokenPriceRequest,
+        platform_map: dict[str, CoingeckoPlatform],
+        coin_map: dict[str, dict[str, str]],
+    ) -> str | None:
+        # Native tokens
         if request.coin_type == CoinType.BTC:
             return "bitcoin"
-        elif request.coin_type == CoinType.ETH and not request.address:
-            return "ethereum"
         elif request.coin_type == CoinType.SOL and not request.address:
             return "solana"
         elif request.coin_type == CoinType.ADA:
@@ -220,4 +135,88 @@ class CoinGeckoClient:
         elif request.coin_type == CoinType.ZEC:
             return "zcash"
 
+        elif request.coin_type == CoinType.ETH and not request.address:
+            chain_id = request.chain_id
+            if not chain_id:
+                return None
+
+            for platform in platform_map.values():
+                if platform.chain_id == chain_id.value:
+                    return platform.native_token_id
+
+            return None
+
+        elif request.coin_type in [CoinType.SOL, CoinType.ETH]:
+            return coin_map.get(request.chain_id.value, {}).get(request.address.lower())
+
         return None
+
+    async def get_coin_map(
+        self, platform_map: dict[str, CoingeckoPlatform]
+    ) -> dict[str, dict[str, str]]:
+        """
+        Returns a map of contract addresses to coingecko ids for all platforms.
+        First checks Redis cache, then fetches from API if needed.
+
+        Example:
+        {
+            "0x1": {
+                "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48": "usd-coin"
+            }
+        }
+        """
+        # Try to get from Redis
+        if cached_map := await CoinMapCache.get():
+            return cached_map
+
+        # Fetch from API if not in cache
+        async with self._create_client() as client:
+            response = await client.get(
+                f"{self.base_url}/coins/list?include_platform=true"
+            )
+            response.raise_for_status()
+            data = response.json()
+
+            coin_map = {}
+            for item in data:
+                for platform_id, contract_address in item["platforms"].items():
+                    if platform_id in platform_map:
+                        chain_id = platform_map[platform_id].chain_id
+                        if chain_id not in coin_map:
+                            coin_map[chain_id] = {}
+                        coin_map[chain_id][contract_address.lower()] = item[
+                            "id"
+                        ].lower()
+
+            # Cache in Redis
+            await CoinMapCache.set(coin_map)
+            return coin_map
+
+    async def get_platform_map(self) -> dict[str, CoingeckoPlatform]:
+        # Try to get from Redis
+        if cached_map := await PlatformMapCache.get():
+            return cached_map
+
+        # Fetch from API if not in cache
+        async with self._create_client() as client:
+            response = await client.get(f"{self.base_url}/asset_platforms")
+            response.raise_for_status()
+            data = response.json()
+
+            platform_map = {}
+            for item in data:
+                chain_id = None
+                if item["id"] == "solana":
+                    chain_id = ChainId.SOLANA.value
+                elif item["chain_identifier"]:
+                    chain_id = hex(item["chain_identifier"])
+
+                platform_map[item["id"]] = CoingeckoPlatform(
+                    id=item["id"],
+                    chain_id=chain_id,
+                    native_token_id=item["native_coin_id"],
+                )
+
+            # Cache in Redis
+            await PlatformMapCache.set(platform_map)
+            return platform_map
