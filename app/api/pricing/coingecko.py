@@ -1,7 +1,10 @@
 import httpx
+import asyncio
 
 from app.api.common.models import ChainId, CoinType
 from app.config import settings
+from .constants import COINGECKO_CHUNK_SIZE, COINGECKO_MAX_CONCURRENT_REQUESTS
+from .utils import chunk_sequence
 
 from .cache import CoinMapCache, PlatformMapCache, TokenPriceCache
 from .models import (
@@ -80,38 +83,57 @@ class CoinGeckoClient:
         if not coingecko_ids:
             return results
 
-        # Fetch prices for all coingecko ids
-        params = {
-            "ids": ",".join(coingecko_ids),
-            "vs_currencies": batch.vs_currency.value,
-            "include_platform": True,
-        }
+        # Split coingecko_ids into chunks
+        id_chunks = chunk_sequence(list(coingecko_ids), COINGECKO_CHUNK_SIZE)
+
+        # Process chunks in parallel with controlled concurrency
+        semaphore = asyncio.Semaphore(COINGECKO_MAX_CONCURRENT_REQUESTS)
+
+        async def fetch_chunk(chunk: list[str]) -> dict:
+            async with semaphore:
+                params = {
+                    "ids": ",".join(chunk),
+                    "vs_currencies": batch.vs_currency.value,
+                    "include_platform": True,
+                }
+                async with self._create_client() as client:
+                    response = await client.get(
+                        f"{self.base_url}/simple/price", params=params
+                    )
+                    response.raise_for_status()
+                    return response.json()
+
+        chunk_results = await asyncio.gather(
+            *[fetch_chunk(chunk) for chunk in id_chunks], return_exceptions=True
+        )
+
+        # Combine results from all chunks
+        combined_data = {}
+        for result in chunk_results:
+            if isinstance(result, Exception):
+                continue
+            combined_data.update(result)
 
         coingecko_responses = []
-        async with self._create_client() as client:
-            response = await client.get(f"{self.base_url}/simple/price", params=params)
-            response.raise_for_status()
-            data = response.json()
+        for request in batch_to_fetch.requests:
+            if (
+                id := await self._get_coingecko_id_from_request(
+                    request, platform_map, coin_map
+                )
+            ) not in combined_data:
+                continue
 
-            for request in batch_to_fetch.requests:
-                if (
-                    id := await self._get_coingecko_id_from_request(
-                        request, platform_map, coin_map
-                    )
-                ) not in data:
-                    continue
+            try:
+                item = TokenPriceResponse(
+                    **request.model_dump(),
+                    vs_currency=batch.vs_currency,
+                    price=float(combined_data[id][batch.vs_currency.value]),
+                    cache_status=CacheStatus.MISS,
+                )
+            except (KeyError, ValueError):
+                continue
 
-                try:
-                    item = TokenPriceResponse(
-                        **request.model_dump(),
-                        vs_currency=batch.vs_currency,
-                        price=float(data[id][batch.vs_currency.value]),
-                        cache_status=CacheStatus.MISS,
-                    )
-                except (KeyError, ValueError):
-                    continue
-
-                coingecko_responses.append(item)
+            coingecko_responses.append(item)
 
         await TokenPriceCache.set(coingecko_responses)
         results.extend(coingecko_responses)
