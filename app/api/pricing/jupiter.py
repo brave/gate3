@@ -8,6 +8,7 @@ from .models import (
     TokenPriceResponse,
     CacheStatus,
     VsCurrency,
+    PriceSource,
 )
 from .cache import JupiterPriceCache
 from .coingecko import CoinGeckoClient
@@ -122,6 +123,7 @@ class JupiterClient:
                     vs_currency=batch.vs_currency,
                     price=price,
                     cache_status=CacheStatus.MISS,
+                    source=PriceSource.JUPITER,
                 )
                 jupiter_responses.append(item)
             except (KeyError, ValueError):

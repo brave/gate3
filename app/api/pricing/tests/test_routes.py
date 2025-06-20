@@ -10,6 +10,7 @@ from app.api.pricing.models import (
     CacheStatus,
     BatchTokenPriceRequests,
     TokenPriceRequest,
+    PriceSource,
 )
 
 from app.main import app
@@ -64,6 +65,7 @@ def test_get_price_success(client, mock_coingecko_client):
         vs_currency=VsCurrency.USD,
         price=1.01,
         cache_status=CacheStatus.MISS,
+        source=PriceSource.COINGECKO,
     )
     mock_coingecko_client.filter.return_value = (batch, empty_batch)
     mock_coingecko_client.get_prices.return_value = [expected_response]
@@ -147,12 +149,14 @@ def test_get_prices_success(client, mock_coingecko_client, mock_jupiter_client):
         vs_currency=VsCurrency.USD,
         price=1.01,
         cache_status=CacheStatus.MISS,
+        source=PriceSource.COINGECKO,
     )
     response_btc = TokenPriceResponse(
         coin_type=CoinType.BTC,
         vs_currency=VsCurrency.USD,
         price=50000.0,
         cache_status=CacheStatus.MISS,
+        source=PriceSource.COINGECKO,
     )
     response_sol = TokenPriceResponse(
         coin_type=CoinType.SOL,
@@ -161,6 +165,7 @@ def test_get_prices_success(client, mock_coingecko_client, mock_jupiter_client):
         vs_currency=VsCurrency.EUR,
         price=0.0000283013301,
         cache_status=CacheStatus.MISS,
+        source=PriceSource.JUPITER,
     )
     mock_coingecko_client.filter.return_value = (
         BatchTokenPriceRequests(
@@ -267,6 +272,7 @@ def test_get_price_cached_response(client):
             vs_currency=VsCurrency.USD,
             price=1.01,
             cache_status=CacheStatus.HIT,
+            source=PriceSource.COINGECKO,
         )
 
         # Mock the cache to return the cached response and an empty batch to fetch

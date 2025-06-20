@@ -9,6 +9,7 @@ from app.api.pricing.models import (
     TokenPriceResponse,
     CacheStatus,
     VsCurrency,
+    PriceSource,
 )
 
 
@@ -87,6 +88,7 @@ async def test_get_prices_all_cached(client):
         vs_currency=VsCurrency.USD,
         price=1.0,
         cache_status=CacheStatus.HIT,
+        source=PriceSource.JUPITER,
     )
 
     with patch("app.api.pricing.jupiter.JupiterPriceCache.get") as mock_cache:
@@ -209,6 +211,7 @@ async def test_get_prices_non_usd_currency(client, mock_httpx_client):
             vs_currency=VsCurrency.EUR,
             price=0.85,  # USDC price in EUR
             cache_status=CacheStatus.MISS,
+            source=PriceSource.COINGECKO,
         )
     ]
 
@@ -411,6 +414,7 @@ async def test_get_prices_mixed_cache_and_fetch(client, mock_httpx_client):
         vs_currency=VsCurrency.USD,
         price=1.0,
         cache_status=CacheStatus.HIT,
+        source=PriceSource.JUPITER,
     )
 
     # Batch to fetch

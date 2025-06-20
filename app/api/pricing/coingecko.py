@@ -13,6 +13,7 @@ from .models import (
     CoingeckoPlatform,
     TokenPriceRequest,
     TokenPriceResponse,
+    PriceSource,
 )
 
 
@@ -129,6 +130,7 @@ class CoinGeckoClient:
                     vs_currency=batch.vs_currency,
                     price=float(combined_data[id][batch.vs_currency.value.lower()]),
                     cache_status=CacheStatus.MISS,
+                    source=PriceSource.COINGECKO,
                 )
             except (KeyError, ValueError):
                 continue
