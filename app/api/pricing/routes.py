@@ -9,6 +9,8 @@ from app.api.common.annotations import (
 )
 
 from .coingecko import CoinGeckoClient
+from .jupiter import JupiterClient
+from .utils import deduplicate_batch
 from .models import (
     BatchTokenPriceRequests,
     TokenPriceRequest,
@@ -23,6 +25,10 @@ router = APIRouter(prefix="/api/pricing")
 
 def get_coingecko_client() -> CoinGeckoClient:
     return CoinGeckoClient()
+
+
+def get_jupiter_client() -> JupiterClient:
+    return JupiterClient()
 
 
 @router.get("/v1/getPrice", response_model=TokenPriceResponse)
@@ -47,21 +53,32 @@ async def get_price(
         examples=[VsCurrency.USD, VsCurrency.EUR],
     ),
     coingecko_client: CoinGeckoClient = Depends(get_coingecko_client),
+    jupiter_client: JupiterClient = Depends(get_jupiter_client),
 ) -> TokenPriceResponse:
     """
     Get token price of a token on a given chain against a specific base currency.
     Chain ID and address are required only for Ethereum and Solana tokens.
     """
     request = TokenPriceRequest(coin_type=coin_type, chain_id=chain_id, address=address)
-
     batch = BatchTokenPriceRequests(requests=[request], vs_currency=vs_currency)
 
-    results = await coingecko_client.get_prices(batch)
+    # Try CoinGecko first
+    coingecko_available, coingecko_unavailable = await coingecko_client.filter(batch)
+    if not coingecko_available.is_empty():
+        results = await coingecko_client.get_prices(coingecko_available)
+        if results:
+            return results[0]
 
-    if not results:
-        raise HTTPException(status_code=404, detail="Token price not found")
+    # For tokens that are not available in CoinGecko, try Jupiter Price API
+    jupiter_available, _ = await jupiter_client.filter(coingecko_unavailable)
+    if not jupiter_available.is_empty():
+        results = await jupiter_client.get_prices(
+            batch=jupiter_available, coingecko_client=coingecko_client
+        )
+        if results:
+            return results[0]
 
-    return results[0]
+    raise HTTPException(status_code=404, detail="Token price not found")
 
 
 @router.post("/v1/getPrices", response_model=list[TokenPriceResponse])
@@ -73,6 +90,7 @@ async def get_prices(
         examples=[VsCurrency.USD, VsCurrency.EUR],
     ),
     coingecko_client: CoinGeckoClient = Depends(get_coingecko_client),
+    jupiter_client: JupiterClient = Depends(get_jupiter_client),
 ) -> list[TokenPriceResponse]:
     """
     Batch retrieve prices for multiple tokens. Each token can be specified
@@ -80,5 +98,18 @@ async def get_prices(
     """
     batch = BatchTokenPriceRequests(requests=tokens, vs_currency=vs_currency)
 
-    results = await coingecko_client.get_prices(batch)
-    return results
+    # Deduplicate requests
+    batch = deduplicate_batch(batch)
+
+    # Try CoinGecko first
+    coingecko_available, coingecko_unavailable = await coingecko_client.filter(batch)
+    coingecko_results = await coingecko_client.get_prices(coingecko_available)
+
+    # For tokens that are not available in CoinGecko, try Jupiter Price API
+    jupiter_available, _ = await jupiter_client.filter(coingecko_unavailable)
+    jupiter_results = await jupiter_client.get_prices(
+        batch=jupiter_available, coingecko_client=coingecko_client
+    )
+
+    # Combine results
+    return coingecko_results + jupiter_results

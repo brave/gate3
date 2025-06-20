@@ -12,8 +12,8 @@ from app.api.common.models import ChainId, CoinType
 
 
 class VsCurrency(str, Enum):
-    USD = "usd"
-    EUR = "eur"
+    USD = "USD"
+    EUR = "EUR"
 
 
 class CacheStatus(str, Enum):
