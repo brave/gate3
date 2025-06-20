@@ -1,5 +1,7 @@
 from typing import TypeVar, Sequence
 
+from .models import BatchTokenPriceRequests
+
 T = TypeVar("T")
 
 
@@ -24,3 +26,20 @@ def chunk_sequence(sequence: Sequence[T], chunk_size: int) -> list[list[T]]:
     if len(sequence) % chunk_size != 0:
         chunks.append(list(sequence)[-(len(sequence) % chunk_size) :])
     return chunks
+
+
+def deduplicate_batch(batch: BatchTokenPriceRequests) -> BatchTokenPriceRequests:
+    """Remove duplicate requests from the batch based on chain_id, address, and coin_type."""
+    seen = set()
+    unique_requests = []
+
+    for request in batch.requests:
+        # Create a unique key for each request
+        key = (request.chain_id, request.address, request.coin_type)
+        if key not in seen:
+            seen.add(key)
+            unique_requests.append(request)
+
+    return BatchTokenPriceRequests(
+        requests=unique_requests, vs_currency=batch.vs_currency
+    )

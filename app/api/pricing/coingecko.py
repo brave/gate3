@@ -6,7 +6,7 @@ from app.config import settings
 from .constants import COINGECKO_CHUNK_SIZE, COINGECKO_MAX_CONCURRENT_REQUESTS
 from .utils import chunk_sequence
 
-from .cache import CoinMapCache, PlatformMapCache, TokenPriceCache
+from .cache import CoinMapCache, PlatformMapCache, CoingeckoPriceCache
 from .models import (
     BatchTokenPriceRequests,
     CacheStatus,
@@ -33,34 +33,34 @@ class CoinGeckoClient:
         )
         return httpx.AsyncClient(timeout=10.0, headers=headers)
 
-    @staticmethod
-    def _deduplicate_requests(
-        batch: BatchTokenPriceRequests,
-    ) -> BatchTokenPriceRequests:
-        """Remove duplicate requests from the batch based on chain_id, address, and coin_type."""
-        seen = set()
-        unique_requests = []
+    async def filter(
+        self, batch: BatchTokenPriceRequests
+    ) -> tuple[BatchTokenPriceRequests, BatchTokenPriceRequests]:
+        """Filter batch to return two batches: available in CoinGecko and not available"""
+        available_batch = BatchTokenPriceRequests.from_vs_currency(batch.vs_currency)
+        unavailable_batch = BatchTokenPriceRequests.from_vs_currency(batch.vs_currency)
+
+        # Get platform and coin maps
+        platform_map = await self.get_platform_map()
+        coin_map = await self.get_coin_map(platform_map)
 
         for request in batch.requests:
-            # Create a unique key for each request
-            key = (request.chain_id, request.address, request.coin_type)
-            if key not in seen:
-                seen.add(key)
-                unique_requests.append(request)
+            # Check if this token is available in CoinGecko
+            if await self._get_coingecko_id_from_request(
+                request, platform_map, coin_map
+            ):
+                available_batch.add(request)
+            else:
+                unavailable_batch.add(request)
 
-        return BatchTokenPriceRequests(
-            requests=unique_requests, vs_currency=batch.vs_currency
-        )
+        return available_batch, unavailable_batch
 
     async def get_prices(
         self, batch: BatchTokenPriceRequests
     ) -> list[TokenPriceResponse]:
         """Get prices for multiple tokens using CoinGecko API"""
-        # Deduplicate requests first
-        batch = self._deduplicate_requests(batch)
-
         # Check cache for all tokens first
-        cached_responses, batch_to_fetch = await TokenPriceCache.get(batch)
+        cached_responses, batch_to_fetch = await CoingeckoPriceCache.get(batch)
         results = list(cached_responses)
 
         if batch_to_fetch.is_empty():
@@ -127,7 +127,7 @@ class CoinGeckoClient:
                 item = TokenPriceResponse(
                     **request.model_dump(),
                     vs_currency=batch.vs_currency,
-                    price=float(combined_data[id][batch.vs_currency.value]),
+                    price=float(combined_data[id][batch.vs_currency.value.lower()]),
                     cache_status=CacheStatus.MISS,
                 )
             except (KeyError, ValueError):
@@ -135,7 +135,7 @@ class CoinGeckoClient:
 
             coingecko_responses.append(item)
 
-        await TokenPriceCache.set(coingecko_responses)
+        await CoingeckoPriceCache.set(coingecko_responses)
         results.extend(coingecko_responses)
         return results
 

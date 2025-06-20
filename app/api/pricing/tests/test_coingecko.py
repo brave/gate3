@@ -3,7 +3,11 @@ from unittest.mock import AsyncMock, patch
 
 from app.api.common.models import ChainId, CoinType
 from app.api.pricing.coingecko import CoinGeckoClient
-from app.api.pricing.models import BatchTokenPriceRequests, TokenPriceRequest
+from app.api.pricing.models import (
+    BatchTokenPriceRequests,
+    TokenPriceRequest,
+    VsCurrency,
+)
 
 
 @pytest.fixture
@@ -30,11 +34,13 @@ async def test_get_prices_chunking(client, mock_httpx_client):
         )
         for i in range(7)
     ]
-    batch = BatchTokenPriceRequests(requests=requests, vs_currency="usd")
+    batch = BatchTokenPriceRequests(requests=requests, vs_currency=VsCurrency.USD)
 
     with (
-        patch("app.api.pricing.coingecko.TokenPriceCache.get") as mock_cache,
-        patch("app.api.pricing.coingecko.TokenPriceCache.set", new_callable=AsyncMock),
+        patch("app.api.pricing.coingecko.CoingeckoPriceCache.get") as mock_cache,
+        patch(
+            "app.api.pricing.coingecko.CoingeckoPriceCache.set", new_callable=AsyncMock
+        ),
         patch.object(client, "get_platform_map") as mock_platform_map,
         patch.object(client, "get_coin_map") as mock_coin_map,
         patch("app.api.pricing.coingecko.COINGECKO_CHUNK_SIZE", 3),
