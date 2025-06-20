@@ -6,13 +6,25 @@
 
 A FastAPI-based gateway service for web3 applications at Brave.
 
+
+## API documentation
+
+| Environment | Access Control | URL |
+|-------------|----------------|------------------|
+| Staging (internal) | Internal Brave VPN | [`gate3-srv.bsg.brave.software/docs`](https://gate3-srv.bsg.brave.software/docs) |
+| Staging | Brave Services Key | [`gate3.bsg.brave.software/docs`](https://gate3.bsg.brave.software/docs) |
+| Production | Brave Services Key | [`gate3.bsg.brave.com/docs`](https://gate3.bsg.brave.com/docs) |
+
+
 ## Prerequisites
 
 - Python 3.13 or higher
 - Poetry for dependency management
-- Redis server (optional)
+- Redis server
 
 ## Development
+
+### Setup
 
 1. Clone the repository:
     ```bash
@@ -25,12 +37,22 @@ A FastAPI-based gateway service for web3 applications at Brave.
     poetry install
     ```
 
-3. Run the development server using FastAPI:
+3. Run unit tests
+    ```bash
+    poetry run pytest
+    ```
+
+4. Run Redis server
+
+    ```bash
+    redis-server
+    ```
+
+5. Run the development server using FastAPI:
     ```bash
     poetry run fastapi dev
     ```
 
-4. Run the production server using Uvicorn:
-    ```bash
-    poetry run fastapi run
-    ```
+### Deployment
+
+Deployments are managed using the [generalized docker build pipeline](https://github.com/brave-intl/general-docker-build-pipeline-action). To create a new deployment, simply publish a new release on GitHub.
