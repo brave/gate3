@@ -21,6 +21,11 @@ class CacheStatus(str, Enum):
     MISS = "MISS"
 
 
+class PriceSource(str, Enum):
+    COINGECKO = "coingecko"
+    JUPITER = "jupiter"
+
+
 class TokenPriceRequest(BaseModel):
     coin_type: CoinType = Field(description=COIN_TYPE_DESCRIPTION)
     chain_id: ChainId | None = Field(default=None, description=CHAIN_ID_DESCRIPTION)
@@ -66,6 +71,7 @@ class TokenPriceResponse(TokenPriceRequest):
         default=VsCurrency.USD, description=VS_CURRENCY_DESCRIPTION
     )
     cache_status: CacheStatus
+    source: PriceSource = Field(description="Source of the price data")
 
     model_config = {
         "json_schema_extra": {
@@ -77,6 +83,7 @@ class TokenPriceResponse(TokenPriceRequest):
                     "vs_currency": VsCurrency.USD,
                     "price": 1.01,
                     "cache_status": CacheStatus.MISS,
+                    "source": PriceSource.COINGECKO,
                 }
             ]
         }

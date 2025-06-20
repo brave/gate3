@@ -10,6 +10,7 @@ from app.api.pricing.models import (
     CacheStatus,
     BatchTokenPriceRequests,
     VsCurrency,
+    PriceSource,
 )
 
 
@@ -61,6 +62,7 @@ async def test_coingecko_get_with_cached_values(mock_redis):
         price=1.01,
         vs_currency=VsCurrency.USD,
         cache_status=CacheStatus.HIT,
+        source=PriceSource.COINGECKO,
     )
     eth_response = TokenPriceResponse(
         coin_type=CoinType.ETH,
@@ -69,12 +71,14 @@ async def test_coingecko_get_with_cached_values(mock_redis):
         price=2000.0,
         vs_currency=VsCurrency.USD,
         cache_status=CacheStatus.HIT,
+        source=PriceSource.COINGECKO,
     )
     btc_response = TokenPriceResponse(
         coin_type=CoinType.BTC,
         price=50000.0,
         vs_currency=VsCurrency.USD,
         cache_status=CacheStatus.HIT,
+        source=PriceSource.COINGECKO,
     )
 
     # Create cached data without cache_status
@@ -136,6 +140,7 @@ async def test_coingecko_get_with_mixed_cache_status(mock_redis):
         price=2000.0,
         vs_currency=VsCurrency.USD,
         cache_status=CacheStatus.HIT,
+        source=PriceSource.COINGECKO,
     )
 
     # Create cached data without cache_status
@@ -172,12 +177,14 @@ async def test_coingecko_set_multiple_responses(mock_redis):
             price=2000.0,
             vs_currency=VsCurrency.USD,
             cache_status=CacheStatus.HIT,
+            source=PriceSource.COINGECKO,
         ),
         TokenPriceResponse(
             coin_type=CoinType.BTC,
             price=50000.0,
             vs_currency=VsCurrency.USD,
             cache_status=CacheStatus.HIT,
+            source=PriceSource.COINGECKO,
         ),
     ]
 
@@ -234,6 +241,7 @@ async def test_coingecko_set_with_custom_ttl(mock_redis):
         price=2000.0,
         vs_currency=VsCurrency.USD,
         cache_status=CacheStatus.HIT,
+        source=PriceSource.COINGECKO,
     )
 
     # Mock pipeline
@@ -290,6 +298,7 @@ async def test_jupiter_get_with_cached_values(mock_redis):
         price=1.01,
         vs_currency=VsCurrency.USD,
         cache_status=CacheStatus.HIT,
+        source=PriceSource.JUPITER,
     )
     usdt_response = TokenPriceResponse(
         coin_type=CoinType.SOL,
@@ -298,6 +307,7 @@ async def test_jupiter_get_with_cached_values(mock_redis):
         price=1.02,
         vs_currency=VsCurrency.USD,
         cache_status=CacheStatus.HIT,
+        source=PriceSource.JUPITER,
     )
 
     # Create cached data without cache_status
@@ -363,6 +373,7 @@ async def test_jupiter_get_with_mixed_cache_status(mock_redis):
         price=1.01,
         vs_currency=VsCurrency.USD,
         cache_status=CacheStatus.HIT,
+        source=PriceSource.JUPITER,
     )
 
     # Create cached data without cache_status
@@ -409,6 +420,7 @@ async def test_jupiter_set_multiple_responses(mock_redis):
             price=1.01,
             vs_currency=VsCurrency.USD,
             cache_status=CacheStatus.HIT,
+            source=PriceSource.JUPITER,
         ),
         TokenPriceResponse(
             coin_type=CoinType.SOL,
@@ -417,6 +429,7 @@ async def test_jupiter_set_multiple_responses(mock_redis):
             price=1.02,
             vs_currency=VsCurrency.USD,
             cache_status=CacheStatus.HIT,
+            source=PriceSource.JUPITER,
         ),
     ]
 
@@ -479,6 +492,7 @@ async def test_jupiter_set_with_custom_ttl(mock_redis):
         price=1.01,
         vs_currency=VsCurrency.USD,
         cache_status=CacheStatus.HIT,
+        source=PriceSource.JUPITER,
     )
 
     # Mock pipeline
@@ -518,6 +532,7 @@ async def test_jupiter_cache_key_generation():
         price=1.02,
         vs_currency=VsCurrency.USD,
         cache_status=CacheStatus.HIT,
+        source=PriceSource.JUPITER,
     )
 
     cache_key = JupiterPriceCache._get_cache_key(response, VsCurrency.USD)
