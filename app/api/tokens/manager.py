@@ -1,0 +1,325 @@
+import json
+from typing import Literal
+
+import requests
+from redis.commands.search.field import TextField
+from redis.commands.search.index_definition import IndexDefinition
+from redis.commands.search.query import Query
+
+from app.api.common.models import ChainId, ChainIdCoinTypeMap, CoinType
+from app.api.tokens.models import TokenInfo, TokenSearchResponse, TokenSource
+from app.core.cache import Cache
+
+
+class TokenManager:
+    key_prefix = "token"
+    index_name = "token_idx"
+
+    @classmethod
+    async def create_index(cls) -> None:
+        """
+        Create RediSearch index for token search capabilities.
+        """
+        async with Cache.get_client() as redis_client:
+            index = redis_client.ft(cls.index_name)
+
+            try:
+                await index.info()
+                return index
+            except Exception:
+                pass
+
+            # Create index with schema for searchable fields
+            schema = [
+                TextField("symbol_lower", weight=2.0),
+                TextField("name_lower", weight=1.5),
+                TextField("address_lower", weight=1.0),
+            ]
+
+            definition = IndexDefinition(prefix=[f"{cls.key_prefix}:"])
+
+            return await index.create_index(fields=schema, definition=definition)
+
+    @classmethod
+    async def clear_tokens(cls) -> None:
+        """
+        Clear all tokens from Redis.
+        """
+        async with Cache.get_client() as redis_client:
+            cursor = 0
+            pipe = redis_client.pipeline()
+
+            while True:
+                cursor, keys = await redis_client.scan(
+                    cursor, match=f"{cls.key_prefix}:*"
+                )
+                for key in keys:
+                    pipe.delete(key)
+                if cursor == 0:
+                    break
+
+            await pipe.execute()
+
+            index = redis_client.ft(cls.index_name)
+            try:
+                await index.info()
+            except Exception:
+                pass
+            else:
+                await index.dropindex()
+
+    @classmethod
+    async def ingest_coingecko_data(cls) -> None:
+        """
+        Ingest the entire Coingecko token list into Redis.
+        """
+        # Create index if it doesn't exist
+        await cls.create_index()
+
+        url = "https://raw.githubusercontent.com/brave/token-lists/refs/heads/main/data/v1/coingecko.json"
+        response = requests.get(url, timeout=10)
+        json_data = response.json()
+
+        try:
+            async with Cache.get_client() as redis_client:
+                pipe = redis_client.pipeline()
+
+                # Process each token in the JSON
+                for raw_chain_id, tokens in json_data.items():
+                    for address, raw_token_info in tokens.items():
+                        chain_id = ChainId(raw_chain_id)
+                        coin_type = ChainIdCoinTypeMap[chain_id]
+
+                        token_info = TokenInfo(
+                            coin_type=coin_type,
+                            chain_id=chain_id,
+                            address=address,
+                            name=raw_token_info["name"],
+                            symbol=raw_token_info["symbol"],
+                            decimals=raw_token_info["decimals"],
+                            logo=raw_token_info["logo"],
+                            sources=[],  # We'll add sources later
+                        )
+
+                        key = ":".join(
+                            (
+                                cls.key_prefix,
+                                coin_type.value.lower(),
+                                chain_id.value.lower(),
+                                address.lower(),
+                            )
+                        )
+
+                        token_data = token_info.model_dump()
+                        token_data["name_lower"] = token_info.name.lower()
+                        token_data["symbol_lower"] = token_info.symbol.lower()
+                        token_data["address_lower"] = address.lower()
+
+                        # Get existing data for comparison
+                        existing = await redis_client.hgetall(key)
+                        sources = (
+                            set(json.loads(existing["sources"])) if existing else set()
+                        )
+                        sources.add(TokenSource.COINGECKO)
+                        token_data["sources"] = json.dumps(sorted(list(sources)))
+
+                        if existing != token_data:
+                            pipe.hset(key, mapping=token_data)
+
+                # Execute pipeline for updates/additions
+                await pipe.execute()
+
+        except Exception as e:
+            print(f"Error during ingestion: {e}")
+            raise
+
+    @classmethod
+    async def ingest_jupiter_tokens(cls, tag: Literal["lst", "verified"]) -> None:
+        """
+        Ingest Jupiter tokens into Redis.
+        """
+        # Create index if it doesn't exist
+        await cls.create_index()
+
+        url = f"https://lite-api.jup.ag/tokens/v2/tag?query={tag}"
+        response = requests.get(url, timeout=10)
+        json_data = response.json()
+
+        async with Cache.get_client() as redis_client:
+            pipe = redis_client.pipeline()
+
+            for token in json_data:
+                key = ":".join(
+                    (
+                        cls.key_prefix,
+                        CoinType.SOL.value.lower(),
+                        ChainId.SOLANA.value.lower(),
+                        token["id"].lower(),
+                    )
+                )
+
+                token_info = TokenInfo(
+                    coin_type=CoinType.SOL,
+                    chain_id=ChainId.SOLANA,
+                    address=token["id"],
+                    name=token["name"],
+                    symbol=token["symbol"],
+                    decimals=token["decimals"],
+                    logo=token.get("icon", ""),
+                    sources=[],  # We'll add sources later
+                )
+
+                token_data = token_info.model_dump()
+                token_data["name_lower"] = token_info.name.lower()
+                token_data["symbol_lower"] = token_info.symbol.lower()
+                token_data["address_lower"] = token["id"].lower()
+
+                existing = await redis_client.hgetall(key)
+                sources = set(json.loads(existing["sources"])) if existing else set()
+                sources.add(
+                    TokenSource.JUPITER_LST
+                    if tag == "lst"
+                    else TokenSource.JUPITER_VERIFIED
+                )
+                token_data["sources"] = json.dumps(sorted(list(sources)))
+
+                if existing != token_data:
+                    pipe.hset(key, mapping=token_data)
+
+            # Execute pipeline for updates/additions
+            await pipe.execute()
+
+    @classmethod
+    async def get(
+        cls, coin_type: CoinType, chain_id: ChainId | None, address: str | None
+    ) -> TokenInfo | None:
+        key = ":".join(
+            (
+                cls.key_prefix,
+                coin_type.lower(),
+                (chain_id or "").lower(),
+                (address or "").lower(),
+            )
+        )
+
+        try:
+            async with Cache.get_client() as redis_client:
+                token_data = await redis_client.hgetall(key)
+
+            if not token_data:
+                return None
+
+            return TokenInfo(
+                coin_type=coin_type,
+                chain_id=chain_id,
+                address=address,
+                name=token_data["name"],
+                symbol=token_data["symbol"],
+                decimals=int(token_data["decimals"]),
+                logo=token_data.get("logo") or None,
+                sources=json.loads(token_data.get("sources", "[]")),
+            )
+        except Exception as e:
+            print(f"Error retrieving token: {e}")
+            return None
+
+    @classmethod
+    async def add(cls, token_info: TokenInfo):
+        key = ":".join(
+            (
+                cls.key_prefix,
+                token_info.coin_type.lower(),
+                (token_info.chain_id or "").lower(),
+                (token_info.address or "").lower(),
+            )
+        )
+
+        # Prepare token data
+        token_data = token_info.model_dump()
+        token_data["name_lower"] = token_info.name.lower()
+        token_data["symbol_lower"] = token_info.symbol.lower()
+        token_data["address_lower"] = (token_info.address or "").lower()
+
+        # Store sources as JSON string
+        if "sources" in token_data and isinstance(token_data["sources"], list):
+            token_data["sources"] = json.dumps(token_data["sources"])
+
+        # Convert all values to strings
+        token_data = {k: str(v) for k, v in token_data.items()}
+
+        try:
+            # Set hash
+            async with Cache.get_client() as redis_client:
+                await redis_client.hset(key, mapping=token_data)
+                print(f"Added/updated token at {key}")
+        except Exception as e:
+            print(f"Error adding token: {e}")
+
+    @classmethod
+    async def search(cls, query: str, offset: int, limit: int) -> TokenSearchResponse:
+        index = await cls.create_index()
+        query_lower = query.lower()
+
+        # Build DIALECT 2 compliant search query with proper field weights:
+        #   1. Exact symbol matches get highest priority
+        #   2. Exact name matches get high priority
+        #   3. Fuzzy name matches get medium priority
+        #   4. Infix symbol matches get lower priority
+        #   5. Address matches get lowest priority
+
+        search_query = ""
+
+        # Add fuzzy name matching for multi-word queries
+        if " " in query_lower:
+            fuzz = "%"
+            terms = [f"{fuzz}{term}{fuzz}" for term in query_lower.split()]
+            search_query = f"@name_lower:({' '.join(terms)})"
+        else:
+            # Start with exact matches for highest priority
+            search_query = (
+                f"(@symbol_lower:{query_lower}) | (@name_lower:{query_lower})"
+            )
+
+            # For single word queries, add infix matching for symbol and exact address matching
+            search_query += (
+                f" | (@symbol_lower:*{query_lower}*) | (@address_lower:{query_lower})"
+            )
+
+        q = Query(search_query).dialect(2).paging(offset, limit)
+        result = await index.search(q)
+
+        results = []
+        for doc in result.docs:
+            # Parse the key to extract coin_type and chain_id
+            _, coin_type, chain_id, _ = doc.id.split(":")
+
+            token_info = TokenInfo(
+                coin_type=CoinType(coin_type.upper()),
+                chain_id=ChainId(chain_id),
+                address=doc.address,
+                name=doc.name,
+                symbol=doc.symbol.upper(),
+                decimals=int(doc.decimals),
+                logo=doc.logo,
+                sources=json.loads(doc.sources),
+            )
+            results.append(token_info)
+
+        return TokenSearchResponse(
+            results=results, offset=offset, limit=limit, total=result.total, query=query
+        )
+
+    @staticmethod
+    async def mock_fetch_from_blockchain(
+        coin_type: CoinType, chain_id: ChainId, address: str
+    ) -> TokenInfo | None:
+        return TokenInfo(
+            coin_type=coin_type,
+            chain_id=chain_id,
+            address=address,
+            name="Mock Token",
+            symbol="MTK",
+            decimals=18,
+            logo="https://example.com/mock-logo.png",
+            sources=[TokenSource.UNKNOWN],
+        )
