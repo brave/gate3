@@ -4,14 +4,17 @@ from fastapi import FastAPI
 from prometheus_client import start_http_server
 from prometheus_fastapi_instrumentator import Instrumentator
 
-from app.config import settings
-from app.core.cache import Cache
-from app.api.pricing.routes import router as pricing_router
+from app.api.common.routes import router as base_router
 from app.api.nft.routes import (
     router as nfts_router,
+)
+from app.api.nft.routes import (
     simplehash_router as simplehash_nfts_router,
 )
-from app.api.common.routes import router as base_router
+from app.api.pricing.routes import router as pricing_router
+from app.api.tokens.routes import router as tokens_router
+from app.config import settings
+from app.core.cache import Cache
 
 
 @asynccontextmanager
@@ -43,6 +46,7 @@ Instrumentator().instrument(app)
 app.include_router(base_router)
 app.include_router(pricing_router)
 app.include_router(nfts_router)
+app.include_router(tokens_router)
 
 # SimpleHash API adapter
 app.include_router(simplehash_nfts_router)

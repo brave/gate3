@@ -30,3 +30,15 @@ class ChainId(str, Enum):
     OPTIMISM = "0xa"
     POLYGON = "0x89"
     SOLANA = "0x65"
+
+
+ChainIdCoinTypeMap = {
+    ChainId.ARBITRUM: CoinType.ETH,
+    ChainId.AVALANCHE: CoinType.ETH,
+    ChainId.BASE: CoinType.ETH,
+    ChainId.BNB_CHAIN: CoinType.ETH,
+    ChainId.ETHEREUM: CoinType.ETH,
+    ChainId.OPTIMISM: CoinType.ETH,
+    ChainId.POLYGON: CoinType.ETH,
+    ChainId.SOLANA: CoinType.SOL,
+}
