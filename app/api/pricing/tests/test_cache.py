@@ -1,16 +1,17 @@
 import json
-import pytest
 from unittest.mock import AsyncMock, patch
 
-from app.api.common.models import CoinType, ChainId
+import pytest
+
+from app.api.common.models import ChainId, CoinType
 from app.api.pricing.cache import CoingeckoPriceCache, JupiterPriceCache
 from app.api.pricing.models import (
+    BatchTokenPriceRequests,
+    CacheStatus,
+    PriceSource,
     TokenPriceRequest,
     TokenPriceResponse,
-    CacheStatus,
-    BatchTokenPriceRequests,
     VsCurrency,
-    PriceSource,
 )
 
 

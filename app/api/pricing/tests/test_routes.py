@@ -1,18 +1,17 @@
-import pytest
 from unittest.mock import AsyncMock, patch
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app.api.common.models import ChainId, CoinType
 from app.api.pricing.models import (
+    BatchTokenPriceRequests,
+    CacheStatus,
+    PriceSource,
+    TokenPriceRequest,
     TokenPriceResponse,
     VsCurrency,
-    CacheStatus,
-    BatchTokenPriceRequests,
-    TokenPriceRequest,
-    PriceSource,
 )
-
 from app.main import app
 
 

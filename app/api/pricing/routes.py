@@ -1,24 +1,23 @@
-from fastapi import APIRouter, Query, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 
-from app.api.common.models import ChainId
 from app.api.common.annotations import (
-    CHAIN_ID_DESCRIPTION,
     ADDRESS_DESCRIPTION,
-    VS_CURRENCY_DESCRIPTION,
+    CHAIN_ID_DESCRIPTION,
     COIN_TYPE_DESCRIPTION,
+    VS_CURRENCY_DESCRIPTION,
 )
+from app.api.common.models import ChainId
 
 from .coingecko import CoinGeckoClient
 from .jupiter import JupiterClient
-from .utils import deduplicate_batch
 from .models import (
     BatchTokenPriceRequests,
+    CoinType,
     TokenPriceRequest,
     TokenPriceResponse,
-    CoinType,
     VsCurrency,
 )
-
+from .utils import deduplicate_batch
 
 router = APIRouter(prefix="/api/pricing")
 

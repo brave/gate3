@@ -1,20 +1,21 @@
-import httpx
 import asyncio
+
+import httpx
 
 from app.api.common.models import ChainId, CoinType
 from app.config import settings
-from .constants import COINGECKO_CHUNK_SIZE, COINGECKO_MAX_CONCURRENT_REQUESTS
-from .utils import chunk_sequence
 
-from .cache import CoinMapCache, PlatformMapCache, CoingeckoPriceCache
+from .cache import CoingeckoPriceCache, CoinMapCache, PlatformMapCache
+from .constants import COINGECKO_CHUNK_SIZE, COINGECKO_MAX_CONCURRENT_REQUESTS
 from .models import (
     BatchTokenPriceRequests,
     CacheStatus,
     CoingeckoPlatform,
+    PriceSource,
     TokenPriceRequest,
     TokenPriceResponse,
-    PriceSource,
 )
+from .utils import chunk_sequence
 
 
 class CoinGeckoClient:
