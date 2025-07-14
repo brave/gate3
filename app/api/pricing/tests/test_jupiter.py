@@ -1,15 +1,16 @@
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
-from unittest.mock import AsyncMock, patch, MagicMock
 
 from app.api.common.models import ChainId, CoinType
 from app.api.pricing.jupiter import JupiterClient
 from app.api.pricing.models import (
     BatchTokenPriceRequests,
+    CacheStatus,
+    PriceSource,
     TokenPriceRequest,
     TokenPriceResponse,
-    CacheStatus,
     VsCurrency,
-    PriceSource,
 )
 
 

@@ -1,7 +1,7 @@
 from fastapi import APIRouter
 
+from app.api.common.models import HealthStatus, PingResponse
 from app.core.cache import Cache
-from app.api.common.models import PingResponse, HealthStatus
 
 router = APIRouter(prefix="/api")
 

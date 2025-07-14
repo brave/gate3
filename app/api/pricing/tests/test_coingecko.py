@@ -1,5 +1,6 @@
-import pytest
 from unittest.mock import AsyncMock, patch
+
+import pytest
 
 from app.api.common.models import ChainId, CoinType
 from app.api.pricing.coingecko import CoinGeckoClient

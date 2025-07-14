@@ -1,18 +1,20 @@
-import httpx
 import asyncio
 
+import httpx
+
 from app.api.common.models import ChainId, CoinType
-from .models import (
-    BatchTokenPriceRequests,
-    TokenPriceRequest,
-    TokenPriceResponse,
-    CacheStatus,
-    VsCurrency,
-    PriceSource,
-)
+
 from .cache import JupiterPriceCache
 from .coingecko import CoinGeckoClient
 from .constants import JUPITER_CHUNK_SIZE, JUPITER_MAX_CONCURRENT_REQUESTS
+from .models import (
+    BatchTokenPriceRequests,
+    CacheStatus,
+    PriceSource,
+    TokenPriceRequest,
+    TokenPriceResponse,
+    VsCurrency,
+)
 from .utils import chunk_sequence
 
 

@@ -1,11 +1,13 @@
-import pytest
 from unittest.mock import AsyncMock, MagicMock, Mock
+
+import pytest
 from fastapi.testclient import TestClient
-from app.main import app
+
 from app.api.nft.models import (
     SimpleHashNFTResponse,
     SolanaAssetMerkleProof,
 )
+from app.main import app
 
 client = TestClient(app)
 

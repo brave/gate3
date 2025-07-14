@@ -1,29 +1,29 @@
 import json
 
 import httpx
-from fastapi import APIRouter, Query, Path
+from fastapi import APIRouter, Path, Query
 from fastapi.responses import RedirectResponse
+
 from app.api.common.models import ChainId
 from app.api.nft.models import (
-    TraitAttribute,
+    AlchemyChain,
+    AlchemyNFT,
+    AlchemyNFTResponse,
+    AlchemyTokenType,
     SimpleHashChain,
+    SimpleHashCollection,
+    SimpleHashContract,
+    SimpleHashExtraMetadata,
     SimpleHashNFT,
     SimpleHashNFTResponse,
     SimpleHashTokenType,
-    SimpleHashContract,
-    SimpleHashCollection,
-    SimpleHashExtraMetadata,
-    AlchemyNFTResponse,
-    AlchemyNFT,
-    AlchemyTokenType,
-    AlchemyChain,
-    SolanaAssetMerkleProof,
-    SolanaAssetResponse,
     SolanaAsset,
+    SolanaAssetMerkleProof,
     SolanaAssetRawContent,
+    SolanaAssetResponse,
+    TraitAttribute,
 )
 from app.config import settings
-
 
 router = APIRouter(prefix="/api/nft")
 simplehash_router = APIRouter(prefix="/simplehash/api/v0")
