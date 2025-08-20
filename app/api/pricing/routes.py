@@ -36,7 +36,7 @@ async def get_price(
         description=COIN_TYPE_DESCRIPTION,
         examples=[CoinType.ETH, CoinType.BTC, CoinType.SOL],
     ),
-    chain_id: ChainId | None = Query(
+    chain_id: str | None = Query(
         default=None,
         description=CHAIN_ID_DESCRIPTION,
         examples=[ChainId.ETHEREUM, ChainId.BASE],

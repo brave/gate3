@@ -96,9 +96,9 @@ class CoingeckoPriceCache:
             return f"{cls.CACHE_PREFIX}:{param.coin_type.value.lower()}:{vs_currency.value.lower()}"
 
         if param.address:
-            return f"{cls.CACHE_PREFIX}:{param.coin_type.value.lower()}:{param.chain_id.value}:{param.address.lower()}:{vs_currency.value.lower()}"
+            return f"{cls.CACHE_PREFIX}:{param.coin_type.value.lower()}:{param.chain_id}:{param.address.lower()}:{vs_currency.value.lower()}"
 
-        return f"{cls.CACHE_PREFIX}:{param.coin_type.value.lower()}:{param.chain_id.value}:{vs_currency.value.lower()}"
+        return f"{cls.CACHE_PREFIX}:{param.coin_type.value.lower()}:{param.chain_id}:{vs_currency.value.lower()}"
 
 
 class JupiterPriceCache:

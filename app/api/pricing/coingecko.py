@@ -166,13 +166,13 @@ class CoinGeckoClient:
                 return None
 
             for platform in platform_map.values():
-                if platform.chain_id == chain_id.value:
+                if platform.chain_id == chain_id:
                     return platform.native_token_id
 
             return None
 
         elif request.coin_type in [CoinType.SOL, CoinType.ETH]:
-            return coin_map.get(request.chain_id.value, {}).get(request.address.lower())
+            return coin_map.get(request.chain_id, {}).get(request.address.lower())
 
         return None
 
