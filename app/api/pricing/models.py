@@ -28,7 +28,7 @@ class PriceSource(str, Enum):
 
 class TokenPriceRequest(BaseModel):
     coin_type: CoinType = Field(description=COIN_TYPE_DESCRIPTION)
-    chain_id: ChainId | None = Field(default=None, description=CHAIN_ID_DESCRIPTION)
+    chain_id: str | None = Field(default=None, description=CHAIN_ID_DESCRIPTION)
     address: str | None = Field(default=None, description=ADDRESS_DESCRIPTION)
 
     @model_validator(mode="after")
@@ -53,7 +53,7 @@ class TokenPriceRequest(BaseModel):
                 {
                     "coin_type": CoinType.SOL,
                     "chain_id": ChainId.SOLANA,
-                    "address": "",
+                    "address": None,
                 },
                 {
                     "coin_type": CoinType.SOL,
