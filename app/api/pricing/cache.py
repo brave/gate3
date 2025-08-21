@@ -93,12 +93,12 @@ class CoingeckoPriceCache:
         """Generate cache key for a token"""
         # For BTC, ADA, FIL, ZEC, etc., just use the coin type
         if param.coin_type not in [CoinType.ETH, CoinType.SOL]:
-            return f"{cls.CACHE_PREFIX}:{param.coin_type.value.lower()}:{vs_currency.value.lower()}"
+            return f"{cls.CACHE_PREFIX}:{param.coin_type.lower()}:{vs_currency.lower()}"
 
         if param.address:
-            return f"{cls.CACHE_PREFIX}:{param.coin_type.value.lower()}:{param.chain_id}:{param.address.lower()}:{vs_currency.value.lower()}"
+            return f"{cls.CACHE_PREFIX}:{param.coin_type.lower()}:{param.chain_id}:{param.address.lower()}:{vs_currency.lower()}"
 
-        return f"{cls.CACHE_PREFIX}:{param.coin_type.value.lower()}:{param.chain_id}:{vs_currency.value.lower()}"
+        return f"{cls.CACHE_PREFIX}:{param.coin_type.lower()}:{param.chain_id}:{vs_currency.lower()}"
 
 
 class JupiterPriceCache:
@@ -176,7 +176,7 @@ class JupiterPriceCache:
         cls, param: TokenPriceRequest | TokenPriceResponse, vs_currency: VsCurrency
     ) -> str:
         """Generate cache key for a token"""
-        return f"{cls.CACHE_PREFIX}:{param.address.lower()}:{vs_currency.value.lower()}"
+        return f"{cls.CACHE_PREFIX}:{param.address.lower()}:{vs_currency.lower()}"
 
 
 class PlatformMapCache:

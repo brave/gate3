@@ -53,7 +53,9 @@ async def test_get_prices_chunking(client, mock_httpx_client):
 
         # Mock the HTTP response
         mock_response = AsyncMock()
-        mock_response.json = lambda: {f"token{i}": {"usd": 1.0} for i in range(7)}
+        mock_response.json = lambda: {
+            f"token{i}": {"usd": 1.0, "usd_24h_change": 2.5} for i in range(7)
+        }
         mock_response.raise_for_status = lambda: None
         mock_httpx_client.get.return_value = mock_response
 

@@ -67,6 +67,10 @@ class TokenPriceRequest(BaseModel):
 
 class TokenPriceResponse(TokenPriceRequest):
     price: float
+    percentage_change_24h: float | None = Field(
+        default=None,
+        description="24-hour price change percentage in the specified vs_currency",
+    )
     vs_currency: VsCurrency = Field(
         default=VsCurrency.USD, description=VS_CURRENCY_DESCRIPTION
     )
@@ -84,6 +88,7 @@ class TokenPriceResponse(TokenPriceRequest):
                     "price": 1.01,
                     "cache_status": CacheStatus.MISS,
                     "source": PriceSource.COINGECKO,
+                    "percentage_change_24h": 2.5,
                 }
             ]
         }
