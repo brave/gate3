@@ -97,6 +97,7 @@ class CoinGeckoClient:
                     "ids": ",".join(chunk),
                     "vs_currencies": batch.vs_currency.value,
                     "include_platform": True,
+                    "include_24hr_change": True,
                 }
                 async with self._create_client() as client:
                     response = await client.get(
@@ -126,10 +127,15 @@ class CoinGeckoClient:
                 continue
 
             try:
+                response = combined_data[id]
+                vs_currency_key = batch.vs_currency.lower()
                 item = TokenPriceResponse(
                     **request.model_dump(),
                     vs_currency=batch.vs_currency,
-                    price=float(combined_data[id][batch.vs_currency.value.lower()]),
+                    price=float(response[vs_currency_key]),
+                    percentage_change_24h=float(
+                        response[f"{vs_currency_key}_24h_change"]
+                    ),
                     cache_status=CacheStatus.MISS,
                     source=PriceSource.COINGECKO,
                 )
