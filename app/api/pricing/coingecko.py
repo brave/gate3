@@ -129,12 +129,15 @@ class CoinGeckoClient:
             try:
                 response = combined_data[id]
                 vs_currency_key = batch.vs_currency.lower()
+                percentage_change_24h = response.get(f"{vs_currency_key}_24h_change")
                 item = TokenPriceResponse(
                     **request.model_dump(),
                     vs_currency=batch.vs_currency,
                     price=float(response[vs_currency_key]),
-                    percentage_change_24h=float(
-                        response[f"{vs_currency_key}_24h_change"]
+                    percentage_change_24h=(
+                        float(percentage_change_24h)
+                        if percentage_change_24h is not None
+                        else None
                     ),
                     cache_status=CacheStatus.MISS,
                     source=PriceSource.COINGECKO,
