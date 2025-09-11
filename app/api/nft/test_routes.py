@@ -85,8 +85,23 @@ def mock_settings(monkeypatch):
 @pytest.fixture
 def mock_httpx_client(monkeypatch):
     mock_client = AsyncMock()
-    mock_client.get = AsyncMock()
-    mock_client.post = AsyncMock()
+
+    # Create mock response objects that return actual values, not coroutines
+    mock_get_response = Mock()
+    mock_post_response = Mock()
+
+    # Set up the mock responses to return actual values, not coroutines
+    mock_get_response.status_code = 200
+    mock_get_response.json.return_value = {}
+    mock_get_response.raise_for_status.return_value = None
+
+    mock_post_response.status_code = 200
+    mock_post_response.json.return_value = {}
+    mock_post_response.raise_for_status.return_value = None
+
+    # Configure the client methods
+    mock_client.get.return_value = mock_get_response
+    mock_client.post.return_value = mock_post_response
 
     # Create a mock context manager
     mock_context = AsyncMock()
@@ -203,3 +218,159 @@ def test_get_solana_asset_proof_error(mock_httpx_client):
         client.get("/api/nft/v1/getSolanaAssetProof?token_address=invalid_token")
 
     assert str(e.value) == "Alchemy API error: Token not found"
+
+
+def test_get_simplehash_nfts_by_owner(mock_httpx_client, mock_settings):
+    mock_response = {
+        "ownedNfts": [MOCK_NFT_ALCHEMY_RESPONSE],
+        "totalCount": 1,
+        "pageKey": None,
+    }
+
+    # Configure the mock response
+    mock_httpx_client.get.return_value.json.return_value = mock_response
+
+    response = client.get(
+        "/simplehash/api/v0/nfts/owners?wallet_addresses=0x123&chains=ethereum"
+    )
+    assert response.status_code == 200
+    data = response.json()
+
+    sh_response = SimpleHashNFTResponse.model_validate(data)
+    assert len(sh_response.nfts) == 1
+    nft = sh_response.nfts[0]
+    assert nft.chain == "ethereum"
+    assert nft.contract_address == "0x123"
+    assert nft.token_id == "1"
+    assert nft.name == "Mock NFT #1"
+    assert nft.description == "A mock NFT description"
+    assert nft.image_url == "https://example.com/cached.jpg"
+    assert nft.background_color is None
+    assert nft.external_url is None
+    assert nft.contract.type == "ERC721"
+    assert nft.contract.name == "MockNFT"
+    assert nft.contract.symbol == "MOCK"
+    assert nft.collection.name == "MockNFT"
+    assert nft.collection.spam_score == 0
+    attributes = nft.extra_metadata.attributes
+    assert len(attributes) == 2
+    assert attributes[0].trait_type == "Color"
+    assert attributes[0].value == "Red"
+    assert attributes[1].trait_type == "Shape"
+    assert attributes[1].value == "Round"
+
+
+def test_get_simplehash_nfts_by_owner_multiple_chains(mock_httpx_client, mock_settings):
+    mock_response = {
+        "ownedNfts": [MOCK_NFT_ALCHEMY_RESPONSE],
+        "totalCount": 1,
+        "pageKey": None,
+    }
+
+    mock_httpx_client.get.return_value.json.return_value = mock_response
+
+    response = client.get(
+        "/simplehash/api/v0/nfts/owners?wallet_addresses=0x123&chains=ethereum,polygon"
+    )
+    assert response.status_code == 200
+    data = response.json()
+    sh_response = SimpleHashNFTResponse.model_validate(data)
+    # Should get 2 NFTs - one from Ethereum and one from Polygon
+    assert len(sh_response.nfts) == 2
+
+
+def test_get_simplehash_nfts_by_owner_with_cursor(mock_httpx_client, mock_settings):
+    mock_response = {
+        "ownedNfts": [MOCK_NFT_ALCHEMY_RESPONSE],
+        "totalCount": 1,
+        "pageKey": "next_page_key",
+    }
+
+    mock_httpx_client.get.return_value.json.return_value = mock_response
+
+    response = client.get(
+        "/simplehash/api/v0/nfts/owners?wallet_addresses=0x123&chains=ethereum&cursor=page123"
+    )
+    assert response.status_code == 200
+    data = response.json()
+    sh_response = SimpleHashNFTResponse.model_validate(data)
+    assert len(sh_response.nfts) == 1
+    assert sh_response.next_cursor == "next_page_key"
+
+
+def test_get_simplehash_compressed_nft_proof(mock_httpx_client, mock_settings):
+    mock_response = {
+        "result": {
+            "proof": ["hash1", "hash2", "hash3"],
+            "root": "root_hash",
+            "tree_id": "tree_123",
+            "node_index": 42,
+            "leaf": "leaf_hash",
+            "status": "finalized",
+        },
+        "error": None,
+    }
+
+    mock_httpx_client.post.return_value.json.return_value = mock_response
+
+    response = client.get("/simplehash/api/v0/nfts/proof/solana/mint123")
+    assert response.status_code == 200
+    data = response.json()
+    sh_response = SolanaAssetMerkleProof.model_validate(data)
+    assert sh_response.root == "root_hash"
+    assert sh_response.tree_id == "tree_123"
+    assert sh_response.node_index == 42
+    assert sh_response.leaf == "leaf_hash"
+    assert sh_response.proof == ["hash1", "hash2", "hash3"]
+
+
+def test_get_simplehash_nfts_by_ids_solana(mock_httpx_client, mock_settings):
+    mock_solana_asset = {
+        "id": "mint123",
+        "interface": "ProgrammableNFT",
+        "content": {
+            "metadata": {
+                "name": "Mock Solana NFT",
+                "symbol": "MSN",
+                "description": "A mock Solana NFT",
+                "attributes": [],
+            },
+            "links": {
+                "image": "https://example.com/solana-image.jpg",
+                "external_url": "https://example.com",
+            },
+            "json_uri": "https://example.com/metadata/solana.json",
+        },
+        "grouping": [],
+        "mutable": False,
+        "burnt": False,
+    }
+
+    mock_response = {
+        "result": [mock_solana_asset],
+    }
+
+    mock_httpx_client.post.return_value.json.return_value = mock_response
+
+    response = client.get("/simplehash/api/v0/nfts/assets?nft_ids=solana.mint123")
+    assert response.status_code == 200
+    data = response.json()
+    sh_response = SimpleHashNFTResponse.model_validate(data)
+    assert len(sh_response.nfts) == 1
+
+
+def test_get_simplehash_nfts_by_ids(mock_httpx_client, mock_settings):
+    mock_response = {
+        "nfts": [MOCK_NFT_ALCHEMY_RESPONSE],
+    }
+
+    mock_httpx_client.post.return_value.json.return_value = mock_response
+
+    response = client.get(
+        "/simplehash/api/v0/nfts/assets?nft_ids=ethereum.0x123.456,polygon.0x789.101112"
+    )
+    assert response.status_code == 200
+    data = response.json()
+    sh_response = SimpleHashNFTResponse.model_validate(data)
+    # Should get 2 NFTs - one from Ethereum and one from Polygon
+    assert len(sh_response.nfts) == 2

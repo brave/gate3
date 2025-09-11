@@ -2,7 +2,6 @@ import json
 
 import httpx
 from fastapi import APIRouter, Path, Query
-from fastapi.responses import RedirectResponse
 
 from app.api.common.models import ChainId
 from app.api.nft.models import (
@@ -462,16 +461,15 @@ async def get_simplehash_nfts_by_owner(
         else list(SimpleHashChain)
     )
 
-    params = httpx.QueryParams(
+    # Convert SimpleHash chains to internal chain IDs
+    chain_ids = [_simplehash_chain_to_chain_id(chain) for chain in filtered_chains]
+
+    # Call the internal function directly instead of redirecting
+    return await get_nfts_by_owner(
         wallet_address=wallet_addresses[0],
-        chain_ids=[_simplehash_chain_to_chain_id(chain) for chain in filtered_chains],
-    )
-
-    if cursor:
-        params = params.set("page_key", cursor)
-
-    return RedirectResponse(
-        url=router.url_path_for("get_nfts_by_owner") + f"?{params}", status_code=307
+        chain_ids=chain_ids,
+        page_key=cursor,
+        page_size=50,  # Use default page size
     )
 
 
@@ -483,11 +481,8 @@ async def get_simplehash_compressed_nft_proof(
         ..., description="The token address to fetch the proof for"
     ),
 ) -> SolanaAssetMerkleProof:
-    return RedirectResponse(
-        url=router.url_path_for("get_solana_asset_proof")
-        + f"?token_address={token_address}",
-        status_code=307,
-    )
+    # Call the internal function directly instead of redirecting
+    return await get_solana_asset_proof(token_address=token_address)
 
 
 @simplehash_router.get("/nfts/assets", response_model=SimpleHashNFTResponse)
@@ -519,8 +514,5 @@ async def get_simplehash_nfts_by_ids(
             # For EVM chains: chain.address.token_id -> chain_id.address.token_id
             internal_nft_ids.append(f"{chain_id}.{parts[1]}.{parts[2]}")
 
-    return RedirectResponse(
-        url=router.url_path_for("get_nfts_by_ids")
-        + f"?ids={','.join(internal_nft_ids)}",
-        status_code=307,
-    )
+    # Call the internal function directly instead of redirecting
+    return await get_nfts_by_ids(ids=",".join(internal_nft_ids))
