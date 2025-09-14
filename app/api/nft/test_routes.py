@@ -374,3 +374,100 @@ def test_get_simplehash_nfts_by_ids(mock_httpx_client, mock_settings):
     sh_response = SimpleHashNFTResponse.model_validate(data)
     # Should get 2 NFTs - one from Ethereum and one from Polygon
     assert len(sh_response.nfts) == 2
+
+
+def test_get_nfts_by_ids_handles_malformed_input_gracefully(
+    mock_httpx_client, mock_settings
+):
+    """
+    Test that verifies malformed NFT IDs are gracefully skipped.
+    """
+    mock_response = {
+        "nfts": [MOCK_NFT_ALCHEMY_RESPONSE, MOCK_NFT_ALCHEMY_RESPONSE],
+    }
+
+    # Mock Solana response
+    mock_solana_response = {
+        "result": [
+            {
+                "id": "0xdef123",
+                "interface": "ProgrammableNFT",
+                "content": {
+                    "metadata": {
+                        "name": "Mock Solana NFT",
+                        "symbol": "MSN",
+                        "description": "A mock Solana NFT",
+                        "attributes": [],
+                    },
+                    "links": {
+                        "image": "https://example.com/solana-image.jpg",
+                        "external_url": "https://example.com",
+                    },
+                    "json_uri": "https://example.com/metadata/solana.json",
+                },
+                "grouping": [],
+                "mutable": False,
+                "burnt": False,
+            }
+        ],
+    }
+
+    # Track the actual requests made to capture the tokens array
+    captured_requests = []
+
+    def capture_post_request(*args, **kwargs):
+        # Capture the request data
+        if "json" in kwargs and "tokens" in kwargs["json"]:
+            captured_requests.append(kwargs["json"]["tokens"])
+
+        # Return a mock response
+        mock_response_obj = Mock()
+        mock_response_obj.status_code = 200
+
+        # Return different responses based on the URL
+        if "solana-mainnet" in str(args[0]) if args else False:
+            mock_response_obj.json.return_value = mock_solana_response
+        else:
+            mock_response_obj.json.return_value = mock_response
+
+        mock_response_obj.raise_for_status.return_value = None
+        return mock_response_obj
+
+    mock_httpx_client.post.side_effect = capture_post_request
+
+    # Test with various malformed inputs that should be gracefully handled:
+    # - Valid EVM ID: eth.0x1.0x123.456
+    # - Valid EVM ID with trailing comma: eth.0x1.0x789.101112, (should be processed as valid)
+    # - Missing token_id: eth.0x1.0xabc. (should be skipped)
+    # - Empty string: (empty) (should be skipped)
+    # - Invalid chain ID: eth.0x999.0xinvalid (should be skipped)
+    # - Valid Solana ID: sol.0x65.0xdef123 (should be processed as valid)
+    # - Malformed Solana ID: sol.0x65. (missing address, should be skipped)
+    # - Malformed Solana ID: sol.0x65.0xdef123.extra (too many parts, should be skipped)
+    # - Invalid Solana chain ID: sol.0x999.0xdef123 (invalid chain ID, should be skipped)
+    response = client.get(
+        "/api/nft/v1/getNFTsByIds?ids="
+        "eth.0x1.0x123.456,"
+        "eth.0x1.0x789.101112,"
+        "eth.0x1.0xabc.,"
+        "eth.0x999.0xinvalid,"
+        "sol.0x65.0xdef123,"
+        "sol.0x65.,"
+        "sol.0x65.0xdef123.extra,"
+        "sol.0x999.0xdef123"
+    )
+
+    # Should not crash - should return 200 with valid NFTs
+    assert response.status_code == 200
+    data = response.json()
+    sh_response = SimpleHashNFTResponse.model_validate(data)
+
+    # Should only process the valid NFT IDs (2 EVM + 1 Solana = 3 valid ones)
+    assert len(sh_response.nfts) == 3
+
+    # Verify that we captured exactly one request with the correct tokens
+    assert len(captured_requests) == 1
+    assert captured_requests[0] == [
+        {"contractAddress": "0x123", "tokenId": "456"},
+        {"contractAddress": "0x789", "tokenId": "101112"},
+    ]

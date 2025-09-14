@@ -295,7 +295,16 @@ async def get_nfts_by_ids(
 
     # Separate Solana and other chain NFTs
     for nft_id in nft_ids_list:
+        # Skip empty strings from trailing commas
+        if not nft_id.strip():
+            continue
+
         parts = nft_id.split(".")
+
+        # Skip malformed IDs that don't have enough parts
+        if len(parts) < 2:
+            continue
+
         coin = parts[0]
         chain_id = parts[1]
 
@@ -304,6 +313,9 @@ async def get_nfts_by_ids(
             continue
 
         if chain == Chain.SOLANA:  # Solana chain ID
+            # Skip malformed Solana IDs that don't have exactly 3 parts
+            if len(parts) != 3:
+                continue
             solana_nfts.append(parts[-1])
         else:
             other_nfts.append(nft_id)
@@ -341,7 +353,18 @@ async def get_nfts_by_ids(
             # Group NFTs by chain
             chain_nfts = {}
             for nft_id in other_nfts:
-                coin, chain_id, contract_address, token_id = nft_id.split(".")
+                parts = nft_id.split(".")
+
+                # Skip malformed EVM IDs that don't have exactly 4 parts
+                if len(parts) != 4:
+                    continue
+
+                coin, chain_id, contract_address, token_id = parts
+
+                # Skip if token_id is empty (malformed input like "eth.0x1.0xabc.")
+                if not token_id.strip():
+                    continue
+
                 chain = Chain.get(coin, chain_id)
                 if not chain:
                     continue
@@ -452,7 +475,16 @@ async def get_simplehash_nfts_by_ids(
     nft_ids_list = nft_ids.split(",")
     internal_nft_ids = []
     for nft_id in nft_ids_list:
+        # Skip empty strings from trailing commas
+        if not nft_id.strip():
+            continue
+
         parts = nft_id.split(".")
+
+        # Skip malformed IDs that don't have enough parts
+        if len(parts) < 2:
+            continue
+
         simplehash_id = parts[0]
 
         chain = _SIMPLEHASH_TO_CHAIN.get(simplehash_id)
@@ -463,11 +495,17 @@ async def get_simplehash_nfts_by_ids(
             continue
 
         if chain == Chain.SOLANA:
+            # Skip malformed Solana IDs that don't have exactly 2 parts (chain.address)
+            if len(parts) != 2:
+                continue
             # For Solana: chain.address -> coin.chain_id.address
             internal_nft_ids.append(
                 f"{chain.coin.value.lower()}.{chain.chain_id}.{parts[1]}"
             )
         elif chain.coin == CoinType.ETH:
+            # Skip malformed EVM IDs that don't have exactly 3 parts (chain.address.token_id)
+            if len(parts) != 3:
+                continue
             # For EVM chains: chain.address.token_id -> coin.chain_id.address.token_id
             internal_nft_ids.append(
                 f"{chain.coin.value.lower()}.{chain.chain_id}.{parts[1]}.{parts[2]}"
