@@ -35,7 +35,7 @@ def deduplicate_batch(batch: BatchTokenPriceRequests) -> BatchTokenPriceRequests
 
     for request in batch.requests:
         # Create a unique key for each request
-        key = (request.chain_id, request.address, request.coin_type)
+        key = (request.coin_type, request.chain_id, request.address)
         if key not in seen:
             seen.add(key)
             unique_requests.append(request)

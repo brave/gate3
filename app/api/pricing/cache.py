@@ -3,7 +3,6 @@ from datetime import datetime, timedelta
 
 from cachetools import TTLCache
 
-from app.api.common.models import CoinType
 from app.core.cache import Cache
 
 from .models import (
@@ -91,10 +90,6 @@ class CoingeckoPriceCache:
         cls, param: TokenPriceRequest | TokenPriceResponse, vs_currency: VsCurrency
     ) -> str:
         """Generate cache key for a token"""
-        # For BTC, ADA, FIL, ZEC, etc., just use the coin type
-        if param.coin_type not in [CoinType.ETH, CoinType.SOL]:
-            return f"{cls.CACHE_PREFIX}:{param.coin_type.lower()}:{vs_currency.lower()}"
-
         if param.address:
             return f"{cls.CACHE_PREFIX}:{param.coin_type.lower()}:{param.chain_id}:{param.address.lower()}:{vs_currency.lower()}"
 

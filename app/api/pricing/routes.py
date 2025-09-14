@@ -6,7 +6,7 @@ from app.api.common.annotations import (
     COIN_TYPE_DESCRIPTION,
     VS_CURRENCY_DESCRIPTION,
 )
-from app.api.common.models import ChainId
+from app.api.common.models import Chain
 
 from .coingecko import CoinGeckoClient
 from .jupiter import JupiterClient
@@ -34,12 +34,15 @@ def get_jupiter_client() -> JupiterClient:
 async def get_price(
     coin_type: CoinType = Query(
         description=COIN_TYPE_DESCRIPTION,
-        examples=[CoinType.ETH, CoinType.BTC, CoinType.SOL],
+        examples=[Chain.ETHEREUM.coin, Chain.BITCOIN.coin, Chain.SOLANA.coin],
     ),
-    chain_id: str | None = Query(
-        default=None,
+    chain_id: str = Query(
         description=CHAIN_ID_DESCRIPTION,
-        examples=[ChainId.ETHEREUM, ChainId.BASE],
+        examples=[
+            Chain.ETHEREUM.chain_id,
+            Chain.BITCOIN.chain_id,
+            Chain.SOLANA.chain_id,
+        ],
     ),
     address: str | None = Query(
         default=None,
@@ -63,6 +66,7 @@ async def get_price(
 
     # Try CoinGecko first
     coingecko_available, coingecko_unavailable = await coingecko_client.filter(batch)
+
     if not coingecko_available.is_empty():
         results = await coingecko_client.get_prices(coingecko_available)
         if results:

@@ -1,6 +1,6 @@
 from enum import Enum
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field
 
 from app.api.common.annotations import (
     ADDRESS_DESCRIPTION,
@@ -8,7 +8,7 @@ from app.api.common.annotations import (
     COIN_TYPE_DESCRIPTION,
     VS_CURRENCY_DESCRIPTION,
 )
-from app.api.common.models import ChainId, CoinType
+from app.api.common.models import Chain, CoinType
 
 
 class VsCurrency(str, Enum):
@@ -28,36 +28,30 @@ class PriceSource(str, Enum):
 
 class TokenPriceRequest(BaseModel):
     coin_type: CoinType = Field(description=COIN_TYPE_DESCRIPTION)
-    chain_id: str | None = Field(default=None, description=CHAIN_ID_DESCRIPTION)
+    chain_id: str = Field(description=CHAIN_ID_DESCRIPTION)
     address: str | None = Field(default=None, description=ADDRESS_DESCRIPTION)
-
-    @model_validator(mode="after")
-    def validate_chain_specific_fields(self) -> "TokenPriceRequest":
-        if self.coin_type in (CoinType.ETH, CoinType.SOL):
-            if not self.chain_id:
-                raise ValueError(
-                    f"chain_id is required for CoinType.{self.coin_type.name}"
-                )
-
-        return self
 
     model_config = {
         "json_schema_extra": {
             "examples": [
                 {
-                    "coin_type": CoinType.ETH,
-                    "chain_id": ChainId.ETHEREUM,
+                    "coin_type": Chain.ETHEREUM.coin,
+                    "chain_id": Chain.ETHEREUM.chain_id,
                     "address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
                 },
-                {"coin_type": CoinType.BTC},
                 {
-                    "coin_type": CoinType.SOL,
-                    "chain_id": ChainId.SOLANA,
+                    "coin_type": Chain.BITCOIN.coin,
+                    "chain_id": Chain.BITCOIN.chain_id,
                     "address": None,
                 },
                 {
-                    "coin_type": CoinType.SOL,
-                    "chain_id": ChainId.SOLANA,
+                    "coin_type": Chain.SOLANA.coin,
+                    "chain_id": Chain.SOLANA.chain_id,
+                    "address": None,
+                },
+                {
+                    "coin_type": Chain.SOLANA.coin,
+                    "chain_id": Chain.SOLANA.chain_id,
                     "address": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
                 },
             ]
@@ -81,8 +75,8 @@ class TokenPriceResponse(TokenPriceRequest):
         "json_schema_extra": {
             "examples": [
                 {
-                    "coin_type": CoinType.ETH,
-                    "chain_id": ChainId.ETHEREUM,
+                    "coin_type": Chain.ETHEREUM.coin,
+                    "chain_id": Chain.ETHEREUM.chain_id,
                     "address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
                     "vs_currency": VsCurrency.USD,
                     "price": 1.01,
@@ -107,19 +101,23 @@ class BatchTokenPriceRequests(BaseModel):
                 {
                     "requests": [
                         {
-                            "coin_type": CoinType.ETH,
-                            "chain_id": ChainId.ETHEREUM,
+                            "coin_type": Chain.ETHEREUM.coin,
+                            "chain_id": Chain.ETHEREUM.chain_id,
                             "address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
                         },
-                        {"coin_type": CoinType.BTC},
                         {
-                            "coin_type": CoinType.SOL,
-                            "chain_id": ChainId.SOLANA,
-                            "address": "",
+                            "coin_type": Chain.BITCOIN.coin,
+                            "chain_id": Chain.BITCOIN.chain_id,
+                            "address": None,
                         },
                         {
-                            "coin_type": CoinType.SOL,
-                            "chain_id": ChainId.SOLANA,
+                            "coin_type": Chain.SOLANA.coin,
+                            "chain_id": Chain.SOLANA.chain_id,
+                            "address": None,
+                        },
+                        {
+                            "coin_type": Chain.SOLANA.coin,
+                            "chain_id": Chain.SOLANA.chain_id,
                             "address": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
                         },
                     ],

@@ -2,7 +2,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from app.api.common.models import ChainId, CoinType
+from app.api.common.models import Chain
 from app.api.pricing.coingecko import CoinGeckoClient
 from app.api.pricing.models import (
     BatchTokenPriceRequests,
@@ -29,9 +29,9 @@ async def test_get_prices_chunking(client, mock_httpx_client):
     # Create a batch with 7 requests (should create 3 chunks: 3, 3, 1)
     requests = [
         TokenPriceRequest(
-            chain_id=ChainId.ETHEREUM,
+            chain_id=Chain.ETHEREUM.chain_id,
             address=f"0x{i}",
-            coin_type=CoinType.ETH,
+            coin_type=Chain.ETHEREUM.coin,
         )
         for i in range(7)
     ]

@@ -3,13 +3,11 @@ import json
 import httpx
 from fastapi import APIRouter, Path, Query
 
-from app.api.common.models import ChainId
+from app.api.common.models import Chain, CoinType
 from app.api.nft.models import (
-    AlchemyChain,
     AlchemyNFT,
     AlchemyNFTResponse,
     AlchemyTokenType,
-    SimpleHashChain,
     SimpleHashCollection,
     SimpleHashContract,
     SimpleHashExtraMetadata,
@@ -31,30 +29,7 @@ with open("data/cg-nfts.json", "r") as f:
     cg_nfts = json.load(f)
 
 # Chain mapping dictionaries
-_CHAIN_ID_TO_SIMPLEHASH = {
-    ChainId.ETHEREUM: SimpleHashChain.ETHEREUM,
-    ChainId.POLYGON: SimpleHashChain.POLYGON,
-    ChainId.BASE: SimpleHashChain.BASE,
-    ChainId.AVALANCHE: SimpleHashChain.AVALANCHE,
-    ChainId.BNB_CHAIN: SimpleHashChain.BSC,
-    ChainId.OPTIMISM: SimpleHashChain.OPTIMISM,
-    ChainId.ARBITRUM: SimpleHashChain.ARBITRUM,
-    ChainId.SOLANA: SimpleHashChain.SOLANA,
-}
-
-_SIMPLEHASH_TO_CHAIN_ID = {v: k for k, v in _CHAIN_ID_TO_SIMPLEHASH.items()}
-
-_CHAIN_ID_TO_ALCHEMY = {
-    ChainId.ETHEREUM: AlchemyChain.ETHEREUM,
-    ChainId.POLYGON: AlchemyChain.POLYGON,
-    ChainId.BASE: AlchemyChain.BASE,
-    ChainId.AVALANCHE: AlchemyChain.AVALANCHE,
-    # BSC is not supported by Alchemy
-    # ChainId.BNB_CHAIN: AlchemyChain.BSC,
-    ChainId.OPTIMISM: AlchemyChain.OPTIMISM,
-    ChainId.ARBITRUM: AlchemyChain.ARBITRUM,
-    ChainId.SOLANA: AlchemyChain.SOLANA,
-}
+_SIMPLEHASH_TO_CHAIN = {chain.simplehash_id: chain for chain in Chain}
 
 
 def _get_spam_score_for_solana_collection(collection_name: str | None) -> int:
@@ -68,24 +43,6 @@ def _get_spam_score_for_solana_collection(collection_name: str | None) -> int:
     )
 
 
-def _chain_id_to_simplehash(chain_id: ChainId) -> SimpleHashChain:
-    if chain := _CHAIN_ID_TO_SIMPLEHASH.get(chain_id):
-        return chain
-    raise ValueError(f"Unsupported ChainId: {chain_id.value}")
-
-
-def _simplehash_chain_to_chain_id(chain: SimpleHashChain) -> ChainId:
-    if chain_id := _SIMPLEHASH_TO_CHAIN_ID.get(chain):
-        return chain_id.value
-    raise ValueError(f"Unsupported SimpleHashChain: {chain.value}")
-
-
-def _chain_id_to_alchemy_chain(chain_id: ChainId) -> AlchemyChain:
-    if chain := _CHAIN_ID_TO_ALCHEMY.get(chain_id):
-        return chain
-    raise ValueError(f"Unsupported ChainId: {chain_id.value}")
-
-
 def _token_type_to_simplehash(token_type: AlchemyTokenType) -> SimpleHashTokenType:
     if token_type == AlchemyTokenType.ERC721:
         return SimpleHashTokenType.ERC721
@@ -96,7 +53,7 @@ def _token_type_to_simplehash(token_type: AlchemyTokenType) -> SimpleHashTokenTy
 
 
 def _transform_alchemy_to_simplehash(
-    alchemy_nft: AlchemyNFT, chain_id: ChainId
+    alchemy_nft: AlchemyNFT, chain: Chain
 ) -> SimpleHashNFT:
     contract = alchemy_nft.contract
     image = alchemy_nft.image or {}
@@ -134,10 +91,8 @@ def _transform_alchemy_to_simplehash(
         metadata_original_url=alchemy_nft.token_uri,
     )
 
-    chain = _chain_id_to_simplehash(chain_id)
-
     return SimpleHashNFT(
-        chain=chain,
+        chain=chain.simplehash_id,
         contract_address=contract.address,
         token_id=alchemy_nft.token_id,
         name=alchemy_nft.name,
@@ -198,7 +153,7 @@ async def _transform_solana_asset_to_simplehash(asset: SolanaAsset) -> SimpleHas
             image_url = image_url or raw_content_data.image
 
     return SimpleHashNFT(
-        chain=SimpleHashChain.SOLANA,
+        chain=Chain.SOLANA.simplehash_id,
         contract_address=asset.id,
         token_id=None,
         name=name,
@@ -230,8 +185,8 @@ async def get_nfts_by_owner(
     wallet_address: str = Query(
         ..., description="The wallet address to fetch NFTs for"
     ),
-    chain_ids: list[str] = Query(
-        ..., description="List of chain IDs to fetch NFTs from"
+    chains: list[str] = Query(
+        ..., description="List of chains to fetch NFTs from in format coin.chain_id"
     ),
     page_key: str | None = Query(None, description="Page key for pagination"),
     page_size: int = Query(50, description="Number of NFTs to fetch per page"),
@@ -246,16 +201,14 @@ async def get_nfts_by_owner(
     nfts = []
     next_page_key = None
 
-    # Filter chains to only include valid chain IDs
-    chains = [
-        ChainId(chain_id)
-        for chain_id in chain_ids
-        if _CHAIN_ID_TO_ALCHEMY.get(chain_id)
-    ]
-
     async with httpx.AsyncClient() as client:
-        for chain in chains:
-            if chain == ChainId.SOLANA:
+        for chain_str in chains:
+            coin, chain_id = chain_str.split(".")
+            chain = Chain.get(coin, chain_id)
+            if not chain or not chain.has_nft_support:
+                continue
+
+            if chain == Chain.SOLANA:
                 # Handle Solana NFTs differently
                 url = f"https://solana-mainnet.g.alchemy.com/v2/{settings.ALCHEMY_API_KEY}"
                 params = {
@@ -294,8 +247,7 @@ async def get_nfts_by_owner(
                 next_page_key = page_key + 1 if page_key else None
             else:
                 # Handle other chains as before
-                alchemy_chain = _chain_id_to_alchemy_chain(chain)
-                url = f"https://{alchemy_chain.value}.g.alchemy.com/nft/v3/{settings.ALCHEMY_API_KEY}/getNFTsForOwner"
+                url = f"https://{chain.alchemy_id}.g.alchemy.com/nft/v3/{settings.ALCHEMY_API_KEY}/getNFTsForOwner"
                 params = httpx.QueryParams(
                     owner=wallet_address,
                     pageSize=page_size,
@@ -325,7 +277,7 @@ async def get_nfts_by_owner(
 async def get_nfts_by_ids(
     ids: str = Query(
         ...,
-        description="Comma separated list of NFT IDs in format chain_id.address for Solana or chain_id.address.token_id for EVM chains",
+        description="Comma separated list of NFT IDs in format coin.chain_id.address for Solana or coin.chain_id.address.token_id for EVM chains",
     ),
 ) -> SimpleHashNFTResponse:
     """
@@ -344,9 +296,15 @@ async def get_nfts_by_ids(
     # Separate Solana and other chain NFTs
     for nft_id in nft_ids_list:
         parts = nft_id.split(".")
-        chain_id = parts[0]
-        if chain_id == ChainId.SOLANA.value:  # Solana chain ID
-            solana_nfts.append(parts[1])
+        coin = parts[0]
+        chain_id = parts[1]
+
+        chain = Chain.get(coin, chain_id)
+        if not chain:
+            continue
+
+        if chain == Chain.SOLANA:  # Solana chain ID
+            solana_nfts.append(parts[-1])
         else:
             other_nfts.append(nft_id)
 
@@ -383,19 +341,18 @@ async def get_nfts_by_ids(
             # Group NFTs by chain
             chain_nfts = {}
             for nft_id in other_nfts:
-                chain_id, contract_address, token_id = nft_id.split(".")
-                if chain_id not in chain_nfts:
-                    chain_nfts[chain_id] = []
-                chain_nfts[chain_id].append((contract_address, token_id))
-
-            # Fetch NFTs for each chain
-            for chain_id, nft_list in chain_nfts.items():
-                chain = ChainId(chain_id)
-                if chain not in _CHAIN_ID_TO_ALCHEMY:
+                coin, chain_id, contract_address, token_id = nft_id.split(".")
+                chain = Chain.get(coin, chain_id)
+                if not chain:
                     continue
 
-                alchemy_chain = _chain_id_to_alchemy_chain(chain)
-                url = f"https://{alchemy_chain.value}.g.alchemy.com/nft/v3/{settings.ALCHEMY_API_KEY}/getNFTMetadataBatch"
+                if chain.alchemy_id not in chain_nfts:
+                    chain_nfts[chain.alchemy_id] = []
+                chain_nfts[chain.alchemy_id].append((contract_address, token_id))
+
+            # Fetch NFTs for each chain
+            for alchemy_id, nft_list in chain_nfts.items():
+                url = f"https://{alchemy_id}.g.alchemy.com/nft/v3/{settings.ALCHEMY_API_KEY}/getNFTMetadataBatch"
 
                 # Prepare batch request
                 tokens = [
@@ -449,25 +406,20 @@ async def get_simplehash_nfts_by_owner(
     ),
     cursor: str | None = Query(None, description="Cursor for pagination"),
 ) -> SimpleHashNFTResponse:
-    # Filter chains to only include valid chain IDs
-    filtered_chains = (
-        [
-            SimpleHashChain(chain)
-            for chain_raw in chains
-            for chain in chain_raw.split(",")
-            if chain in SimpleHashChain
-        ]
-        if chains
-        else list(SimpleHashChain)
-    )
+    filtered_chains = {
+        chain_str for chain_raw in (chains or []) for chain_str in chain_raw.split(",")
+    }
 
-    # Convert SimpleHash chains to internal chain IDs
-    chain_ids = [_simplehash_chain_to_chain_id(chain) for chain in filtered_chains]
+    internal_chains = {
+        f"{chain.coin.value.lower()}.{chain.chain_id}"
+        for chain_str in filtered_chains
+        if (chain := _SIMPLEHASH_TO_CHAIN.get(chain_str))
+    }
 
     # Call the internal function directly instead of redirecting
     return await get_nfts_by_owner(
         wallet_address=wallet_addresses[0],
-        chain_ids=chain_ids,
+        chains=list(internal_chains),
         page_key=cursor,
         page_size=50,  # Use default page size
     )
@@ -501,18 +453,28 @@ async def get_simplehash_nfts_by_ids(
     internal_nft_ids = []
     for nft_id in nft_ids_list:
         parts = nft_id.split(".")
-        chain = parts[0]
+        simplehash_id = parts[0]
 
-        if chain not in _SIMPLEHASH_TO_CHAIN_ID:
+        chain = _SIMPLEHASH_TO_CHAIN.get(simplehash_id)
+        if chain is None:
             continue
 
-        chain_id = _simplehash_chain_to_chain_id(SimpleHashChain(chain))
-        if chain == SimpleHashChain.SOLANA:
-            # For Solana: chain.address -> chain_id.address
-            internal_nft_ids.append(f"{chain_id}.{parts[1]}")
+        if not chain.has_nft_support:
+            continue
+
+        if chain == Chain.SOLANA:
+            # For Solana: chain.address -> coin.chain_id.address
+            internal_nft_ids.append(
+                f"{chain.coin.value.lower()}.{chain.chain_id}.{parts[1]}"
+            )
+        elif chain.coin == CoinType.ETH:
+            # For EVM chains: chain.address.token_id -> coin.chain_id.address.token_id
+            internal_nft_ids.append(
+                f"{chain.coin.value.lower()}.{chain.chain_id}.{parts[1]}.{parts[2]}"
+            )
         else:
-            # For EVM chains: chain.address.token_id -> chain_id.address.token_id
-            internal_nft_ids.append(f"{chain_id}.{parts[1]}.{parts[2]}")
+            # We don't support NFTs on other chains yet
+            continue
 
     # Call the internal function directly instead of redirecting
     return await get_nfts_by_ids(ids=",".join(internal_nft_ids))

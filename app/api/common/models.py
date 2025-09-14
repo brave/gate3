@@ -21,24 +21,124 @@ class CoinType(str, Enum):
     ZEC = "ZEC"
 
 
-class ChainId(str, Enum):
-    ARBITRUM = "0xa4b1"
-    AVALANCHE = "0xa86a"
-    BASE = "0x2105"
-    BNB_CHAIN = "0x38"
-    ETHEREUM = "0x1"
-    OPTIMISM = "0xa"
-    POLYGON = "0x89"
-    SOLANA = "0x65"
+class _c(BaseModel):
+    coin: CoinType
+    chain_id: str
+    simplehash_id: str
+    alchemy_id: str
+    has_nft_support: bool
 
 
-ChainIdCoinTypeMap = {
-    ChainId.ARBITRUM: CoinType.ETH,
-    ChainId.AVALANCHE: CoinType.ETH,
-    ChainId.BASE: CoinType.ETH,
-    ChainId.BNB_CHAIN: CoinType.ETH,
-    ChainId.ETHEREUM: CoinType.ETH,
-    ChainId.OPTIMISM: CoinType.ETH,
-    ChainId.POLYGON: CoinType.ETH,
-    ChainId.SOLANA: CoinType.SOL,
-}
+class Chain(Enum):
+    # EVM chains
+    ETHEREUM = _c(
+        coin=CoinType.ETH,
+        chain_id="0x1",
+        simplehash_id="ethereum",
+        alchemy_id="eth-mainnet",
+        has_nft_support=True,
+    )
+    ARBITRUM = _c(
+        coin=CoinType.ETH,
+        chain_id="0xa4b1",
+        simplehash_id="arbitrum",
+        alchemy_id="arb-mainnet",
+        has_nft_support=True,
+    )
+    AVALANCHE = _c(
+        coin=CoinType.ETH,
+        chain_id="0xa86a",
+        simplehash_id="avalanche",
+        alchemy_id="avax-mainnet",
+        has_nft_support=True,
+    )
+    BASE = _c(
+        coin=CoinType.ETH,
+        chain_id="0x2105",
+        simplehash_id="base",
+        alchemy_id="base-mainnet",
+        has_nft_support=True,
+    )
+    BNB_CHAIN = _c(
+        coin=CoinType.ETH,
+        chain_id="0x38",
+        simplehash_id="bsc",
+        alchemy_id="bnb-mainnet",
+        has_nft_support=False,
+    )
+    OPTIMISM = _c(
+        coin=CoinType.ETH,
+        chain_id="0xa",
+        simplehash_id="optimism",
+        alchemy_id="opt-mainnet",
+        has_nft_support=True,
+    )
+    POLYGON = _c(
+        coin=CoinType.ETH,
+        chain_id="0x89",
+        simplehash_id="polygon",
+        alchemy_id="polygon-mainnet",
+        has_nft_support=True,
+    )
+
+    # Non-EVM chains
+    BITCOIN = _c(
+        coin=CoinType.BTC,
+        chain_id="bitcoin_mainnet",
+        simplehash_id="bitcoin",
+        alchemy_id="bitcoin-mainnet",
+        has_nft_support=False,
+    )
+    SOLANA = _c(
+        coin=CoinType.SOL,
+        chain_id="0x65",
+        simplehash_id="solana",
+        alchemy_id="sol-mainnet",
+        has_nft_support=True,
+    )
+    FILECOIN = _c(
+        coin=CoinType.FIL,
+        chain_id="f",
+        simplehash_id="filecoin",
+        alchemy_id="filecoin-mainnet",
+        has_nft_support=False,
+    )
+    CARDANO = _c(
+        coin=CoinType.ADA,
+        chain_id="cardano_mainnet",
+        simplehash_id="cardano",
+        alchemy_id="cardano-mainnet",
+        has_nft_support=False,
+    )
+    ZCASH = _c(
+        coin=CoinType.ZEC,
+        chain_id="zcash_mainnet",
+        simplehash_id="zcash",
+        alchemy_id="zcash-mainnet",
+        has_nft_support=False,
+    )
+
+    def __getattr__(self, name):
+        """Delegate attribute access to the chain info"""
+        # Only delegate specific attributes to avoid recursion
+        if name in [
+            "coin",
+            "chain_id",
+            "simplehash_id",
+            "alchemy_id",
+            "has_nft_support",
+        ]:
+            return getattr(self.value, name)
+
+        return super().__getattr__(name)
+
+    @staticmethod
+    def get(coin: str, chain_id: str):
+        for chain in Chain:
+            if chain.coin.value == coin.upper() and chain.chain_id == chain_id.lower():
+                return chain
+
+        return None
+
+    def __repr__(self):
+        return f"<{self.__class__.__name__}.{self.name}: coin={self.coin.value} chain_id={self.chain_id}>"

@@ -2,7 +2,7 @@ import asyncio
 
 import httpx
 
-from app.api.common.models import ChainId, CoinType
+from app.api.common.models import Chain, CoinType
 from app.config import settings
 
 from .cache import CoingeckoPriceCache, CoinMapCache, PlatformMapCache
@@ -158,29 +158,32 @@ class CoinGeckoClient:
         coin_map: dict[str, dict[str, str]],
     ) -> str | None:
         # Native tokens
-        if request.coin_type == CoinType.BTC:
+        chain = Chain.get(request.coin_type, request.chain_id)
+        if chain == Chain.BITCOIN:
             return "bitcoin"
-        elif request.coin_type == CoinType.SOL and not request.address:
-            return "solana"
-        elif request.coin_type == CoinType.ADA:
+
+        elif chain == Chain.CARDANO:
             return "cardano"
-        elif request.coin_type == CoinType.FIL:
+
+        elif chain == Chain.FILECOIN:
             return "filecoin"
-        elif request.coin_type == CoinType.ZEC:
+
+        elif chain == Chain.ZCASH:
             return "zcash"
 
-        elif request.coin_type == CoinType.ETH and not request.address:
-            chain_id = request.chain_id
-            if not chain_id:
-                return None
+        elif chain == Chain.SOLANA and not request.address:
+            return "solana"
 
+        # Native asset on EVM chains
+        elif request.coin_type == CoinType.ETH and not request.address:
             for platform in platform_map.values():
-                if platform.chain_id == chain_id:
+                if platform.chain_id == request.chain_id:
                     return platform.native_token_id
 
             return None
 
-        elif request.coin_type in [CoinType.SOL, CoinType.ETH]:
+        # EVM and Solana tokens
+        elif request.coin_type in [CoinType.SOL, CoinType.ETH] and request.address:
             return coin_map.get(request.chain_id, {}).get(request.address.lower())
 
         return None
@@ -241,7 +244,7 @@ class CoinGeckoClient:
             for item in data:
                 chain_id = None
                 if item["id"] == "solana":
-                    chain_id = ChainId.SOLANA.value
+                    chain_id = Chain.SOLANA.chain_id
                 elif item["chain_identifier"]:
                     chain_id = hex(item["chain_identifier"])
 

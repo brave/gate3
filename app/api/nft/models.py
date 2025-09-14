@@ -90,29 +90,6 @@ class AlchemyNFTResponse(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel)
 
 
-class AlchemyChain(str, Enum):
-    ETHEREUM = "eth-mainnet"
-    POLYGON = "polygon-mainnet"
-    BASE = "base-mainnet"
-    OPTIMISM = "opt-mainnet"
-    ARBITRUM = "arb-mainnet"
-    SOLANA = "sol-mainnet"
-    BSC = "bnb-mainnet"
-    AVALANCHE = "avax-mainnet"
-
-
-# SimpleHash Models
-class SimpleHashChain(str, Enum):
-    ETHEREUM = "ethereum"
-    BSC = "bsc"
-    AVALANCHE = "avalanche"
-    POLYGON = "polygon"
-    BASE = "base"
-    OPTIMISM = "optimism"
-    ARBITRUM = "arbitrum"
-    SOLANA = "solana"
-
-
 class SimpleHashTokenType(str, Enum):
     ERC721 = "ERC721"
     ERC1155 = "ERC1155"
@@ -139,7 +116,7 @@ class SimpleHashExtraMetadata(BaseModel):
 
 
 class SimpleHashNFT(BaseModel):
-    chain: SimpleHashChain
+    chain: str
     contract_address: str
     token_id: str | None = None
     name: str | None = None

@@ -8,7 +8,7 @@ from app.api.common.annotations import (
     CHAIN_ID_DESCRIPTION,
     COIN_TYPE_DESCRIPTION,
 )
-from app.api.common.models import ChainId, CoinType
+from app.api.common.models import CoinType
 from app.api.tokens.manager import TokenManager
 from app.api.tokens.models import (
     TokenInfo,
@@ -21,7 +21,7 @@ router = APIRouter(prefix="/api/tokens")
 @router.get("/v1/getTokenInfo", response_model=TokenInfo)
 async def get_token_info(
     coin_type: CoinType = Query(..., description=COIN_TYPE_DESCRIPTION),
-    chain_id: ChainId | None = Query(None, description=CHAIN_ID_DESCRIPTION),
+    chain_id: str = Query(..., description=CHAIN_ID_DESCRIPTION),
     address: str | None = Query(None, description=ADDRESS_DESCRIPTION),
 ):
     try:

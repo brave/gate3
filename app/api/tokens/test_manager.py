@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 import fakeredis
 import pytest
 
-from app.api.common.models import ChainId, CoinType
+from app.api.common.models import Chain
 from app.api.tokens.manager import TokenManager
 from app.api.tokens.models import TokenInfo, TokenSource
 
@@ -53,8 +53,8 @@ def cache():
 @pytest.fixture
 def sample_token_info():
     return TokenInfo(
-        coin_type=CoinType.ETH,
-        chain_id=ChainId.ETHEREUM,
+        coin_type=Chain.ETHEREUM.coin,
+        chain_id=Chain.ETHEREUM.chain_id,
         address="0x1234567890123456789012345678901234567890",
         name="Test Token",
         symbol="TEST",
@@ -71,7 +71,9 @@ async def test_add_and_get_token(cache, sample_token_info):
 
     # Get the token
     result = await TokenManager.get(
-        CoinType.ETH, ChainId.ETHEREUM, "0x1234567890123456789012345678901234567890"
+        Chain.ETHEREUM.coin,
+        Chain.ETHEREUM.chain_id,
+        "0x1234567890123456789012345678901234567890",
     )
 
     # Verify the token was retrieved correctly
@@ -87,7 +89,9 @@ async def test_add_and_get_token(cache, sample_token_info):
 async def test_get_token_not_found(cache):
     # Try to get a non-existent token
     result = await TokenManager.get(
-        CoinType.ETH, ChainId.ETHEREUM, "0x0000000000000000000000000000000000000000"
+        Chain.ETHEREUM.coin,
+        Chain.ETHEREUM.chain_id,
+        "0x0000000000000000000000000000000000000000",
     )
 
     # Verify no token was found
@@ -97,8 +101,8 @@ async def test_get_token_not_found(cache):
 @pytest.mark.asyncio
 async def test_add_bitcoin(cache):
     token_info = TokenInfo(
-        coin_type=CoinType.BTC,
-        chain_id=None,
+        coin_type=Chain.BITCOIN.coin,
+        chain_id=Chain.BITCOIN.chain_id,
         address=None,
         name="Bitcoin",
         symbol="BTC",
@@ -111,7 +115,7 @@ async def test_add_bitcoin(cache):
     await TokenManager.add(token_info)
 
     # Get the token
-    result = await TokenManager.get(CoinType.BTC, None, None)
+    result = await TokenManager.get(Chain.BITCOIN.coin, Chain.BITCOIN.chain_id, None)
 
     # Verify the token was retrieved correctly
     assert result is not None
@@ -119,7 +123,7 @@ async def test_add_bitcoin(cache):
     assert result.symbol == "BTC"
     assert result.decimals == 8
     assert result.address is None
-    assert result.chain_id is None
+    assert result.chain_id == Chain.BITCOIN.chain_id
     assert result.logo == "https://example.com/btc.png"
     assert result.sources == [TokenSource.COINGECKO]
 
@@ -212,8 +216,8 @@ async def test_ingest_coingecko_data(cache):
 
             # Verify the token was stored and can be retrieved
             result = await TokenManager.get(
-                CoinType.ETH,
-                ChainId.ETHEREUM,
+                Chain.ETHEREUM.coin,
+                Chain.ETHEREUM.chain_id,
                 "0x1234567890123456789012345678901234567890",
             )
 
@@ -247,8 +251,8 @@ async def test_ingest_jupiter_tokens(cache):
 
             # Verify the token was stored and can be retrieved
             result = await TokenManager.get(
-                CoinType.SOL,
-                ChainId.SOLANA,
+                Chain.SOLANA.coin,
+                Chain.SOLANA.chain_id,
                 "So11111111111111111111111111111111111111112",
             )
 
@@ -265,8 +269,8 @@ async def test_multiple_tokens(cache):
     # Create multiple tokens
     tokens = [
         TokenInfo(
-            coin_type=CoinType.ETH,
-            chain_id=ChainId.ETHEREUM,
+            coin_type=Chain.ETHEREUM.coin,
+            chain_id=Chain.ETHEREUM.chain_id,
             address=f"0x{i:040x}",
             name=f"Token {i}",
             symbol=f"TKN{i}",
@@ -283,7 +287,9 @@ async def test_multiple_tokens(cache):
 
     # Verify all tokens can be retrieved
     for i, token in enumerate(tokens, 1):
-        result = await TokenManager.get(CoinType.ETH, ChainId.ETHEREUM, f"0x{i:040x}")
+        result = await TokenManager.get(
+            Chain.ETHEREUM.coin, Chain.ETHEREUM.chain_id, f"0x{i:040x}"
+        )
         assert result is not None
         assert result.name == f"Token {i}"
         assert result.symbol == f"TKN{i}"

@@ -2,7 +2,7 @@ import asyncio
 
 import httpx
 
-from app.api.common.models import ChainId, CoinType
+from app.api.common.models import Chain
 
 from .cache import JupiterPriceCache
 from .coingecko import CoinGeckoClient
@@ -37,8 +37,8 @@ class JupiterClient:
         for request in batch.requests:
             # Jupiter Price API can only handle Solana tokens with addresses
             if (
-                request.coin_type == CoinType.SOL
-                and request.chain_id == ChainId.SOLANA
+                request.coin_type == Chain.SOLANA.coin
+                and request.chain_id == Chain.SOLANA.chain_id
                 and request.address
             ):
                 available_batch.add(request)
@@ -101,8 +101,8 @@ class JupiterClient:
         usdc_multiplier = 1.0
         if batch.vs_currency != VsCurrency.USD:
             usdc_request = TokenPriceRequest(
-                coin_type=CoinType.SOL,
-                chain_id=ChainId.SOLANA,
+                coin_type=Chain.SOLANA.coin,
+                chain_id=Chain.SOLANA.chain_id,
                 address="EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",  # USDC on Solana
             )
             usdc_batch = BatchTokenPriceRequests(

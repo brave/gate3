@@ -128,7 +128,7 @@ def test_get_nfts_by_owner(mock_httpx_client, mock_settings):
     )
 
     response = client.get(
-        "/api/nft/v1/getNFTsForOwner?wallet_address=0x123&chain_ids=0x1"
+        "/api/nft/v1/getNFTsForOwner?wallet_address=0x123&chains=eth.0x1"
     )
     assert response.status_code == 200
     data = response.json()
@@ -159,7 +159,7 @@ def test_get_nfts_by_owner(mock_httpx_client, mock_settings):
 
 def test_get_nfts_by_owner_invalid_chain(mock_settings):
     response = client.get(
-        "/api/nft/v1/getNFTsForOwner?wallet_address=0x123&chain_ids=0x999"
+        "/api/nft/v1/getNFTsForOwner?wallet_address=0x123&chains=eth.0x999"
     )
     assert response.status_code == 200
     data = response.json()
@@ -171,7 +171,7 @@ def test_get_nfts_by_owner_missing_api_key(mock_settings):
     mock_settings.ALCHEMY_API_KEY = None
 
     with pytest.raises(ValueError):
-        client.get("/api/nft/v1/getNFTsForOwner?wallet_address=0x123&chain_ids=0x1")
+        client.get("/api/nft/v1/getNFTsForOwner?wallet_address=0x123&chains=eth.0x1")
 
 
 def test_get_solana_asset_proof(mock_httpx_client, mock_settings):
