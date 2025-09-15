@@ -91,9 +91,9 @@ class CoingeckoPriceCache:
     ) -> str:
         """Generate cache key for a token"""
         if param.address:
-            return f"{cls.CACHE_PREFIX}:{param.coin_type.lower()}:{param.chain_id}:{param.address.lower()}:{vs_currency.lower()}"
+            return f"{cls.CACHE_PREFIX}:{param.coin.lower()}:{param.chain_id}:{param.address.lower()}:{vs_currency.lower()}"
 
-        return f"{cls.CACHE_PREFIX}:{param.coin_type.lower()}:{param.chain_id}:{vs_currency.lower()}"
+        return f"{cls.CACHE_PREFIX}:{param.coin.lower()}:{param.chain_id}:{vs_currency.lower()}"
 
 
 class JupiterPriceCache:

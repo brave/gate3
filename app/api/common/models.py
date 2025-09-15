@@ -12,7 +12,7 @@ class PingResponse(BaseModel):
     redis: HealthStatus
 
 
-class CoinType(str, Enum):
+class Coin(str, Enum):
     ADA = "ADA"
     BTC = "BTC"
     ETH = "ETH"
@@ -22,7 +22,7 @@ class CoinType(str, Enum):
 
 
 class _c(BaseModel):
-    coin: CoinType
+    coin: Coin
     chain_id: str
     simplehash_id: str
     alchemy_id: str
@@ -32,49 +32,49 @@ class _c(BaseModel):
 class Chain(Enum):
     # EVM chains
     ETHEREUM = _c(
-        coin=CoinType.ETH,
+        coin=Coin.ETH,
         chain_id="0x1",
         simplehash_id="ethereum",
         alchemy_id="eth-mainnet",
         has_nft_support=True,
     )
     ARBITRUM = _c(
-        coin=CoinType.ETH,
+        coin=Coin.ETH,
         chain_id="0xa4b1",
         simplehash_id="arbitrum",
         alchemy_id="arb-mainnet",
         has_nft_support=True,
     )
     AVALANCHE = _c(
-        coin=CoinType.ETH,
+        coin=Coin.ETH,
         chain_id="0xa86a",
         simplehash_id="avalanche",
         alchemy_id="avax-mainnet",
         has_nft_support=True,
     )
     BASE = _c(
-        coin=CoinType.ETH,
+        coin=Coin.ETH,
         chain_id="0x2105",
         simplehash_id="base",
         alchemy_id="base-mainnet",
         has_nft_support=True,
     )
     BNB_CHAIN = _c(
-        coin=CoinType.ETH,
+        coin=Coin.ETH,
         chain_id="0x38",
         simplehash_id="bsc",
         alchemy_id="bnb-mainnet",
         has_nft_support=False,
     )
     OPTIMISM = _c(
-        coin=CoinType.ETH,
+        coin=Coin.ETH,
         chain_id="0xa",
         simplehash_id="optimism",
         alchemy_id="opt-mainnet",
         has_nft_support=True,
     )
     POLYGON = _c(
-        coin=CoinType.ETH,
+        coin=Coin.ETH,
         chain_id="0x89",
         simplehash_id="polygon",
         alchemy_id="polygon-mainnet",
@@ -83,35 +83,35 @@ class Chain(Enum):
 
     # Non-EVM chains
     BITCOIN = _c(
-        coin=CoinType.BTC,
+        coin=Coin.BTC,
         chain_id="bitcoin_mainnet",
         simplehash_id="bitcoin",
         alchemy_id="bitcoin-mainnet",
         has_nft_support=False,
     )
     SOLANA = _c(
-        coin=CoinType.SOL,
+        coin=Coin.SOL,
         chain_id="0x65",
         simplehash_id="solana",
         alchemy_id="sol-mainnet",
         has_nft_support=True,
     )
     FILECOIN = _c(
-        coin=CoinType.FIL,
+        coin=Coin.FIL,
         chain_id="f",
         simplehash_id="filecoin",
         alchemy_id="filecoin-mainnet",
         has_nft_support=False,
     )
     CARDANO = _c(
-        coin=CoinType.ADA,
+        coin=Coin.ADA,
         chain_id="cardano_mainnet",
         simplehash_id="cardano",
         alchemy_id="cardano-mainnet",
         has_nft_support=False,
     )
     ZCASH = _c(
-        coin=CoinType.ZEC,
+        coin=Coin.ZEC,
         chain_id="zcash_mainnet",
         simplehash_id="zcash",
         alchemy_id="zcash-mainnet",

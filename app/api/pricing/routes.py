@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from app.api.common.annotations import (
     ADDRESS_DESCRIPTION,
     CHAIN_ID_DESCRIPTION,
-    COIN_TYPE_DESCRIPTION,
+    COIN_DESCRIPTION,
     VS_CURRENCY_DESCRIPTION,
 )
 from app.api.common.models import Chain
@@ -12,7 +12,7 @@ from .coingecko import CoinGeckoClient
 from .jupiter import JupiterClient
 from .models import (
     BatchTokenPriceRequests,
-    CoinType,
+    Coin,
     TokenPriceRequest,
     TokenPriceResponse,
     VsCurrency,
@@ -32,8 +32,8 @@ def get_jupiter_client() -> JupiterClient:
 
 @router.get("/v1/getPrice", response_model=TokenPriceResponse)
 async def get_price(
-    coin_type: CoinType = Query(
-        description=COIN_TYPE_DESCRIPTION,
+    coin: Coin = Query(
+        description=COIN_DESCRIPTION,
         examples=[Chain.ETHEREUM.coin, Chain.BITCOIN.coin, Chain.SOLANA.coin],
     ),
     chain_id: str = Query(
@@ -61,7 +61,7 @@ async def get_price(
     Get token price of a token on a given chain against a specific base currency.
     Chain ID and address are required only for Ethereum and Solana tokens.
     """
-    request = TokenPriceRequest(coin_type=coin_type, chain_id=chain_id, address=address)
+    request = TokenPriceRequest(coin=coin, chain_id=chain_id, address=address)
     batch = BatchTokenPriceRequests(requests=[request], vs_currency=vs_currency)
 
     # Try CoinGecko first

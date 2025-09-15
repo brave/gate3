@@ -31,7 +31,7 @@ async def test_get_prices_chunking(client, mock_httpx_client):
         TokenPriceRequest(
             chain_id=Chain.ETHEREUM.chain_id,
             address=f"0x{i}",
-            coin_type=Chain.ETHEREUM.coin,
+            coin=Chain.ETHEREUM.coin,
         )
         for i in range(7)
     ]

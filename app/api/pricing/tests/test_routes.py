@@ -49,7 +49,7 @@ def mock_token_price_cache():
 
 def test_get_price_success(client, mock_coingecko_client):
     request = TokenPriceRequest(
-        coin_type=Chain.ETHEREUM.coin,
+        coin=Chain.ETHEREUM.coin,
         chain_id=Chain.ETHEREUM.chain_id,
         address="0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
         vs_currency=VsCurrency.USD,
@@ -59,7 +59,7 @@ def test_get_price_success(client, mock_coingecko_client):
 
     # Setup mock response
     expected_response = TokenPriceResponse(
-        coin_type=Chain.ETHEREUM.coin,
+        coin=Chain.ETHEREUM.coin,
         chain_id=Chain.ETHEREUM.chain_id,
         address="0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
         vs_currency=VsCurrency.USD,
@@ -74,7 +74,7 @@ def test_get_price_success(client, mock_coingecko_client):
     response = client.get(
         "/api/pricing/v1/getPrice",
         params={
-            "coin_type": Chain.ETHEREUM.coin.value,
+            "coin": Chain.ETHEREUM.coin.value,
             "chain_id": Chain.ETHEREUM.chain_id,
             "address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
             "vs_currency": VsCurrency.USD.value,
@@ -95,7 +95,7 @@ def test_get_price_success(client, mock_coingecko_client):
 def test_get_price_not_found(client, mock_coingecko_client):
     # Setup mock to return empty list
     request = TokenPriceRequest(
-        coin_type=Chain.ETHEREUM.coin,
+        coin=Chain.ETHEREUM.coin,
         chain_id=Chain.ETHEREUM.chain_id,
         address="0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
         vs_currency=VsCurrency.USD,
@@ -111,7 +111,7 @@ def test_get_price_not_found(client, mock_coingecko_client):
     response = client.get(
         "/api/pricing/v1/getPrice",
         params={
-            "coin_type": Chain.ETHEREUM.coin.value,
+            "coin": Chain.ETHEREUM.coin.value,
             "chain_id": Chain.ETHEREUM.chain_id,
             "address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
             "vs_currency": VsCurrency.USD.value,
@@ -125,18 +125,18 @@ def test_get_price_not_found(client, mock_coingecko_client):
 
 def test_get_prices_success(client, mock_coingecko_client, mock_jupiter_client):
     request_eth = TokenPriceRequest(
-        coin_type=Chain.ETHEREUM.coin,
+        coin=Chain.ETHEREUM.coin,
         chain_id=Chain.ETHEREUM.chain_id,
         address="0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
         vs_currency=VsCurrency.USD,
     )
     request_btc = TokenPriceRequest(
-        coin_type=Chain.BITCOIN.coin,
+        coin=Chain.BITCOIN.coin,
         chain_id=Chain.BITCOIN.chain_id,
         vs_currency=VsCurrency.USD,
     )
     request_sol = TokenPriceRequest(
-        coin_type=Chain.SOLANA.coin,
+        coin=Chain.SOLANA.coin,
         chain_id=Chain.SOLANA.chain_id,
         address="5rmx75XP4VkWcxYsmcLSRbbwzN8g2Cy4YDgBabvboop",
         vs_currency=VsCurrency.EUR,
@@ -144,7 +144,7 @@ def test_get_prices_success(client, mock_coingecko_client, mock_jupiter_client):
 
     # Setup mock response
     response_eth = TokenPriceResponse(
-        coin_type=Chain.ETHEREUM.coin,
+        coin=Chain.ETHEREUM.coin,
         chain_id=Chain.ETHEREUM.chain_id,
         address="0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
         vs_currency=VsCurrency.USD,
@@ -153,7 +153,7 @@ def test_get_prices_success(client, mock_coingecko_client, mock_jupiter_client):
         source=PriceSource.COINGECKO,
     )
     response_btc = TokenPriceResponse(
-        coin_type=Chain.BITCOIN.coin,
+        coin=Chain.BITCOIN.coin,
         chain_id=Chain.BITCOIN.chain_id,
         vs_currency=VsCurrency.USD,
         price=50000.0,
@@ -161,7 +161,7 @@ def test_get_prices_success(client, mock_coingecko_client, mock_jupiter_client):
         source=PriceSource.COINGECKO,
     )
     response_sol = TokenPriceResponse(
-        coin_type=Chain.SOLANA.coin,
+        coin=Chain.SOLANA.coin,
         chain_id=Chain.SOLANA.chain_id,
         address="5rmx75XP4VkWcxYsmcLSRbbwzN8g2Cy4YDgBabvboop",
         vs_currency=VsCurrency.EUR,
@@ -193,12 +193,12 @@ def test_get_prices_success(client, mock_coingecko_client, mock_jupiter_client):
         params={"vs_currency": VsCurrency.USD.value},
         json=[
             {
-                "coin_type": Chain.ETHEREUM.coin.value,
+                "coin": Chain.ETHEREUM.coin.value,
                 "chain_id": Chain.ETHEREUM.chain_id,
                 "address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
             },
             {
-                "coin_type": Chain.BITCOIN.coin.value,
+                "coin": Chain.BITCOIN.coin.value,
                 "chain_id": Chain.BITCOIN.chain_id,
             },
         ],
@@ -271,7 +271,7 @@ def test_get_price_cached_response(client):
         ),
     ):
         cached_response = TokenPriceResponse(
-            coin_type=Chain.ETHEREUM.coin,
+            coin=Chain.ETHEREUM.coin,
             chain_id=Chain.ETHEREUM.chain_id,
             address="0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
             vs_currency=VsCurrency.USD,
@@ -301,7 +301,7 @@ def test_get_price_cached_response(client):
         response = client.get(
             "/api/pricing/v1/getPrice",
             params={
-                "coin_type": Chain.ETHEREUM.coin.value,
+                "coin": Chain.ETHEREUM.coin.value,
                 "chain_id": Chain.ETHEREUM.chain_id,
                 "address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
                 "vs_currency": VsCurrency.USD.value,

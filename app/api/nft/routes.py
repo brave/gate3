@@ -3,7 +3,7 @@ import json
 import httpx
 from fastapi import APIRouter, Path, Query
 
-from app.api.common.models import Chain, CoinType
+from app.api.common.models import Chain, Coin
 from app.api.nft.models import (
     AlchemyNFT,
     AlchemyNFTResponse,
@@ -502,7 +502,7 @@ async def get_simplehash_nfts_by_ids(
             internal_nft_ids.append(
                 f"{chain.coin.value.lower()}.{chain.chain_id}.{parts[1]}"
             )
-        elif chain.coin == CoinType.ETH:
+        elif chain.coin == Coin.ETH:
             # Skip malformed EVM IDs that don't have exactly 3 parts (chain.address.token_id)
             if len(parts) != 3:
                 continue

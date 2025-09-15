@@ -2,7 +2,7 @@ import asyncio
 
 import httpx
 
-from app.api.common.models import Chain, CoinType
+from app.api.common.models import Chain, Coin
 from app.config import settings
 
 from .cache import CoingeckoPriceCache, CoinMapCache, PlatformMapCache
@@ -158,7 +158,7 @@ class CoinGeckoClient:
         coin_map: dict[str, dict[str, str]],
     ) -> str | None:
         # Native tokens
-        chain = Chain.get(request.coin_type, request.chain_id)
+        chain = Chain.get(request.coin, request.chain_id)
         if chain == Chain.BITCOIN:
             return "bitcoin"
 
@@ -175,7 +175,7 @@ class CoinGeckoClient:
             return "solana"
 
         # Native asset on EVM chains
-        elif request.coin_type == CoinType.ETH and not request.address:
+        elif request.coin == Coin.ETH and not request.address:
             for platform in platform_map.values():
                 if platform.chain_id == request.chain_id:
                     return platform.native_token_id
@@ -183,7 +183,7 @@ class CoinGeckoClient:
             return None
 
         # EVM and Solana tokens
-        elif request.coin_type in [CoinType.SOL, CoinType.ETH] and request.address:
+        elif request.coin in [Coin.SOL, Coin.ETH] and request.address:
             return coin_map.get(request.chain_id, {}).get(request.address.lower())
 
         return None

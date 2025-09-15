@@ -53,7 +53,7 @@ def cache():
 @pytest.fixture
 def sample_token_info():
     return TokenInfo(
-        coin_type=Chain.ETHEREUM.coin,
+        coin=Chain.ETHEREUM.coin,
         chain_id=Chain.ETHEREUM.chain_id,
         address="0x1234567890123456789012345678901234567890",
         name="Test Token",
@@ -101,7 +101,7 @@ async def test_get_token_not_found(cache):
 @pytest.mark.asyncio
 async def test_add_bitcoin(cache):
     token_info = TokenInfo(
-        coin_type=Chain.BITCOIN.coin,
+        coin=Chain.BITCOIN.coin,
         chain_id=Chain.BITCOIN.chain_id,
         address=None,
         name="Bitcoin",
@@ -269,7 +269,7 @@ async def test_multiple_tokens(cache):
     # Create multiple tokens
     tokens = [
         TokenInfo(
-            coin_type=Chain.ETHEREUM.coin,
+            coin=Chain.ETHEREUM.coin,
             chain_id=Chain.ETHEREUM.chain_id,
             address=f"0x{i:040x}",
             name=f"Token {i}",

@@ -5,10 +5,10 @@ from pydantic import BaseModel, Field
 from app.api.common.annotations import (
     ADDRESS_DESCRIPTION,
     CHAIN_ID_DESCRIPTION,
-    COIN_TYPE_DESCRIPTION,
+    COIN_DESCRIPTION,
     VS_CURRENCY_DESCRIPTION,
 )
-from app.api.common.models import Chain, CoinType
+from app.api.common.models import Chain, Coin
 
 
 class VsCurrency(str, Enum):
@@ -27,7 +27,7 @@ class PriceSource(str, Enum):
 
 
 class TokenPriceRequest(BaseModel):
-    coin_type: CoinType = Field(description=COIN_TYPE_DESCRIPTION)
+    coin: Coin = Field(description=COIN_DESCRIPTION)
     chain_id: str = Field(description=CHAIN_ID_DESCRIPTION)
     address: str | None = Field(default=None, description=ADDRESS_DESCRIPTION)
 
@@ -35,22 +35,22 @@ class TokenPriceRequest(BaseModel):
         "json_schema_extra": {
             "examples": [
                 {
-                    "coin_type": Chain.ETHEREUM.coin,
+                    "coin": Chain.ETHEREUM.coin,
                     "chain_id": Chain.ETHEREUM.chain_id,
                     "address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
                 },
                 {
-                    "coin_type": Chain.BITCOIN.coin,
+                    "coin": Chain.BITCOIN.coin,
                     "chain_id": Chain.BITCOIN.chain_id,
                     "address": None,
                 },
                 {
-                    "coin_type": Chain.SOLANA.coin,
+                    "coin": Chain.SOLANA.coin,
                     "chain_id": Chain.SOLANA.chain_id,
                     "address": None,
                 },
                 {
-                    "coin_type": Chain.SOLANA.coin,
+                    "coin": Chain.SOLANA.coin,
                     "chain_id": Chain.SOLANA.chain_id,
                     "address": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
                 },
@@ -75,7 +75,7 @@ class TokenPriceResponse(TokenPriceRequest):
         "json_schema_extra": {
             "examples": [
                 {
-                    "coin_type": Chain.ETHEREUM.coin,
+                    "coin": Chain.ETHEREUM.coin,
                     "chain_id": Chain.ETHEREUM.chain_id,
                     "address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
                     "vs_currency": VsCurrency.USD,
@@ -101,22 +101,22 @@ class BatchTokenPriceRequests(BaseModel):
                 {
                     "requests": [
                         {
-                            "coin_type": Chain.ETHEREUM.coin,
+                            "coin": Chain.ETHEREUM.coin,
                             "chain_id": Chain.ETHEREUM.chain_id,
                             "address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
                         },
                         {
-                            "coin_type": Chain.BITCOIN.coin,
+                            "coin": Chain.BITCOIN.coin,
                             "chain_id": Chain.BITCOIN.chain_id,
                             "address": None,
                         },
                         {
-                            "coin_type": Chain.SOLANA.coin,
+                            "coin": Chain.SOLANA.coin,
                             "chain_id": Chain.SOLANA.chain_id,
                             "address": None,
                         },
                         {
-                            "coin_type": Chain.SOLANA.coin,
+                            "coin": Chain.SOLANA.coin,
                             "chain_id": Chain.SOLANA.chain_id,
                             "address": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
                         },
