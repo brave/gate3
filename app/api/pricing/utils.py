@@ -29,13 +29,13 @@ def chunk_sequence(sequence: Sequence[T], chunk_size: int) -> list[list[T]]:
 
 
 def deduplicate_batch(batch: BatchTokenPriceRequests) -> BatchTokenPriceRequests:
-    """Remove duplicate requests from the batch based on chain_id, address, and coin_type."""
+    """Remove duplicate requests from the batch based on chain_id, address, and coin."""
     seen = set()
     unique_requests = []
 
     for request in batch.requests:
         # Create a unique key for each request
-        key = (request.chain_id, request.address, request.coin_type)
+        key = (request.coin, request.chain_id, request.address)
         if key not in seen:
             seen.add(key)
             unique_requests.append(request)

@@ -6,7 +6,7 @@ from redis.commands.search.field import TextField
 from redis.commands.search.index_definition import IndexDefinition
 from redis.commands.search.query import Query
 
-from app.api.common.models import ChainId, ChainIdCoinTypeMap, CoinType
+from app.api.common.models import Chain, Coin
 from app.api.tokens.models import TokenInfo, TokenSearchResponse, TokenSource
 from app.core.cache import Cache
 
@@ -87,12 +87,20 @@ class TokenManager:
                 # Process each token in the JSON
                 for raw_chain_id, tokens in json_data.items():
                     for address, raw_token_info in tokens.items():
-                        chain_id = ChainId(raw_chain_id)
-                        coin_type = ChainIdCoinTypeMap[chain_id]
+                        chain = next(
+                            (
+                                chain
+                                for chain in Chain
+                                if chain.chain_id == raw_chain_id
+                            ),
+                            None,
+                        )
+                        if not chain:
+                            continue
 
                         token_info = TokenInfo(
-                            coin_type=coin_type,
-                            chain_id=chain_id,
+                            coin=chain.coin,
+                            chain_id=chain.chain_id,
                             address=address,
                             name=raw_token_info["name"],
                             symbol=raw_token_info["symbol"],
@@ -104,8 +112,8 @@ class TokenManager:
                         key = ":".join(
                             (
                                 cls.key_prefix,
-                                coin_type.value.lower(),
-                                chain_id.value.lower(),
+                                chain.coin.value.lower(),
+                                chain.chain_id.lower(),
                                 address.lower(),
                             )
                         )
@@ -152,15 +160,15 @@ class TokenManager:
                 key = ":".join(
                     (
                         cls.key_prefix,
-                        CoinType.SOL.value.lower(),
-                        ChainId.SOLANA.value.lower(),
+                        Chain.SOLANA.coin.value.lower(),
+                        Chain.SOLANA.chain_id,
                         token["id"].lower(),
                     )
                 )
 
                 token_info = TokenInfo(
-                    coin_type=CoinType.SOL,
-                    chain_id=ChainId.SOLANA,
+                    coin=Chain.SOLANA.coin,
+                    chain_id=Chain.SOLANA.chain_id,
                     address=token["id"],
                     name=token["name"],
                     symbol=token["symbol"],
@@ -191,13 +199,13 @@ class TokenManager:
 
     @classmethod
     async def get(
-        cls, coin_type: CoinType, chain_id: ChainId | None, address: str | None
+        cls, coin: Coin, chain_id: str, address: str | None
     ) -> TokenInfo | None:
         key = ":".join(
             (
                 cls.key_prefix,
-                coin_type.lower(),
-                (chain_id or "").lower(),
+                coin.lower(),
+                chain_id.lower(),
                 (address or "").lower(),
             )
         )
@@ -210,7 +218,7 @@ class TokenManager:
                 return None
 
             return TokenInfo(
-                coin_type=coin_type,
+                coin=coin,
                 chain_id=chain_id,
                 address=address,
                 name=token_data["name"],
@@ -228,8 +236,8 @@ class TokenManager:
         key = ":".join(
             (
                 cls.key_prefix,
-                token_info.coin_type.lower(),
-                (token_info.chain_id or "").lower(),
+                token_info.coin.lower(),
+                token_info.chain_id.lower(),
                 (token_info.address or "").lower(),
             )
         )
@@ -290,12 +298,12 @@ class TokenManager:
 
         results = []
         for doc in result.docs:
-            # Parse the key to extract coin_type and chain_id
-            _, coin_type, chain_id, _ = doc.id.split(":")
+            # Parse the key to extract coin and chain_id
+            _, coin, chain_id, _ = doc.id.split(":")
 
             token_info = TokenInfo(
-                coin_type=CoinType(coin_type.upper()),
-                chain_id=ChainId(chain_id),
+                coin=Coin(coin.upper()),
+                chain_id=chain_id,
                 address=doc.address,
                 name=doc.name,
                 symbol=doc.symbol.upper(),
@@ -311,11 +319,11 @@ class TokenManager:
 
     @staticmethod
     async def mock_fetch_from_blockchain(
-        coin_type: CoinType, chain_id: ChainId, address: str
+        coin: Coin, chain_id: str, address: str
     ) -> TokenInfo | None:
         return TokenInfo(
-            coin_type=coin_type,
-            chain_id=chain_id,
+            coin=coin,
+            chain_id=chain_id.lower(),
             address=address,
             name="Mock Token",
             symbol="MTK",

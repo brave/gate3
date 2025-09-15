@@ -6,9 +6,9 @@ from fastapi.responses import ORJSONResponse as JSONResponse
 from app.api.common.annotations import (
     ADDRESS_DESCRIPTION,
     CHAIN_ID_DESCRIPTION,
-    COIN_TYPE_DESCRIPTION,
+    COIN_DESCRIPTION,
 )
-from app.api.common.models import ChainId, CoinType
+from app.api.common.models import Coin
 from app.api.tokens.manager import TokenManager
 from app.api.tokens.models import (
     TokenInfo,
@@ -20,14 +20,14 @@ router = APIRouter(prefix="/api/tokens")
 
 @router.get("/v1/getTokenInfo", response_model=TokenInfo)
 async def get_token_info(
-    coin_type: CoinType = Query(..., description=COIN_TYPE_DESCRIPTION),
-    chain_id: ChainId | None = Query(None, description=CHAIN_ID_DESCRIPTION),
+    coin: Coin = Query(..., description=COIN_DESCRIPTION),
+    chain_id: str = Query(..., description=CHAIN_ID_DESCRIPTION),
     address: str | None = Query(None, description=ADDRESS_DESCRIPTION),
 ):
     try:
         # First try to get from Redis
         token_info = await TokenManager.get(
-            coin_type=coin_type, chain_id=chain_id, address=address
+            coin=coin, chain_id=chain_id, address=address
         )
 
         if token_info:
@@ -35,7 +35,7 @@ async def get_token_info(
 
         # If not found, try to fetch from blockchain (mock for now)
         blockchain_token = await TokenManager.mock_fetch_from_blockchain(
-            coin_type, chain_id, address
+            coin, chain_id, address
         )
 
         if blockchain_token:

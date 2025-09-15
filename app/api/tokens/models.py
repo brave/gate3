@@ -5,9 +5,9 @@ from pydantic import BaseModel, Field
 from app.api.common.annotations import (
     ADDRESS_DESCRIPTION,
     CHAIN_ID_DESCRIPTION,
-    COIN_TYPE_DESCRIPTION,
+    COIN_DESCRIPTION,
 )
-from app.api.common.models import ChainId, CoinType
+from app.api.common.models import Coin
 
 
 class TokenSource(str, Enum):
@@ -19,8 +19,8 @@ class TokenSource(str, Enum):
 
 
 class TokenInfo(BaseModel):
-    coin_type: CoinType = Field(..., description=COIN_TYPE_DESCRIPTION)
-    chain_id: ChainId | None = Field(default=None, description=CHAIN_ID_DESCRIPTION)
+    coin: Coin = Field(..., description=COIN_DESCRIPTION)
+    chain_id: str = Field(..., description=CHAIN_ID_DESCRIPTION)
     address: str | None = Field(default=None, description=ADDRESS_DESCRIPTION)
     name: str = Field(..., description="Token name")
     symbol: str = Field(..., description="Token symbol")

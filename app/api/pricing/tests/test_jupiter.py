@@ -2,7 +2,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.api.common.models import ChainId, CoinType
+from app.api.common.models import Chain
 from app.api.pricing.jupiter import JupiterClient
 from app.api.pricing.models import (
     BatchTokenPriceRequests,
@@ -32,24 +32,24 @@ async def test_filter_solana_tokens(client):
     # Create a batch with mixed token types
     requests = [
         TokenPriceRequest(
-            chain_id=ChainId.SOLANA,
+            chain_id=Chain.SOLANA.chain_id,
             address="EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
-            coin_type=CoinType.SOL,
+            coin=Chain.SOLANA.coin,
         ),
         TokenPriceRequest(
-            chain_id=ChainId.ETHEREUM,
+            chain_id=Chain.ETHEREUM.chain_id,
             address="0x123",
-            coin_type=CoinType.ETH,
+            coin=Chain.ETHEREUM.coin,
         ),
         TokenPriceRequest(
-            chain_id=ChainId.SOLANA,
+            chain_id=Chain.SOLANA.chain_id,
             address="So11111111111111111111111111111111111111112",
-            coin_type=CoinType.SOL,
+            coin=Chain.SOLANA.coin,
         ),
         TokenPriceRequest(
-            chain_id=ChainId.SOLANA,
+            chain_id=Chain.SOLANA.chain_id,
             address=None,  # No address
-            coin_type=CoinType.SOL,
+            coin=Chain.SOLANA.coin,
         ),
     ]
     batch = BatchTokenPriceRequests(requests=requests, vs_currency=VsCurrency.USD)
@@ -75,17 +75,17 @@ async def test_get_prices_empty_batch(client):
 async def test_get_prices_all_cached(client):
     requests = [
         TokenPriceRequest(
-            chain_id=ChainId.SOLANA,
+            chain_id=Chain.SOLANA.chain_id,
             address="EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
-            coin_type=CoinType.SOL,
+            coin=Chain.SOLANA.coin,
         ),
     ]
     batch = BatchTokenPriceRequests(requests=requests, vs_currency=VsCurrency.USD)
 
     cached_response = TokenPriceResponse(
-        chain_id=ChainId.SOLANA,
+        chain_id=Chain.SOLANA.chain_id,
         address="EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
-        coin_type=CoinType.SOL,
+        coin=Chain.SOLANA.coin,
         vs_currency=VsCurrency.USD,
         price=1.0,
         cache_status=CacheStatus.HIT,
@@ -110,9 +110,9 @@ async def test_get_prices_chunking(client, mock_httpx_client):
     # Create a batch with 7 requests (should create 2 chunks: 5, 2 with default chunk size of 50)
     requests = [
         TokenPriceRequest(
-            chain_id=ChainId.SOLANA,
+            chain_id=Chain.SOLANA.chain_id,
             address=f"address{i}",
-            coin_type=CoinType.SOL,
+            coin=Chain.SOLANA.coin,
         )
         for i in range(7)
     ]
@@ -152,9 +152,9 @@ async def test_get_prices_chunking(client, mock_httpx_client):
 async def test_get_prices_usd_currency(client, mock_httpx_client):
     requests = [
         TokenPriceRequest(
-            chain_id=ChainId.SOLANA,
+            chain_id=Chain.SOLANA.chain_id,
             address="EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
-            coin_type=CoinType.SOL,
+            coin=Chain.SOLANA.coin,
         ),
     ]
     batch = BatchTokenPriceRequests(requests=requests, vs_currency=VsCurrency.USD)
@@ -196,9 +196,9 @@ async def test_get_prices_usd_currency(client, mock_httpx_client):
 async def test_get_prices_non_usd_currency(client, mock_httpx_client):
     requests = [
         TokenPriceRequest(
-            chain_id=ChainId.SOLANA,
+            chain_id=Chain.SOLANA.chain_id,
             address="5rmx75XP4VkWcxYsmcLSRbbwzN8g2Cy4YDgBabvboop",  # $PUMP
-            coin_type=CoinType.SOL,
+            coin=Chain.SOLANA.coin,
         ),
     ]
     batch = BatchTokenPriceRequests(requests=requests, vs_currency=VsCurrency.EUR)
@@ -206,9 +206,9 @@ async def test_get_prices_non_usd_currency(client, mock_httpx_client):
     mock_coingecko_client = AsyncMock()
     mock_coingecko_client.get_prices.return_value = [
         TokenPriceResponse(
-            chain_id=ChainId.SOLANA,
+            chain_id=Chain.SOLANA.chain_id,
             address="EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",  # USDC
-            coin_type=CoinType.SOL,
+            coin=Chain.SOLANA.coin,
             vs_currency=VsCurrency.EUR,
             price=0.85,  # USDC price in EUR
             cache_status=CacheStatus.MISS,
@@ -256,9 +256,9 @@ async def test_get_prices_non_usd_currency(client, mock_httpx_client):
 async def test_get_prices_missing_addresses(client, mock_httpx_client):
     requests = [
         TokenPriceRequest(
-            chain_id=ChainId.SOLANA,
+            chain_id=Chain.SOLANA.chain_id,
             address=None,  # No address
-            coin_type=CoinType.SOL,
+            coin=Chain.SOLANA.coin,
         ),
     ]
     batch = BatchTokenPriceRequests(requests=requests, vs_currency=VsCurrency.USD)
@@ -277,9 +277,9 @@ async def test_get_prices_missing_addresses(client, mock_httpx_client):
 async def test_get_prices_http_error(client, mock_httpx_client):
     requests = [
         TokenPriceRequest(
-            chain_id=ChainId.SOLANA,
+            chain_id=Chain.SOLANA.chain_id,
             address="EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
-            coin_type=CoinType.SOL,
+            coin=Chain.SOLANA.coin,
         ),
     ]
     batch = BatchTokenPriceRequests(requests=requests, vs_currency=VsCurrency.USD)
@@ -307,14 +307,14 @@ async def test_get_prices_http_error(client, mock_httpx_client):
 async def test_get_prices_invalid_price_data(client, mock_httpx_client):
     requests = [
         TokenPriceRequest(
-            chain_id=ChainId.SOLANA,
+            chain_id=Chain.SOLANA.chain_id,
             address="EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
-            coin_type=CoinType.SOL,
+            coin=Chain.SOLANA.coin,
         ),
         TokenPriceRequest(
-            chain_id=ChainId.SOLANA,
+            chain_id=Chain.SOLANA.chain_id,
             address="So11111111111111111111111111111111111111112",
-            coin_type=CoinType.SOL,
+            coin=Chain.SOLANA.coin,
         ),
     ]
     batch = BatchTokenPriceRequests(requests=requests, vs_currency=VsCurrency.USD)
@@ -352,14 +352,14 @@ async def test_get_prices_invalid_price_data(client, mock_httpx_client):
 async def test_get_prices_missing_token_in_response(client, mock_httpx_client):
     requests = [
         TokenPriceRequest(
-            chain_id=ChainId.SOLANA,
+            chain_id=Chain.SOLANA.chain_id,
             address="EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
-            coin_type=CoinType.SOL,
+            coin=Chain.SOLANA.coin,
         ),
         TokenPriceRequest(
-            chain_id=ChainId.SOLANA,
+            chain_id=Chain.SOLANA.chain_id,
             address="So11111111111111111111111111111111111111112",
-            coin_type=CoinType.SOL,
+            coin=Chain.SOLANA.coin,
         ),
     ]
     batch = BatchTokenPriceRequests(requests=requests, vs_currency=VsCurrency.USD)
@@ -395,23 +395,23 @@ async def test_get_prices_missing_token_in_response(client, mock_httpx_client):
 async def test_get_prices_mixed_cache_and_fetch(client, mock_httpx_client):
     requests = [
         TokenPriceRequest(
-            chain_id=ChainId.SOLANA,
+            chain_id=Chain.SOLANA.chain_id,
             address="EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
-            coin_type=CoinType.SOL,
+            coin=Chain.SOLANA.coin,
         ),
         TokenPriceRequest(
-            chain_id=ChainId.SOLANA,
+            chain_id=Chain.SOLANA.chain_id,
             address="So11111111111111111111111111111111111111112",
-            coin_type=CoinType.SOL,
+            coin=Chain.SOLANA.coin,
         ),
     ]
     batch = BatchTokenPriceRequests(requests=requests, vs_currency=VsCurrency.USD)
 
     # Cached response
     cached_response = TokenPriceResponse(
-        chain_id=ChainId.SOLANA,
+        chain_id=Chain.SOLANA.chain_id,
         address="EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
-        coin_type=CoinType.SOL,
+        coin=Chain.SOLANA.coin,
         vs_currency=VsCurrency.USD,
         price=1.0,
         cache_status=CacheStatus.HIT,
