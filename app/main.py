@@ -1,4 +1,4 @@
-import os
+import subprocess
 from contextlib import asynccontextmanager
 
 import sentry_sdk
@@ -18,8 +18,9 @@ from app.api.tokens.routes import router as tokens_router
 from app.config import settings
 from app.core.cache import Cache
 
-version = os.popen("poetry version --short").read().strip()
-
+version = subprocess.run(
+    ["poetry", "version", "--short"], capture_output=True, text=True, check=True
+).stdout.strip()
 
 sentry_sdk.init(
     dsn=settings.SENTRY_DSN,
