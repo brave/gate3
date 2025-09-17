@@ -81,10 +81,10 @@ class JupiterClient:
                 params = {"ids": ",".join(chunk)}
                 async with self._create_client() as client:
                     response = await client.get(
-                        f"{self.base_url}/price/v2", params=params
+                        f"{self.base_url}/price/v3", params=params
                     )
                     response.raise_for_status()
-                    return response.json()["data"]
+                    return response.json()
 
         chunk_results = await asyncio.gather(
             *[fetch_chunk(chunk) for chunk in address_chunks], return_exceptions=True
@@ -119,11 +119,26 @@ class JupiterClient:
                 continue
 
             try:
-                price = float(combined_data[request.address]["price"]) * usdc_multiplier
+                token_data = combined_data[request.address]
+
+                # Skip if usdPrice is None or missing
+                usd_price = token_data.get("usdPrice")
+                if usd_price is None:
+                    continue
+
+                price = float(usd_price) * usdc_multiplier
+
+                # Extract 24h price change if available
+                price_change_24h = token_data.get("priceChange24h")
+                percentage_change_24h = (
+                    float(price_change_24h) if price_change_24h is not None else None
+                )
+
                 item = TokenPriceResponse(
                     **request.model_dump(),
                     vs_currency=batch.vs_currency,
                     price=price,
+                    percentage_change_24h=percentage_change_24h,
                     cache_status=CacheStatus.MISS,
                     source=PriceSource.JUPITER,
                 )
