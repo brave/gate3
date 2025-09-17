@@ -130,7 +130,7 @@ async def test_get_prices_chunking(client, mock_httpx_client):
         # Mock the HTTP response
         mock_response = MagicMock()
         mock_response.json.return_value = {
-            "data": {f"address{i}": {"price": "1.0"} for i in range(7)}
+            f"address{i}": {"usdPrice": 1.0, "priceChange24h": 2.5} for i in range(7)
         }
         mock_response.raise_for_status.return_value = None
         mock_httpx_client.get.return_value = mock_response
@@ -168,7 +168,10 @@ async def test_get_prices_usd_currency(client, mock_httpx_client):
         # Mock Jupiter API response
         mock_response = MagicMock()
         mock_response.json.return_value = {
-            "data": {"EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v": {"price": "1.0"}}
+            "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v": {
+                "usdPrice": 1.0,
+                "priceChange24h": 0.5,
+            }
         }
         mock_response.raise_for_status.return_value = None
         mock_httpx_client.get.return_value = mock_response
@@ -180,7 +183,7 @@ async def test_get_prices_usd_currency(client, mock_httpx_client):
         # Check that at least one call was made with the expected parameters
         call_args_list = mock_httpx_client.get.call_args_list
         assert any(
-            call[0][0] == "https://lite-api.jup.ag/price/v2"
+            call[0][0] == "https://lite-api.jup.ag/price/v3"
             and call[1]["params"]["ids"]
             == "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
             for call in call_args_list
@@ -189,6 +192,7 @@ async def test_get_prices_usd_currency(client, mock_httpx_client):
         # Verify results
         assert len(results) == 1
         assert results[0].price == 1.0
+        assert results[0].percentage_change_24h == 0.5
         assert results[0].cache_status == CacheStatus.MISS
 
 
@@ -225,11 +229,10 @@ async def test_get_prices_non_usd_currency(client, mock_httpx_client):
         # Mock Jupiter API response
         mock_response = MagicMock()
         mock_response.json.return_value = {
-            "data": {
-                "5rmx75XP4VkWcxYsmcLSRbbwzN8g2Cy4YDgBabvboop": {
-                    "price": "10.0"
-                }  # $PUMP price in USDC
-            }
+            "5rmx75XP4VkWcxYsmcLSRbbwzN8g2Cy4YDgBabvboop": {
+                "usdPrice": 10.0,
+                "priceChange24h": 15.2,
+            }  # $PUMP price in USDC
         }
         mock_response.raise_for_status.return_value = None
         mock_httpx_client.get.return_value = mock_response
@@ -249,6 +252,9 @@ async def test_get_prices_non_usd_currency(client, mock_httpx_client):
         # Verify price was converted (10.0 * 0.85 = 8.5)
         assert len(results) == 1
         assert results[0].price == 8.5  # $PUMP price in EUR
+        assert (
+            results[0].percentage_change_24h == 15.2
+        )  # priceChange24h should be preserved
         assert results[0].cache_status == CacheStatus.MISS
 
 
@@ -328,14 +334,14 @@ async def test_get_prices_invalid_price_data(client, mock_httpx_client):
         # Mock Jupiter API response with invalid data
         mock_response = MagicMock()
         mock_response.json.return_value = {
-            "data": {
-                "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v": {
-                    "price": "invalid"
-                },  # Invalid price
-                "So11111111111111111111111111111111111111112": {
-                    "price": "1.5"
-                },  # Valid price
-            }
+            "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v": {
+                "usdPrice": "invalid",
+                "priceChange24h": 1.0,
+            },  # Invalid price
+            "So11111111111111111111111111111111111111112": {
+                "usdPrice": 1.5,
+                "priceChange24h": 3.2,
+            },  # Valid price
         }
         mock_response.raise_for_status.return_value = None
         mock_httpx_client.get.return_value = mock_response
@@ -373,12 +379,11 @@ async def test_get_prices_missing_token_in_response(client, mock_httpx_client):
         # Mock Jupiter API response with missing token
         mock_response = MagicMock()
         mock_response.json.return_value = {
-            "data": {
-                "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v": {
-                    "price": "1.0"
-                },  # Present
-                # "So11111111111111111111111111111111111111112" is missing
-            }
+            "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v": {
+                "usdPrice": 1.0,
+                "priceChange24h": 0.8,
+            },  # Present
+            # "So11111111111111111111111111111111111111112" is missing
         }
         mock_response.raise_for_status.return_value = None
         mock_httpx_client.get.return_value = mock_response
@@ -389,6 +394,7 @@ async def test_get_prices_missing_token_in_response(client, mock_httpx_client):
         assert len(results) == 1
         assert results[0].address == "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
         assert results[0].price == 1.0
+        assert results[0].percentage_change_24h == 0.8
 
 
 @pytest.mark.asyncio
@@ -432,7 +438,10 @@ async def test_get_prices_mixed_cache_and_fetch(client, mock_httpx_client):
         # Mock Jupiter API response
         mock_response = MagicMock()
         mock_response.json.return_value = {
-            "data": {"So11111111111111111111111111111111111111112": {"price": "2.0"}}
+            "So11111111111111111111111111111111111111112": {
+                "usdPrice": 2.0,
+                "priceChange24h": 5.1,
+            }
         }
         mock_response.raise_for_status.return_value = None
         mock_httpx_client.get.return_value = mock_response
@@ -458,4 +467,173 @@ async def test_get_prices_mixed_cache_and_fetch(client, mock_httpx_client):
             if r.address == "So11111111111111111111111111111111111111112"
         )
         assert fetched_result.price == 2.0
+        assert fetched_result.percentage_change_24h == 5.1
         assert fetched_result.cache_status == CacheStatus.MISS
+
+
+@pytest.mark.asyncio
+async def test_get_prices_missing_price_change_24h(client, mock_httpx_client):
+    requests = [
+        TokenPriceRequest(
+            chain_id=Chain.SOLANA.chain_id,
+            address="EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+            coin=Chain.SOLANA.coin,
+        ),
+    ]
+    batch = BatchTokenPriceRequests(requests=requests, vs_currency=VsCurrency.USD)
+
+    with (
+        patch("app.api.pricing.jupiter.JupiterPriceCache.get") as mock_cache,
+        patch("app.api.pricing.jupiter.JupiterPriceCache.set", new_callable=AsyncMock),
+    ):
+        mock_cache.return_value = ([], batch)
+
+        # Mock Jupiter API response without priceChange24h field
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v": {
+                "usdPrice": 1.0
+                # priceChange24h field is missing
+            }
+        }
+        mock_response.raise_for_status.return_value = None
+        mock_httpx_client.get.return_value = mock_response
+
+        results = await client.get_prices(batch=batch, coingecko_client=MagicMock())
+
+        # Verify results
+        assert len(results) == 1
+        assert results[0].price == 1.0
+        assert results[0].percentage_change_24h is None  # Should be None when missing
+        assert results[0].cache_status == CacheStatus.MISS
+
+
+@pytest.mark.asyncio
+async def test_get_prices_price_change_24h_is_none(client, mock_httpx_client):
+    requests = [
+        TokenPriceRequest(
+            chain_id=Chain.SOLANA.chain_id,
+            address="EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+            coin=Chain.SOLANA.coin,
+        ),
+    ]
+    batch = BatchTokenPriceRequests(requests=requests, vs_currency=VsCurrency.USD)
+
+    with (
+        patch("app.api.pricing.jupiter.JupiterPriceCache.get") as mock_cache,
+        patch("app.api.pricing.jupiter.JupiterPriceCache.set", new_callable=AsyncMock),
+    ):
+        mock_cache.return_value = ([], batch)
+
+        # Mock Jupiter API response with priceChange24h explicitly set to None
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v": {
+                "usdPrice": 1.0,
+                "priceChange24h": None,  # Explicitly None
+            }
+        }
+        mock_response.raise_for_status.return_value = None
+        mock_httpx_client.get.return_value = mock_response
+
+        results = await client.get_prices(batch=batch, coingecko_client=MagicMock())
+
+        # Verify results
+        assert len(results) == 1
+        assert results[0].price == 1.0
+        assert (
+            results[0].percentage_change_24h is None
+        )  # Should be None when priceChange24h is None
+        assert results[0].cache_status == CacheStatus.MISS
+
+
+@pytest.mark.asyncio
+async def test_get_prices_usd_price_is_none(client, mock_httpx_client):
+    requests = [
+        TokenPriceRequest(
+            chain_id=Chain.SOLANA.chain_id,
+            address="EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+            coin=Chain.SOLANA.coin,
+        ),
+        TokenPriceRequest(
+            chain_id=Chain.SOLANA.chain_id,
+            address="So11111111111111111111111111111111111111112",
+            coin=Chain.SOLANA.coin,
+        ),
+    ]
+    batch = BatchTokenPriceRequests(requests=requests, vs_currency=VsCurrency.USD)
+
+    with (
+        patch("app.api.pricing.jupiter.JupiterPriceCache.get") as mock_cache,
+        patch("app.api.pricing.jupiter.JupiterPriceCache.set", new_callable=AsyncMock),
+    ):
+        mock_cache.return_value = ([], batch)
+
+        # Mock Jupiter API response with one token having usdPrice: null
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v": {
+                "usdPrice": None,  # This should be skipped
+                "priceChange24h": 1.0,
+            },
+            "So11111111111111111111111111111111111111112": {
+                "usdPrice": 2.0,
+                "priceChange24h": 3.2,
+            },
+        }
+        mock_response.raise_for_status.return_value = None
+        mock_httpx_client.get.return_value = mock_response
+
+        results = await client.get_prices(batch=batch, coingecko_client=MagicMock())
+
+        # Should only return the token with valid usdPrice
+        assert len(results) == 1
+        assert results[0].address == "So11111111111111111111111111111111111111112"
+        assert results[0].price == 2.0
+        assert results[0].percentage_change_24h == 3.2
+
+
+@pytest.mark.asyncio
+async def test_get_prices_usd_price_missing(client, mock_httpx_client):
+    requests = [
+        TokenPriceRequest(
+            chain_id=Chain.SOLANA.chain_id,
+            address="EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+            coin=Chain.SOLANA.coin,
+        ),
+        TokenPriceRequest(
+            chain_id=Chain.SOLANA.chain_id,
+            address="So11111111111111111111111111111111111111112",
+            coin=Chain.SOLANA.coin,
+        ),
+    ]
+    batch = BatchTokenPriceRequests(requests=requests, vs_currency=VsCurrency.USD)
+
+    with (
+        patch("app.api.pricing.jupiter.JupiterPriceCache.get") as mock_cache,
+        patch("app.api.pricing.jupiter.JupiterPriceCache.set", new_callable=AsyncMock),
+    ):
+        mock_cache.return_value = ([], batch)
+
+        # Mock Jupiter API response with one token missing usdPrice field
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v": {
+                # usdPrice field is missing
+                "priceChange24h": 1.0
+            },
+            "So11111111111111111111111111111111111111112": {
+                "usdPrice": 2.0,
+                "priceChange24h": 3.2,
+            },
+        }
+        mock_response.raise_for_status.return_value = None
+        mock_httpx_client.get.return_value = mock_response
+
+        results = await client.get_prices(batch=batch, coingecko_client=MagicMock())
+
+        # Should only return the token with valid usdPrice
+        assert len(results) == 1
+        assert results[0].address == "So11111111111111111111111111111111111111112"
+        assert results[0].price == 2.0
+        assert results[0].percentage_change_24h == 3.2
