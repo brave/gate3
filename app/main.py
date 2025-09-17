@@ -1,5 +1,7 @@
+import subprocess
 from contextlib import asynccontextmanager
 
+import sentry_sdk
 from fastapi import FastAPI
 from prometheus_client import start_http_server
 from prometheus_fastapi_instrumentator import Instrumentator
@@ -15,6 +17,17 @@ from app.api.pricing.routes import router as pricing_router
 from app.api.tokens.routes import router as tokens_router
 from app.config import settings
 from app.core.cache import Cache
+
+version = subprocess.run(
+    ["poetry", "version", "--short"], capture_output=True, text=True, check=True
+).stdout.strip()
+
+sentry_sdk.init(
+    dsn=settings.SENTRY_DSN,
+    environment=settings.ENVIRONMENT,
+    release=f"gate3@{version}",
+    traces_sample_rate=1.0,
+)
 
 
 @asynccontextmanager

@@ -1,6 +1,6 @@
 [project]
 name = "gate3"
-version = "0.5.0"
+version = "0.5.1"
 description = "Gate API for web3 applications at Brave"
 authors = [
 ]
@@ -17,7 +17,8 @@ dependencies = [
     "prometheus-fastapi-instrumentator (>=7.1.0,<8.0.0)",
     "cachetools (>=6.0.0,<7.0.0)",
     "requests (>=2.32.4,<3.0.0)",
-    "fakeredis[json] (>=2.30.1,<3.0.0)"
+    "fakeredis[json] (>=2.30.1,<3.0.0)",
+    "sentry-sdk[fastapi] (>=2.38.0,<3.0.0)"
 ]
 
 
