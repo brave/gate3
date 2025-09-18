@@ -47,7 +47,9 @@ def mock_token_price_cache():
         yield mock
 
 
-def test_get_price_success(client, mock_coingecko_client):
+def test_get_prices_single_token_success(
+    client, mock_coingecko_client, mock_jupiter_client
+):
     request = TokenPriceRequest(
         coin=Chain.ETHEREUM.coin,
         chain_id=Chain.ETHEREUM.chain_id,
@@ -68,22 +70,26 @@ def test_get_price_success(client, mock_coingecko_client):
         source=PriceSource.COINGECKO,
     )
     mock_coingecko_client.filter.return_value = (batch, empty_batch)
+    mock_jupiter_client.filter.return_value = (empty_batch, empty_batch)
     mock_coingecko_client.get_prices.return_value = [expected_response]
+    mock_jupiter_client.get_prices.return_value = []
 
     # Make request
-    response = client.get(
-        "/api/pricing/v1/getPrice",
-        params={
-            "coin": Chain.ETHEREUM.coin.value,
-            "chain_id": Chain.ETHEREUM.chain_id,
-            "address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
-            "vs_currency": VsCurrency.USD.value,
-        },
+    response = client.post(
+        "/api/pricing/v1/getPrices",
+        params={"vs_currency": VsCurrency.USD.value},
+        json=[
+            {
+                "coin": Chain.ETHEREUM.coin.value,
+                "chain_id": Chain.ETHEREUM.chain_id,
+                "address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+            }
+        ],
     )
 
     # Verify response
     assert response.status_code == 200
-    assert response.json() == expected_response.model_dump()
+    assert response.json() == [expected_response.model_dump()]
 
     # Verify mock was called correctly
     mock_coingecko_client.get_prices.assert_called_once()
@@ -92,7 +98,9 @@ def test_get_price_success(client, mock_coingecko_client):
     assert batch.requests[0] == request
 
 
-def test_get_price_not_found(client, mock_coingecko_client):
+def test_get_prices_single_token_not_found(
+    client, mock_coingecko_client, mock_jupiter_client
+):
     # Setup mock to return empty list
     request = TokenPriceRequest(
         coin=Chain.ETHEREUM.coin,
@@ -105,22 +113,26 @@ def test_get_price_not_found(client, mock_coingecko_client):
         empty_batch,
         BatchTokenPriceRequests(requests=[request], vs_currency=VsCurrency.USD),
     )
+    mock_jupiter_client.filter.return_value = (empty_batch, empty_batch)
     mock_coingecko_client.get_prices.return_value = []
+    mock_jupiter_client.get_prices.return_value = []
 
     # Make request
-    response = client.get(
-        "/api/pricing/v1/getPrice",
-        params={
-            "coin": Chain.ETHEREUM.coin.value,
-            "chain_id": Chain.ETHEREUM.chain_id,
-            "address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
-            "vs_currency": VsCurrency.USD.value,
-        },
+    response = client.post(
+        "/api/pricing/v1/getPrices",
+        params={"vs_currency": VsCurrency.USD.value},
+        json=[
+            {
+                "coin": Chain.ETHEREUM.coin.value,
+                "chain_id": Chain.ETHEREUM.chain_id,
+                "address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+            }
+        ],
     )
 
     # Verify response
-    assert response.status_code == 404
-    assert response.json() == {"detail": "Token price not found"}
+    assert response.status_code == 200
+    assert response.json() == []
 
 
 def test_get_prices_success(client, mock_coingecko_client, mock_jupiter_client):
@@ -252,7 +264,7 @@ def test_get_prices_empty_list(client, mock_coingecko_client, mock_jupiter_clien
     assert response.json() == []
 
 
-def test_get_price_cached_response(client):
+def test_get_prices_cached_response(client):
     # Patch all cache get/set methods to prevent Redis connections
     with (
         patch(
@@ -298,18 +310,20 @@ def test_get_price_cached_response(client):
             },
         }
 
-        response = client.get(
-            "/api/pricing/v1/getPrice",
-            params={
-                "coin": Chain.ETHEREUM.coin.value,
-                "chain_id": Chain.ETHEREUM.chain_id,
-                "address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
-                "vs_currency": VsCurrency.USD.value,
-            },
+        response = client.post(
+            "/api/pricing/v1/getPrices",
+            params={"vs_currency": VsCurrency.USD.value},
+            json=[
+                {
+                    "coin": Chain.ETHEREUM.coin.value,
+                    "chain_id": Chain.ETHEREUM.chain_id,
+                    "address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+                }
+            ],
         )
 
         assert response.status_code == 200
-        assert response.json() == cached_response.model_dump()
+        assert response.json() == [cached_response.model_dump()]
         mock_cache_get.assert_called_once()
         mock_platform_cache_get.assert_called_once()
         mock_coin_cache_get.assert_called_once()
