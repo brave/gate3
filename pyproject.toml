@@ -33,7 +33,7 @@ package-mode = false
 ruff = "0.12.9"
 pytest = "8.4.2"
 pytest-asyncio = "1.1.0"
-pytest-cov = "6.2.1"
+pytest-cov = "6.3.0"
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
