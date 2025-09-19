@@ -1,6 +1,6 @@
 [project]
 name = "gate3"
-version = "0.6.0"
+version = "0.7.0"
 description = "Gate API for web3 applications at Brave"
 authors = [
 ]

@@ -6,14 +6,7 @@
 
 A FastAPI-based gateway service for web3 applications at Brave.
 
-
-## API documentation
-
-| Environment | Access Control | URL |
-|-------------|----------------|------------------|
-| Staging (internal) | Internal Brave VPN | [`gate3-srv.bsg.brave.software/docs`](https://gate3-srv.bsg.brave.software/docs) |
-| Staging | Brave Services Key | [`gate3.bsg.brave.software/docs`](https://gate3.bsg.brave.software/docs) |
-| Production | Brave Services Key | [`gate3.bsg.brave.com/docs`](https://gate3.bsg.brave.com/docs) |
+**Documentation:** [`gate3.bsg.brave.com/docs`](https://gate3.bsg.brave.com/docs) (requires Brave VPN)
 
 
 ## Prerequisites
@@ -53,6 +46,14 @@ A FastAPI-based gateway service for web3 applications at Brave.
     poetry run fastapi dev
     ```
 
-### Deployment
+### Deployments
 
 Deployments are managed using the [generalized docker build pipeline](https://github.com/brave-intl/general-docker-build-pipeline-action). To create a new deployment, simply publish a new release on GitHub.
+
+gate3 is currently deployed to the following environments:
+
+| Environment | Access Control | URL |
+|-------------|----------------|------------------|
+| Production (internal) | Internal Brave VPN | `gate3.bsg.brave.com` |
+| Production | Brave Services Key | `gate3.wallet.brave.com` |
+| Staging | Brave Services Key | `gate3.wallet.brave.software` |
