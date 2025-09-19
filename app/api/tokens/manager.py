@@ -98,13 +98,17 @@ class TokenManager:
                         if not chain:
                             continue
 
+                        decimals = raw_token_info.get("decimals")
+                        if not decimals:
+                            continue
+
                         token_info = TokenInfo(
                             coin=chain.coin,
                             chain_id=chain.chain_id,
                             address=address,
                             name=raw_token_info["name"],
                             symbol=raw_token_info["symbol"],
-                            decimals=raw_token_info["decimals"],
+                            decimals=decimals,
                             logo=raw_token_info["logo"],
                             sources=[],  # We'll add sources later
                         )
