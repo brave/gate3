@@ -1,4 +1,5 @@
 from enum import Enum
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from pydantic.alias_generators import to_camel
@@ -6,7 +7,7 @@ from pydantic.alias_generators import to_camel
 
 def strip_trailing_slash_validator(v: str | None) -> str | None:
     if v is not None:
-        return v.rstrip("/")
+        return v.strip().rstrip("/")
     return v
 
 
@@ -171,13 +172,16 @@ class SolanaAssetContentFile(BaseModel):
 
 
 class SolanaAssetContentLink(BaseModel):
-    image: str | None = None
+    image: Any = None
     external_url: str | None = None
 
     @field_validator("image")
     @classmethod
-    def validate_urls(cls, v: str | None) -> str | None:
-        return strip_trailing_slash_validator(v)
+    def validate_image(cls, v: Any) -> str | None:
+        if isinstance(v, str):
+            return strip_trailing_slash_validator(v) or None
+
+        return None
 
     model_config = ConfigDict(
         extra="allow",

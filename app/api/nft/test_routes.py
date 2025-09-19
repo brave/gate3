@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 
 from app.api.nft.models import (
     SimpleHashNFTResponse,
+    SolanaAssetContentLink,
     SolanaAssetMerkleProof,
 )
 from app.main import app
@@ -471,3 +472,25 @@ def test_get_nfts_by_ids_handles_malformed_input_gracefully(
         {"contractAddress": "0x123", "tokenId": "456"},
         {"contractAddress": "0x789", "tokenId": "101112"},
     ]
+
+
+def test_solana_asset_content_link_image_validation():
+    # Test with boolean value - should convert to None
+    # Ref: https://github.com/brave/gate3/issues/72
+    link_false = SolanaAssetContentLink.model_validate({"image": False})
+    assert link_false.image is None
+
+    # Test with None - should remain None
+    link_none = SolanaAssetContentLink.model_validate({"image": None})
+    assert link_none.image is None
+
+    # Test with empty string - should convert to None
+    link_empty = SolanaAssetContentLink.model_validate({"image": ""})
+    assert link_empty.image is None
+
+    # Test with valid string - should apply URL validation
+    # Trailing slash and whitespaces should be stripped
+    link_string = SolanaAssetContentLink.model_validate(
+        {"image": "https://example.com/image.jpg/   "}
+    )
+    assert link_string.image == "https://example.com/image.jpg"
