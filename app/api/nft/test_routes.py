@@ -494,3 +494,111 @@ def test_solana_asset_content_link_image_validation():
         {"image": "https://example.com/image.jpg/   "}
     )
     assert link_string.image == "https://example.com/image.jpg"
+
+
+def test_alchemy_nft_with_dict_attributes(mock_httpx_client, mock_settings):
+    # Mock NFT data with dict format attributes
+    mock_nft_with_dict_attributes = {
+        "contract": {
+            "address": "0x123",
+            "name": "MockNFT",
+            "symbol": "MOCK",
+            "isSpam": None,
+            "spamClassifications": [],
+        },
+        "tokenId": "1",
+        "tokenType": "ERC721",
+        "name": "Mock NFT #1",
+        "description": "A mock NFT description",
+        "image": {
+            "cachedUrl": "https://example.com/cached.jpg",
+            "thumbnailUrl": "https://example.com/thumb.jpg",
+            "pngUrl": "https://example.com/image.png",
+            "contentType": "image/png",
+            "size": 1000000,
+            "originalUrl": "https://example.com/original.jpg",
+        },
+        "raw": {
+            "tokenUri": "https://example.com/metadata/1",
+            "metadata": {
+                "name": "Mock NFT #1",
+                "description": "A mock NFT description",
+                "image": "https://example.com/image.jpg",
+                "external_url": "https://example.com",
+                # This is a problematic format - dict instead of list
+                "attributes": {
+                    "Color": "Red",
+                    "Shape": "Round",
+                    "minter_address": "0xf30...name",
+                    "name": "The Paint Room",
+                },
+            },
+            "error": None,
+        },
+        "tokenUri": "https://example.com/metadata/1",
+    }
+
+    mock_response = {
+        "nfts": [mock_nft_with_dict_attributes],
+    }
+
+    mock_httpx_client.post.return_value.json.return_value = mock_response
+
+    # This should not raise a ValidationError anymore
+    response = client.get("/api/nft/v1/getNFTsByIds?ids=eth.0x1.0x123.1")
+    assert response.status_code == 200
+    data = response.json()
+    sh_response = SimpleHashNFTResponse.model_validate(data)
+    assert len(sh_response.nfts) == 1
+
+    # Verify the attributes are empty when metadata is not a list
+    nft = sh_response.nfts[0]
+    attributes = nft.extra_metadata.attributes
+    assert len(attributes) == 0  # Should be empty when attributes is not a list
+
+
+def test_alchemy_nft_with_string_metadata(mock_httpx_client, mock_settings):
+    # Mock NFT data with string metadata
+    mock_nft_with_string_metadata = {
+        "contract": {
+            "address": "0x123",
+            "name": "MockNFT",
+            "symbol": "MOCK",
+            "isSpam": None,
+            "spamClassifications": [],
+        },
+        "tokenId": "1",
+        "tokenType": "ERC721",
+        "name": "Mock NFT #1",
+        "description": "A mock NFT description",
+        "image": {
+            "cachedUrl": "https://example.com/cached.jpg",
+            "thumbnailUrl": "https://example.com/thumb.jpg",
+            "pngUrl": "https://example.com/image.png",
+            "contentType": "image/png",
+            "size": 1000000,
+            "originalUrl": "https://example.com/original.jpg",
+        },
+        "raw": {
+            "tokenUri": "https://example.com/metadata/1",
+            "metadata": "https://example.com/metadata/1",  # String instead of dict
+            "error": None,
+        },
+        "tokenUri": "https://example.com/metadata/1",
+    }
+
+    mock_response = {
+        "nfts": [mock_nft_with_string_metadata],
+    }
+
+    mock_httpx_client.post.return_value.json.return_value = mock_response
+
+    response = client.get("/api/nft/v1/getNFTsByIds?ids=eth.0x1.0x123.1")
+    assert response.status_code == 200
+    data = response.json()
+    sh_response = SimpleHashNFTResponse.model_validate(data)
+    assert len(sh_response.nfts) == 1
+
+    nft = sh_response.nfts[0]
+    attributes = nft.extra_metadata.attributes
+    assert len(attributes) == 0  # Should be empty when metadata is a string

@@ -60,6 +60,16 @@ class AlchemyRawMetadata(BaseModel):
     def validate_urls(cls, v: str | None) -> str | None:
         return strip_trailing_slash_validator(v)
 
+    @field_validator("attributes", mode="before")
+    @classmethod
+    def validate_attributes(cls, v):
+        if isinstance(v, list):
+            # Already in the correct format
+            return v
+        else:
+            # Return empty list for any other type (dict, string, etc.)
+            return []
+
     model_config = ConfigDict(alias_generator=to_camel)
 
 
