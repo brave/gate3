@@ -140,7 +140,7 @@ async def _transform_solana_asset_to_simplehash(asset: SolanaAsset) -> SimpleHas
         )
 
     if not any([name, symbol, description, image_url]):
-        with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient() as client:
             raw_content_response = await client.get(asset.content.json_uri)
             raw_content_response.raise_for_status()
             raw_content_data = SolanaAssetRawContent.model_validate(
@@ -210,7 +210,7 @@ async def get_nfts_by_owner(
 
             if chain == Chain.SOLANA:
                 # Handle Solana NFTs differently
-                url = f"https://solana-mainnet.g.alchemy.com/v2/{settings.ALCHEMY_API_KEY}"
+                url = f"https://{Chain.SOLANA.alchemy_id}.g.alchemy.com/v2/{settings.ALCHEMY_API_KEY}"
                 params = {
                     "jsonrpc": "2.0",
                     "id": 1,
@@ -323,7 +323,7 @@ async def get_nfts_by_ids(
     async with httpx.AsyncClient() as client:
         # Handle Solana NFTs
         if solana_nfts:
-            url = f"https://solana-mainnet.g.alchemy.com/v2/{settings.ALCHEMY_API_KEY}"
+            url = f"https://{Chain.SOLANA.alchemy_id}.g.alchemy.com/v2/{settings.ALCHEMY_API_KEY}"
             params = {
                 "jsonrpc": "2.0",
                 "id": 1,
@@ -402,7 +402,7 @@ async def get_solana_asset_proof(
     ),
 ) -> SolanaAssetMerkleProof:
     async with httpx.AsyncClient() as client:
-        url = f"https://solana-mainnet.g.alchemy.com/v2/{settings.ALCHEMY_API_KEY}"
+        url = f"https://{Chain.SOLANA.alchemy_id}.g.alchemy.com/v2/{settings.ALCHEMY_API_KEY}"
         params = {
             "jsonrpc": "2.0",
             "method": "getAssetProof",

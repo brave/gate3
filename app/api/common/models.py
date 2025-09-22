@@ -93,7 +93,7 @@ class Chain(Enum):
         coin=Coin.SOL,
         chain_id="0x65",
         simplehash_id="solana",
-        alchemy_id="sol-mainnet",
+        alchemy_id="solana-mainnet",
         has_nft_support=True,
     )
     FILECOIN = _c(
