@@ -73,6 +73,27 @@ MOCK_NFT_ALCHEMY_RESPONSE = {
     "balance": "1",
 }
 
+MOCK_SOLANA_ASSET_RESPONSE = {
+    "id": "mint123",
+    "interface": "ProgrammableNFT",
+    "content": {
+        "metadata": {
+            "name": "Mock Solana NFT",
+            "symbol": "MSN",
+            "description": "A mock Solana NFT",
+            "attributes": [],
+        },
+        "links": {
+            "image": "https://example.com/solana-image.jpg",
+            "external_url": "https://example.com",
+        },
+        "json_uri": "https://example.com/metadata/solana.json",
+    },
+    "grouping": [],
+    "mutable": False,
+    "burnt": False,
+}
+
 
 @pytest.fixture
 def mock_settings(monkeypatch):
@@ -326,29 +347,8 @@ def test_get_simplehash_compressed_nft_proof(mock_httpx_client, mock_settings):
 
 
 def test_get_simplehash_nfts_by_ids_solana(mock_httpx_client, mock_settings):
-    mock_solana_asset = {
-        "id": "mint123",
-        "interface": "ProgrammableNFT",
-        "content": {
-            "metadata": {
-                "name": "Mock Solana NFT",
-                "symbol": "MSN",
-                "description": "A mock Solana NFT",
-                "attributes": [],
-            },
-            "links": {
-                "image": "https://example.com/solana-image.jpg",
-                "external_url": "https://example.com",
-            },
-            "json_uri": "https://example.com/metadata/solana.json",
-        },
-        "grouping": [],
-        "mutable": False,
-        "burnt": False,
-    }
-
     mock_response = {
-        "result": [mock_solana_asset],
+        "result": [MOCK_SOLANA_ASSET_RESPONSE],
     }
 
     mock_httpx_client.post.return_value.json.return_value = mock_response
@@ -389,28 +389,7 @@ def test_get_nfts_by_ids_handles_malformed_input_gracefully(
 
     # Mock Solana response
     mock_solana_response = {
-        "result": [
-            {
-                "id": "0xdef123",
-                "interface": "ProgrammableNFT",
-                "content": {
-                    "metadata": {
-                        "name": "Mock Solana NFT",
-                        "symbol": "MSN",
-                        "description": "A mock Solana NFT",
-                        "attributes": [],
-                    },
-                    "links": {
-                        "image": "https://example.com/solana-image.jpg",
-                        "external_url": "https://example.com",
-                    },
-                    "json_uri": "https://example.com/metadata/solana.json",
-                },
-                "grouping": [],
-                "mutable": False,
-                "burnt": False,
-            }
-        ],
+        "result": [MOCK_SOLANA_ASSET_RESPONSE],
     }
 
     # Track the actual requests made to capture the tokens array
@@ -602,3 +581,42 @@ def test_alchemy_nft_with_string_metadata(mock_httpx_client, mock_settings):
     nft = sh_response.nfts[0]
     attributes = nft.extra_metadata.attributes
     assert len(attributes) == 0  # Should be empty when metadata is a string
+
+
+def test_get_nfts_by_ids_handles_none_values_in_response(
+    mock_httpx_client, mock_settings
+):
+    # Mock response with None values mixed in
+    mock_solana_response = {
+        "result": [MOCK_SOLANA_ASSET_RESPONSE, None],
+    }
+
+    # Mock EVM response with None values mixed in
+    mock_evm_response = {
+        "nfts": [None, MOCK_NFT_ALCHEMY_RESPONSE],
+    }
+
+    def mock_post_side_effect(*args, **kwargs):
+        mock_response_obj = Mock()
+        mock_response_obj.status_code = 200
+        mock_response_obj.raise_for_status.return_value = None
+
+        # Return Solana response for Solana requests, EVM response for others
+        if "solana-mainnet.g.alchemy.com" in args[0]:
+            mock_response_obj.json.return_value = mock_solana_response
+        else:
+            mock_response_obj.json.return_value = mock_evm_response
+
+        return mock_response_obj
+
+    mock_httpx_client.post.side_effect = mock_post_side_effect
+
+    response = client.get(
+        "/simplehash/api/v0/nfts/assets?nft_ids=solana.mint123,ethereum.0x123.456"
+    )
+    assert response.status_code == 200
+    data = response.json()
+    sh_response = SimpleHashNFTResponse.model_validate(data)
+
+    # Should get 2 NFTs total (1 from Solana + 1 from Ethereum), None values should be skipped
+    assert len(sh_response.nfts) == 2
