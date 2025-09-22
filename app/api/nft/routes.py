@@ -63,7 +63,6 @@ def _transform_alchemy_to_simplehash(
     )
     attributes = metadata.attributes if metadata else []
     external_url = metadata.external_url if metadata else None
-    properties = metadata.properties if metadata else {}
 
     # Transform attributes to SimpleHash format
     transformed_attributes = [
@@ -85,7 +84,6 @@ def _transform_alchemy_to_simplehash(
 
     extra_metadata = SimpleHashExtraMetadata(
         attributes=transformed_attributes,
-        properties=properties,
         image_original_url=image.original_url,
         animation_original_url=None,
         metadata_original_url=alchemy_nft.token_uri,
@@ -172,7 +170,6 @@ async def _transform_solana_asset_to_simplehash(asset: SolanaAsset) -> SimpleHas
         ),
         extra_metadata=SimpleHashExtraMetadata(
             attributes=asset.content.metadata.attributes,
-            properties={},
             image_original_url=image_url,
             animation_original_url=None,
             metadata_original_url=asset.content.json_uri,

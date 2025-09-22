@@ -53,7 +53,6 @@ class AlchemyRawMetadata(BaseModel):
     image: str | None = None
     external_url: str | None = None
     attributes: list[TraitAttribute] = Field(default_factory=list)
-    properties: dict = Field(default_factory=dict)
 
     @field_validator("image")
     @classmethod
@@ -120,7 +119,6 @@ class SimpleHashCollection(BaseModel):
 
 class SimpleHashExtraMetadata(BaseModel):
     attributes: list[TraitAttribute] = Field(default_factory=list)
-    properties: dict = Field(default_factory=dict)
     image_original_url: str | None = None
     animation_original_url: str | None = None
     metadata_original_url: str | None = None
