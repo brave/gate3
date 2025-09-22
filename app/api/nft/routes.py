@@ -339,6 +339,8 @@ async def get_nfts_by_ids(
 
             solana_assets = []
             for nft_data in json_response["result"]:
+                if not nft_data:
+                    continue
                 solana_assets.append(SolanaAsset.model_validate(nft_data))
 
             # Transform Solana assets to SimpleHash format
@@ -389,6 +391,8 @@ async def get_nfts_by_ids(
                 json_response = response.json()
 
                 for nft_data in json_response["nfts"]:
+                    if not nft_data:
+                        continue
                     alchemy_nft = AlchemyNFT.model_validate(nft_data)
                     nfts.append(_transform_alchemy_to_simplehash(alchemy_nft, chain))
 
