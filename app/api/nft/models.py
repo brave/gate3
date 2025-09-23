@@ -48,8 +48,6 @@ class TraitAttribute(BaseModel):
 
 
 class AlchemyRawMetadata(BaseModel):
-    name: str | None = None
-    description: str | None = None
     image: str | None = None
     external_url: str | None = None
     attributes: list[TraitAttribute] = Field(default_factory=list)
