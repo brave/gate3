@@ -1,7 +1,14 @@
+import json
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_validator,
+    model_validator,
+)
 from pydantic.alias_generators import to_camel
 
 
@@ -9,6 +16,52 @@ def strip_trailing_slash_validator(v: str | None) -> str | None:
     if v is not None:
         return v.strip().rstrip("/")
     return v
+
+
+class TraitAttribute(BaseModel):
+    trait_type: str
+    value: str | bool | int | float | None = None
+
+    @model_validator(mode="before")
+    def check_trait_type_omitted(cls, data):
+        if not isinstance(data, dict):
+            raise ValueError("TraitAttribute data must be a dictionary")
+
+        trait_type = data.get("trait_type", "").strip() or data.get("name", "").strip()
+
+        if not trait_type and not data.get("value"):
+            raise ValueError(
+                "Either trait_type or value must be provided for TraitAttribute"
+            )
+
+        data["trait_type"] = trait_type or "Unknown"
+
+        # Handle complex value types (dict, list) by serializing to JSON.
+        # If serialization fails, the TraitAttribute will be invalid and skipped.
+        value = data.get("value")
+        if isinstance(value, (dict, list)):
+            data["value"] = json.dumps(value)
+
+        return data
+
+
+class AttributesValidationMixin:
+    """Mixin to provide shared attribute validation logic for metadata classes."""
+
+    @field_validator("attributes", mode="before")
+    @classmethod
+    def validate_attributes(cls, v):
+        if not isinstance(v, list):
+            return []
+
+        # Filter out invalid attributes, keeping only valid ones
+        def is_valid_attribute(attr_data):
+            try:
+                return TraitAttribute.model_validate(attr_data)
+            except Exception:
+                return False
+
+        return [attr_data for attr_data in v if is_valid_attribute(attr_data)]
 
 
 class AlchemyTokenType(str, Enum):
@@ -42,12 +95,7 @@ class AlchemyImage(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel)
 
 
-class TraitAttribute(BaseModel):
-    trait_type: str
-    value: str | bool | int | float | None = None
-
-
-class AlchemyRawMetadata(BaseModel):
+class AlchemyRawMetadata(BaseModel, AttributesValidationMixin):
     image: str | None = None
     external_url: str | None = None
     attributes: list[TraitAttribute] = Field(default_factory=list)
@@ -56,16 +104,6 @@ class AlchemyRawMetadata(BaseModel):
     @classmethod
     def validate_urls(cls, v: str | None) -> str | None:
         return strip_trailing_slash_validator(v)
-
-    @field_validator("attributes", mode="before")
-    @classmethod
-    def validate_attributes(cls, v):
-        if isinstance(v, list):
-            # Already in the correct format
-            return v
-        else:
-            # Return empty list for any other type (dict, string, etc.)
-            return []
 
     model_config = ConfigDict(alias_generator=to_camel)
 
@@ -196,7 +234,7 @@ class SolanaAssetContentLink(BaseModel):
     )
 
 
-class SolanaAssetContentMetadata(BaseModel):
+class SolanaAssetContentMetadata(BaseModel, AttributesValidationMixin):
     name: str
     symbol: str | None = None
     description: str | None = None
