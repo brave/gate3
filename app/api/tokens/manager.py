@@ -41,14 +41,32 @@ class TokenManager:
             return await index.create_index(fields=schema, definition=definition)
 
     @classmethod
-    async def clear_tokens(cls) -> None:
+    async def refresh(cls) -> None:
         """
-        Clear all tokens from Redis.
+        Refresh all tokens by clearing existing data and ingesting fresh data atomically.
         """
         async with Cache.get_client() as redis_client:
-            cursor = 0
             pipe = redis_client.pipeline()
 
+            # Clear existing tokens
+            await cls._clear_tokens(pipe)
+
+            # Ingest Coingecko data
+            await cls.ingest_from_coingecko(pipe)
+
+            # Ingest Jupiter LST tokens
+            await cls.ingest_from_jupiter("lst", pipe)
+
+            # Ingest Jupiter verified tokens
+            await cls.ingest_from_jupiter("verified", pipe)
+
+            # Execute all operations atomically
+            await pipe.execute()
+
+    @classmethod
+    async def _clear_tokens(cls, pipe) -> None:
+        async with Cache.get_client() as redis_client:
+            cursor = 0
             while True:
                 cursor, keys = await redis_client.scan(
                     cursor, match=f"{cls.key_prefix}:*"
@@ -57,8 +75,6 @@ class TokenManager:
                     pipe.delete(key)
                 if cursor == 0:
                     break
-
-            await pipe.execute()
 
             index = redis_client.ft(cls.index_name)
             try:
@@ -69,21 +85,17 @@ class TokenManager:
                 await index.dropindex()
 
     @classmethod
-    async def ingest_coingecko_data(cls) -> None:
-        """
-        Ingest the entire Coingecko token list into Redis.
-        """
+    async def ingest_from_coingecko(cls, pipe) -> None:
         # Create index if it doesn't exist
         await cls.create_index()
 
         url = "https://raw.githubusercontent.com/brave/token-lists/refs/heads/main/data/v1/coingecko.json"
+
         response = requests.get(url, timeout=10)
         json_data = response.json()
 
         try:
             async with Cache.get_client() as redis_client:
-                pipe = redis_client.pipeline()
-
                 # Process each token in the JSON
                 for raw_chain_id, tokens in json_data.items():
                     for address, raw_token_info in tokens.items():
@@ -138,18 +150,12 @@ class TokenManager:
                         if existing != token_data:
                             pipe.hset(key, mapping=token_data)
 
-                # Execute pipeline for updates/additions
-                await pipe.execute()
-
         except Exception as e:
             print(f"Error during ingestion: {e}")
             raise
 
     @classmethod
-    async def ingest_jupiter_tokens(cls, tag: Literal["lst", "verified"]) -> None:
-        """
-        Ingest Jupiter tokens into Redis.
-        """
+    async def ingest_from_jupiter(cls, tag: Literal["lst", "verified"], pipe) -> None:
         # Create index if it doesn't exist
         await cls.create_index()
 
@@ -158,8 +164,6 @@ class TokenManager:
         json_data = response.json()
 
         async with Cache.get_client() as redis_client:
-            pipe = redis_client.pipeline()
-
             for token in json_data:
                 key = ":".join(
                     (
@@ -197,9 +201,6 @@ class TokenManager:
 
                 if existing != token_data:
                     pipe.hset(key, mapping=token_data)
-
-            # Execute pipeline for updates/additions
-            await pipe.execute()
 
     @classmethod
     async def get(
