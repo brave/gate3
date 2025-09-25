@@ -1,5 +1,3 @@
-from typing import Literal
-
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import ORJSONResponse as JSONResponse
 
@@ -65,32 +63,23 @@ async def search_tokens(
     Supports full-text search with case-insensitive matching.
     """
     try:
-        if not q.strip():
-            return TokenSearchResponse(results=[], total=0, query=q)
-
-        # Perform search
         search_results = await TokenManager.search(q.strip(), offset, limit)
         return search_results
-
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 
-@router.get("/v1/_admin/ingest/clear")
-async def admin_ingest_clear_tokens():
-    await TokenManager.clear_tokens()
-    return JSONResponse(content={"status": "success"})
-
-
-@router.get("/v1/_admin/ingest/coingecko")
-async def admin_ingest_coingecko_tokens():
-    await TokenManager.ingest_coingecko_data()
-    return JSONResponse(content={"status": "success"})
-
-
-@router.get("/v1/_admin/ingest/jupiter")
-async def admin_ingest_jupiter_tokens(
-    tag: Literal["lst", "verified"] = Query(..., description="Tag to ingest"),
-):
-    await TokenManager.ingest_jupiter_tokens(tag=tag)
-    return JSONResponse(content={"status": "success"})
+@router.get("/v1/_admin/refresh")
+async def admin_refresh_all_tokens():
+    try:
+        await TokenManager.refresh()
+        return JSONResponse(
+            content={
+                "status": "success",
+                "message": "All tokens refreshed successfully",
+            }
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to refresh tokens: {str(e)}"
+        )

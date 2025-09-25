@@ -194,7 +194,7 @@ async def test_search_no_results(cache):
 
 
 @pytest.mark.asyncio
-async def test_ingest_coingecko_data(cache):
+async def test_refresh_with_coingecko_data(cache):
     # Mock the Coingecko API response
     mock_response = Mock()
     mock_response.json.return_value = {
@@ -208,29 +208,31 @@ async def test_ingest_coingecko_data(cache):
         }
     }
 
-    # Mock create_index to avoid RediSearch issues
-    with patch.object(TokenManager, "create_index"):
-        with patch("app.api.tokens.manager.requests.get", return_value=mock_response):
-            # Ingest tokens
-            await TokenManager.ingest_coingecko_data()
+    with (
+        patch.object(TokenManager, "create_index"),
+        patch("app.api.tokens.manager.requests.get", return_value=mock_response),
+        patch.object(TokenManager, "ingest_from_jupiter"),
+    ):
+        # Refresh tokens (which includes Coingecko ingestion)
+        await TokenManager.refresh()
 
-            # Verify the token was stored and can be retrieved
-            result = await TokenManager.get(
-                Chain.ETHEREUM.coin,
-                Chain.ETHEREUM.chain_id,
-                "0x1234567890123456789012345678901234567890",
-            )
+        # Verify the token was stored and can be retrieved
+        result = await TokenManager.get(
+            Chain.ETHEREUM.coin,
+            Chain.ETHEREUM.chain_id,
+            "0x1234567890123456789012345678901234567890",
+        )
 
-            # Verify the token was retrieved correctly
-            assert result is not None
-            assert result.name == "Test Token"
-            assert result.symbol == "TEST"
-            assert result.decimals == 18
-            assert TokenSource.COINGECKO in result.sources
+        # Verify the token was retrieved correctly
+        assert result is not None
+        assert result.name == "Test Token"
+        assert result.symbol == "TEST"
+        assert result.decimals == 18
+        assert TokenSource.COINGECKO in result.sources
 
 
 @pytest.mark.asyncio
-async def test_ingest_jupiter_tokens(cache):
+async def test_refresh_with_jupiter_data(cache):
     # Mock the Jupiter API response
     mock_response = Mock()
     mock_response.json.return_value = [
@@ -243,25 +245,27 @@ async def test_ingest_jupiter_tokens(cache):
         }
     ]
 
-    # Mock create_index to avoid RediSearch issues
-    with patch.object(TokenManager, "create_index"):
-        with patch("app.api.tokens.manager.requests.get", return_value=mock_response):
-            # Ingest tokens
-            await TokenManager.ingest_jupiter_tokens("verified")
+    with (
+        patch.object(TokenManager, "create_index"),
+        patch("app.api.tokens.manager.requests.get", return_value=mock_response),
+        patch.object(TokenManager, "ingest_from_coingecko"),
+    ):
+        # Refresh tokens (which includes Jupiter ingestion)
+        await TokenManager.refresh()
 
-            # Verify the token was stored and can be retrieved
-            result = await TokenManager.get(
-                Chain.SOLANA.coin,
-                Chain.SOLANA.chain_id,
-                "So11111111111111111111111111111111111111112",
-            )
+        # Verify the token was stored and can be retrieved
+        result = await TokenManager.get(
+            Chain.SOLANA.coin,
+            Chain.SOLANA.chain_id,
+            "So11111111111111111111111111111111111111112",
+        )
 
-            # Verify the token was retrieved correctly
-            assert result is not None
-            assert result.name == "Wrapped SOL"
-            assert result.symbol == "SOL"
-            assert result.decimals == 9
-            assert TokenSource.JUPITER_VERIFIED in result.sources
+        # Verify the token was retrieved correctly
+        assert result is not None
+        assert result.name == "Wrapped SOL"
+        assert result.symbol == "SOL"
+        assert result.decimals == 9
+        assert TokenSource.JUPITER_VERIFIED in result.sources
 
 
 @pytest.mark.asyncio
