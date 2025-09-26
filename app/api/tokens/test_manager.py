@@ -142,6 +142,8 @@ async def test_search_functionality(cache, sample_token_info):
     # Create mock search result
     mock_doc = MockSearchDoc(
         doc_id="token:eth:0x1:0x1234567890123456789012345678901234567890",
+        coin="eth",
+        chain_id="0x1",
         address="0x1234567890123456789012345678901234567890",
         name="Test Token",
         symbol="TEST",
@@ -298,3 +300,85 @@ async def test_multiple_tokens(cache):
         assert result.name == f"Token {i}"
         assert result.symbol == f"TKN{i}"
         assert result.address == f"0x{i:040x}"
+
+
+QUERIES = [
+    # Single word queries
+    (
+        "bitcoin",
+        "(@symbol_lower:(bitcoin)) => { $weight: 5.0; } | "
+        "(@address_lower:(bitcoin)) => { $weight: 5.0; } | "
+        "(@name_lower:(bitcoin)) => { $weight: 2.0; } | "
+        "(@name_lower:(*bitcoin*)) => { $weight: 1.0; } | "
+        "(@name_lower:(%%bitcoin%%)) => { $weight: 0.5; }",
+    ),
+    # Two word queries
+    (
+        "basic attention",
+        "(@name_lower:(basic attention)) => { $weight: 2.0; } | "
+        "(@name_lower:(*basic* *attention*)) => { $weight: 1.0; } | "
+        "(@name_lower:(%%basic%% %%attention%%)) => { $weight: 0.5; }",
+    ),
+    # Three word queries
+    (
+        "basic attention token",
+        "(@name_lower:(basic attention token)) => { $weight: 2.0; } | "
+        "(@name_lower:(*basic* *attention* *token*)) => { $weight: 1.0; } | "
+        "(@name_lower:(%%basic%% %%attention%% %%token%%)) => { $weight: 0.5; }",
+    ),
+    # Four word queries
+    (
+        "basic attention token portal",
+        "(@name_lower:(basic attention token portal)) => { $weight: 2.0; } | "
+        "(@name_lower:(*basic* *attention* *token* *portal*)) => { $weight: 1.0; } | "
+        "(@name_lower:(%%basic%% %%attention%% %%token%% %%portal%%)) => { $weight: 0.5; }",
+    ),
+    # Case insensitive test
+    (
+        "BiTcOiN",
+        "(@symbol_lower:(bitcoin)) => { $weight: 5.0; } | "
+        "(@address_lower:(bitcoin)) => { $weight: 5.0; } | "
+        "(@name_lower:(bitcoin)) => { $weight: 2.0; } | "
+        "(@name_lower:(*bitcoin*)) => { $weight: 1.0; } | "
+        "(@name_lower:(%%bitcoin%%)) => { $weight: 0.5; }",
+    ),
+]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "query,expected_query",
+    QUERIES,
+    ids=[x[0] for x in QUERIES],
+)
+async def test_search_query_construction(cache, query, expected_query):
+    """Test that queries construct the exact expected Query string."""
+    # Hardcoded offset and limit for all tests
+    offset, limit = 0, 10
+
+    # Mock the search index and Query class
+    mock_index = AsyncMock()
+    mock_result = MockSearchResult(docs=[], total=0)
+    mock_index.search = AsyncMock(return_value=mock_result)
+
+    with (
+        patch.object(TokenManager, "create_index", return_value=mock_index),
+        patch("app.api.tokens.manager.Query") as mock_query_class,
+    ):
+        # Mock Query instance
+        mock_query_instance = Mock()
+        mock_query_class.return_value = mock_query_instance
+        mock_query_instance.dialect.return_value = mock_query_instance
+        mock_query_instance.paging.return_value = mock_query_instance
+
+        # Test the query
+        await TokenManager.search(query, offset, limit)
+
+        # Verify Query was called with the exact expected search query
+        mock_query_class.assert_called_once()
+        actual_query = mock_query_class.call_args[0][0]
+        assert actual_query == expected_query
+
+        # Verify dialect and paging were called
+        mock_query_instance.dialect.assert_called_once_with(2)
+        mock_query_instance.paging.assert_called_once_with(offset, limit)

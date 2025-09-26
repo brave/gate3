@@ -268,39 +268,10 @@ class TokenManager:
         except Exception as e:
             print(f"Error adding token: {e}")
 
-    @classmethod
-    async def search(cls, query: str, offset: int, limit: int) -> TokenSearchResponse:
-        index = await cls.create_index()
-        query_lower = query.lower()
-
-        # Build DIALECT 2 compliant search query with proper field weights:
-        #   1. Exact symbol matches get highest priority
-        #   2. Exact name matches get high priority
-        #   3. Fuzzy name matches get medium priority
-        #   4. Infix symbol matches get lower priority
-        #   5. Address matches get lowest priority
-
-        search_query = ""
-
-        # Add fuzzy name matching for multi-word queries
-        if " " in query_lower:
-            fuzz = "%"
-            terms = [f"{fuzz}{term}{fuzz}" for term in query_lower.split()]
-            search_query = f"@name_lower:({' '.join(terms)})"
-        else:
-            # Start with exact matches for highest priority
-            search_query = (
-                f"(@symbol_lower:{query_lower}) | (@name_lower:{query_lower})"
-            )
-
-            # For single word queries, add infix matching for symbol and exact address matching
-            search_query += (
-                f" | (@symbol_lower:*{query_lower}*) | (@address_lower:{query_lower})"
-            )
-
-        q = Query(search_query).dialect(2).paging(offset, limit)
-        result = await index.search(q)
-
+    @staticmethod
+    def _as_response(
+        result, query: str, offset: int, limit: int
+    ) -> TokenSearchResponse:
         results = []
         for doc in result.docs:
             # Parse the key to extract coin and chain_id
@@ -316,11 +287,70 @@ class TokenManager:
                 logo=doc.logo,
                 sources=json.loads(doc.sources),
             )
+
             results.append(token_info)
 
         return TokenSearchResponse(
-            results=results, offset=offset, limit=limit, total=result.total, query=query
+            results=results, total=result.total, query=query, offset=offset, limit=limit
         )
+
+    @classmethod
+    async def search(cls, query: str, offset: int, limit: int) -> TokenSearchResponse:
+        query_lower = query.strip().lower()
+        index = await cls.create_index()
+
+        # Build comprehensive DIALECT 2 compliant search query with multiple matching strategies
+        search_query = ""
+        fuzz = "%" * 2
+
+        # Unified search logic for both single and multi-word queries
+        terms = query_lower.split()
+        search_parts = []
+
+        # Define search fields for different matching strategies
+        fuzzy_prefix_fields = ["name_lower"]
+
+        # 1. Exact symbol matches (highest priority - weight 5.0)
+        if len(terms) == 1:
+            exact_terms = [f"{term}" for term in terms]
+            symbol_exact = f"@symbol_lower:({' '.join(exact_terms)})"
+            search_parts.append(f"({symbol_exact}) => {{ $weight: 5.0; }}")
+
+        # 2. Exact address matches (highest priority - weight 5.0)
+        if len(terms) == 1:
+            exact_terms = [f"{term}" for term in terms]
+            address_exact = f"@address_lower:({' '.join(exact_terms)})"
+            search_parts.append(f"({address_exact}) => {{ $weight: 5.0; }}")
+
+        # 3. Exact name matches (high priority - weight 2.0)
+        if len(terms) >= 1:
+            exact_terms = [f"{term}" for term in terms]
+            name_exact = f"@name_lower:({' '.join(exact_terms)})"
+            search_parts.append(f"({name_exact}) => {{ $weight: 2.0; }}")
+
+        # 4. Prefix/infix matches for name field (lower priority - weight 1.0)
+        if len(terms) >= 1:
+            prefix_terms = [f"*{term}*" for term in terms]
+            for field in fuzzy_prefix_fields:
+                prefix_query = f"@{field}:({' '.join(prefix_terms)})"
+                search_parts.append(f"({prefix_query}) => {{ $weight: 1.0; }}")
+
+        # 5. Fuzzy matches for name field (lowest priority - weight 0.5)
+        if len(terms) >= 1:
+            fuzzy_terms = [f"{fuzz}{term}{fuzz}" for term in terms]
+            for field in fuzzy_prefix_fields:
+                fuzzy_query = f"@{field}:({' '.join(fuzzy_terms)})"
+                search_parts.append(f"({fuzzy_query}) => {{ $weight: 0.5; }}")
+
+        search_query = " | ".join(search_parts)
+
+        if not search_query:
+            search_query = "*"
+
+        q = Query(search_query).dialect(2).paging(offset, limit)
+        result = await index.search(q)
+
+        return cls._as_response(result, query, offset, limit)
 
     @staticmethod
     async def mock_fetch_from_blockchain(
