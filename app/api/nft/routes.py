@@ -296,7 +296,7 @@ async def get_nfts_by_ids(
         if not nft_id.strip():
             continue
 
-        parts = nft_id.split(".")
+        parts = [part.strip() for part in nft_id.split(".") if part.strip()]
 
         # Skip malformed IDs that don't have enough parts
         if len(parts) < 2:
@@ -316,6 +316,10 @@ async def get_nfts_by_ids(
             solana_nfts.append(parts[-1])
         else:
             other_nfts.append(nft_id)
+
+    # If no valid NFT IDs were found, return empty response
+    if not solana_nfts and not other_nfts:
+        return SimpleHashNFTResponse(next_cursor=None, nfts=[])
 
     async with httpx.AsyncClient() as client:
         # Handle Solana NFTs
@@ -352,17 +356,13 @@ async def get_nfts_by_ids(
             # Group NFTs by chain
             chain_nfts = {}
             for nft_id in other_nfts:
-                parts = nft_id.split(".")
+                parts = [part.strip() for part in nft_id.split(".") if part.strip()]
 
                 # Skip malformed EVM IDs that don't have exactly 4 parts
                 if len(parts) != 4:
                     continue
 
                 coin, chain_id, contract_address, token_id = parts
-
-                # Skip if token_id is empty (malformed input like "eth.0x1.0xabc.")
-                if not token_id.strip():
-                    continue
 
                 chain = Chain.get(coin, chain_id)
                 if not chain:
@@ -480,7 +480,7 @@ async def get_simplehash_nfts_by_ids(
         if not nft_id.strip():
             continue
 
-        parts = nft_id.split(".")
+        parts = [part.strip() for part in nft_id.split(".") if part.strip()]
 
         # Skip malformed IDs that don't have enough parts
         if len(parts) < 2:
@@ -514,6 +514,10 @@ async def get_simplehash_nfts_by_ids(
         else:
             # We don't support NFTs on other chains yet
             continue
+
+    # If no valid NFT IDs were found, return empty response
+    if not internal_nft_ids:
+        return SimpleHashNFTResponse(next_cursor=None, nfts=[])
 
     # Call the internal function directly instead of redirecting
     return await get_nfts_by_ids(ids=",".join(internal_nft_ids))
