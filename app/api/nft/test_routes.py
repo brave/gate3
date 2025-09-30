@@ -377,6 +377,21 @@ def test_get_simplehash_nfts_by_ids(mock_httpx_client, mock_settings):
     assert len(sh_response.nfts) == 2
 
 
+def test_get_simplehash_nfts_by_ids_handles_invalid_input(
+    mock_httpx_client, mock_settings
+):
+    # Ref: https://github.com/brave/gate3/issues/97
+    response = client.get(
+        "/simplehash/api/v0/nfts/assets?nft_ids=solana.,ethereum..123,ethereum.0x123.,invalid.chain.123"
+    )
+    assert response.status_code == 200
+    data = response.json()
+    sh_response = SimpleHashNFTResponse.model_validate(data)
+    # Should return empty response since all IDs are invalid
+    assert len(sh_response.nfts) == 0
+    assert sh_response.next_cursor is None
+
+
 def test_get_nfts_by_ids_handles_malformed_input_gracefully(
     mock_httpx_client, mock_settings
 ):
