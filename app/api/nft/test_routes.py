@@ -136,6 +136,41 @@ def mock_httpx_client(monkeypatch):
     return mock_client
 
 
+def _create_mock_response(status_code=200, json_data=None):
+    mock_response_obj = Mock()
+    mock_response_obj.status_code = status_code
+    mock_response_obj.raise_for_status.return_value = None
+    if json_data is not None:
+        mock_response_obj.json.return_value = json_data
+    return mock_response_obj
+
+
+def _create_mock_post_side_effect(
+    mock_evm_response, mock_solana_response, capture_requests=None
+):
+    def f(*args, **kwargs):
+        if (
+            capture_requests is not None
+            and "json" in kwargs
+            and "tokens" in kwargs["json"]
+        ):
+            capture_requests.append(kwargs["json"]["tokens"])
+
+        if "solana-mainnet.g.alchemy.com" in args[0]:
+            return _create_mock_response(json_data=mock_solana_response)
+        else:
+            return _create_mock_response(json_data=mock_evm_response)
+
+    return f
+
+
+def _create_mock_get_side_effect(mock_evm_response):
+    def f(*args, **kwargs):
+        return _create_mock_response(json_data=mock_evm_response)
+
+    return f
+
+
 def test_get_nfts_by_owner(mock_httpx_client, mock_settings):
     mock_response = {
         "ownedNfts": [MOCK_NFT_ALCHEMY_RESPONSE],
@@ -407,28 +442,10 @@ def test_get_nfts_by_ids_handles_malformed_input_gracefully(
         "result": [MOCK_SOLANA_ASSET_RESPONSE],
     }
 
-    # Track the actual requests made to capture the tokens array
     captured_requests = []
-
-    def capture_post_request(*args, **kwargs):
-        # Capture the request data
-        if "json" in kwargs and "tokens" in kwargs["json"]:
-            captured_requests.append(kwargs["json"]["tokens"])
-
-        # Return a mock response
-        mock_response_obj = Mock()
-        mock_response_obj.status_code = 200
-
-        # Return different responses based on the URL
-        if "solana-mainnet" in str(args[0]) if args else False:
-            mock_response_obj.json.return_value = mock_solana_response
-        else:
-            mock_response_obj.json.return_value = mock_response
-
-        mock_response_obj.raise_for_status.return_value = None
-        return mock_response_obj
-
-    mock_httpx_client.post.side_effect = capture_post_request
+    mock_httpx_client.post.side_effect = _create_mock_post_side_effect(
+        mock_response, mock_solana_response, captured_requests
+    )
 
     # Test with various malformed inputs that should be gracefully handled:
     # - Valid EVM ID: eth.0x1.0x123.456
@@ -611,20 +628,9 @@ def test_get_nfts_by_ids_handles_none_values_in_response(
         "nfts": [None, MOCK_NFT_ALCHEMY_RESPONSE],
     }
 
-    def mock_post_side_effect(*args, **kwargs):
-        mock_response_obj = Mock()
-        mock_response_obj.status_code = 200
-        mock_response_obj.raise_for_status.return_value = None
-
-        # Return Solana response for Solana requests, EVM response for others
-        if "solana-mainnet.g.alchemy.com" in args[0]:
-            mock_response_obj.json.return_value = mock_solana_response
-        else:
-            mock_response_obj.json.return_value = mock_evm_response
-
-        return mock_response_obj
-
-    mock_httpx_client.post.side_effect = mock_post_side_effect
+    mock_httpx_client.post.side_effect = _create_mock_post_side_effect(
+        mock_evm_response, mock_solana_response
+    )
 
     response = client.get(
         "/simplehash/api/v0/nfts/assets?nft_ids=solana.mint123,ethereum.0x123.456"
@@ -635,3 +641,137 @@ def test_get_nfts_by_ids_handles_none_values_in_response(
 
     # Should get 2 NFTs total (1 from Solana + 1 from Ethereum), None values should be skipped
     assert len(sh_response.nfts) == 2
+
+
+def test_get_simplehash_nfts_by_owner_evm_wallet_filtering(
+    mock_httpx_client, mock_settings
+):
+    mock_response = {
+        "ownedNfts": [MOCK_NFT_ALCHEMY_RESPONSE],
+        "totalCount": 1,
+        "pageKey": None,
+    }
+
+    mock_httpx_client.get.return_value.json.return_value = mock_response
+
+    response = client.get(
+        "/simplehash/api/v0/nfts/owners?wallet_addresses=0x1234567890123456789012345678901234567890&chains=ethereum,polygon,solana"
+    )
+    assert response.status_code == 200
+    data = response.json()
+    sh_response = SimpleHashNFTResponse.model_validate(data)
+
+    # Should get 2 NFTs total (1 from Solana + 1 from Ethereum), None values should be skipped
+    assert len(sh_response.nfts) == 2
+
+
+def test_get_simplehash_nfts_by_owner_solana_wallet_filtering(
+    mock_httpx_client, mock_settings
+):
+    mock_solana_response = {
+        "result": {"items": [MOCK_SOLANA_ASSET_RESPONSE], "total": 1, "limit": 50}
+    }
+
+    mock_evm_response = {
+        "ownedNfts": [MOCK_NFT_ALCHEMY_RESPONSE],
+        "totalCount": 1,
+        "pageKey": None,
+    }
+
+    mock_httpx_client.post.side_effect = _create_mock_post_side_effect(
+        mock_evm_response, mock_solana_response
+    )
+    mock_httpx_client.get.side_effect = _create_mock_get_side_effect(mock_evm_response)
+
+    response = client.get(
+        "/simplehash/api/v0/nfts/owners?wallet_addresses=9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin&chains=ethereum,polygon,solana"
+    )
+    assert response.status_code == 200
+    data = response.json()
+    sh_response = SimpleHashNFTResponse.model_validate(data)
+
+    assert len(sh_response.nfts) == 1
+
+
+def test_get_simplehash_nfts_by_owner_unknown_wallet_filtering(
+    mock_httpx_client, mock_settings
+):
+    mock_evm_response = {
+        "ownedNfts": [MOCK_NFT_ALCHEMY_RESPONSE],
+        "totalCount": 1,
+        "pageKey": None,
+    }
+
+    mock_solana_response = {
+        "result": {"items": [MOCK_SOLANA_ASSET_RESPONSE], "total": 1, "limit": 50}
+    }
+
+    mock_httpx_client.post.side_effect = _create_mock_post_side_effect(
+        mock_evm_response, mock_solana_response
+    )
+    mock_httpx_client.get.side_effect = _create_mock_get_side_effect(mock_evm_response)
+
+    response = client.get(
+        "/simplehash/api/v0/nfts/owners?wallet_addresses=unknown_address_format&chains=ethereum,polygon,solana"
+    )
+    assert response.status_code == 200
+    data = response.json()
+    sh_response = SimpleHashNFTResponse.model_validate(data)
+
+    assert len(sh_response.nfts) == 3
+
+
+def test_get_simplehash_nfts_by_owner_empty_wallet_filtering(
+    mock_httpx_client, mock_settings
+):
+    mock_evm_response = {
+        "ownedNfts": [MOCK_NFT_ALCHEMY_RESPONSE],
+        "totalCount": 1,
+        "pageKey": None,
+    }
+
+    mock_solana_response = {
+        "result": {"items": [MOCK_SOLANA_ASSET_RESPONSE], "total": 1, "limit": 50}
+    }
+
+    mock_httpx_client.post.side_effect = _create_mock_post_side_effect(
+        mock_evm_response, mock_solana_response
+    )
+    mock_httpx_client.get.side_effect = _create_mock_get_side_effect(mock_evm_response)
+
+    response = client.get(
+        "/simplehash/api/v0/nfts/owners?wallet_addresses=&chains=ethereum,polygon,solana"
+    )
+    assert response.status_code == 200
+    data = response.json()
+    sh_response = SimpleHashNFTResponse.model_validate(data)
+
+    assert len(sh_response.nfts) == 3
+
+
+def test_get_simplehash_nfts_by_owner_no_wallet_addresses(
+    mock_httpx_client, mock_settings
+):
+    mock_evm_response = {
+        "ownedNfts": [MOCK_NFT_ALCHEMY_RESPONSE],
+        "totalCount": 1,
+        "pageKey": None,
+    }
+
+    mock_solana_response = {
+        "result": {"items": [MOCK_SOLANA_ASSET_RESPONSE], "total": 1, "limit": 50}
+    }
+
+    mock_httpx_client.post.side_effect = _create_mock_post_side_effect(
+        mock_evm_response, mock_solana_response
+    )
+    mock_httpx_client.get.side_effect = _create_mock_get_side_effect(mock_evm_response)
+
+    response = client.get(
+        "/simplehash/api/v0/nfts/owners?wallet_addresses=&chains=ethereum,polygon,solana"
+    )
+    assert response.status_code == 200
+    data = response.json()
+    sh_response = SimpleHashNFTResponse.model_validate(data)
+
+    assert len(sh_response.nfts) == 3
