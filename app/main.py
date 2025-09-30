@@ -26,7 +26,7 @@ sentry_sdk.init(
     dsn=settings.SENTRY_DSN,
     environment=settings.ENVIRONMENT,
     release=f"gate3@{version}",
-    traces_sample_rate=0.1,
+    traces_sample_rate=0.01,
 )
 
 
