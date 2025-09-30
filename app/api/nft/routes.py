@@ -1,9 +1,8 @@
-import json
-
 import httpx
 from fastapi import APIRouter, Path, Query
 
 from app.api.common.models import Chain, Coin
+from app.api.common.utils import is_evm_address, is_solana_address
 from app.api.nft.models import (
     AlchemyNFT,
     AlchemyNFTResponse,
@@ -25,11 +24,34 @@ from app.config import settings
 router = APIRouter(prefix="/api/nft")
 simplehash_router = APIRouter(prefix="/simplehash/api/v0")
 
-with open("data/cg-nfts.json", "r") as f:
-    cg_nfts = json.load(f)
-
 # Chain mapping dictionaries
 _SIMPLEHASH_TO_CHAIN = {chain.simplehash_id: chain for chain in Chain}
+
+
+def _filter_chains_by_address_type(
+    chains: list[Chain], wallet_address: str
+) -> list[Chain]:
+    if not wallet_address:
+        return chains
+
+    is_evm = is_evm_address(wallet_address)
+    is_solana = is_solana_address(wallet_address)
+
+    # If we can't determine the address type, return all chains
+    if not is_evm and not is_solana:
+        return chains
+
+    filtered_chains = []
+    for chain in chains:
+        if is_evm and chain.coin == Coin.ETH:
+            filtered_chains.append(chain)
+        elif is_solana and chain.coin == Coin.SOL:
+            filtered_chains.append(chain)
+        else:
+            # Skip chains that are not compatible with the wallet address
+            continue
+
+    return filtered_chains
 
 
 def _get_spam_score_for_solana_collection(collection_name: str | None) -> int:
@@ -434,16 +456,23 @@ async def get_simplehash_nfts_by_owner(
         chain_str for chain_raw in (chains or []) for chain_str in chain_raw.split(",")
     }
 
-    internal_chains = {
-        f"{chain.coin.value.lower()}.{chain.chain_id}"
+    internal_chains = [
+        chain
         for chain_str in filtered_chains
         if (chain := _SIMPLEHASH_TO_CHAIN.get(chain_str))
-    }
+    ]
+
+    wallet_address = wallet_addresses[0] if wallet_addresses else ""
+    compatible_chains = _filter_chains_by_address_type(internal_chains, wallet_address)
+
+    internal_chains_ids = [
+        f"{chain.coin.value.lower()}.{chain.chain_id}" for chain in compatible_chains
+    ]
 
     # Call the internal function directly instead of redirecting
     return await get_nfts_by_owner(
-        wallet_address=wallet_addresses[0],
-        chains=list(internal_chains),
+        wallet_address=wallet_address,
+        chains=internal_chains_ids,
         page_key=cursor,
         page_size=50,  # Use default page size
     )
