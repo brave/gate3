@@ -16,7 +16,7 @@ from app.api.tokens.models import (
 router = APIRouter(prefix="/api/tokens")
 
 
-@router.get("/v1/getTokenInfo", response_model=TokenInfo)
+@router.get("/v1/get", response_model=TokenInfo)
 async def get_token_info(
     coin: Coin = Query(..., description=COIN_DESCRIPTION),
     chain_id: str = Query(..., description=CHAIN_ID_DESCRIPTION),
@@ -45,6 +45,22 @@ async def get_token_info(
         raise HTTPException(status_code=404, detail="Token not found")
     except HTTPException:
         raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+
+@router.get("/v1/list", response_model=list[TokenInfo])
+async def list_tokens(
+    coin: Coin = Query(..., description=COIN_DESCRIPTION),
+    chain_id: str | None = Query(None, description=CHAIN_ID_DESCRIPTION),
+):
+    """
+    List all tokens for a specific coin and optionally chain_id.
+    If chain_id is not provided, returns all tokens for the given coin across all chains.
+    """
+    try:
+        list_results = await TokenManager.list_tokens(coin, chain_id)
+        return list_results
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 

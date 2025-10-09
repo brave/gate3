@@ -18,6 +18,15 @@ class TokenSource(str, Enum):
     UNKNOWN = "unknown"
 
 
+class TokenType(str, Enum):
+    ERC20 = "ERC20"
+    ERC721 = "ERC721"
+    ERC1155 = "ERC1155"
+    SPL_TOKEN = "SPL_TOKEN"
+    SPL_TOKEN_2022 = "SPL_TOKEN_2022"
+    UNKNOWN = "UNKNOWN"
+
+
 class TokenInfo(BaseModel):
     coin: Coin = Field(..., description=COIN_DESCRIPTION)
     chain_id: str = Field(..., description=CHAIN_ID_DESCRIPTION)
@@ -27,6 +36,7 @@ class TokenInfo(BaseModel):
     decimals: int = Field(..., description="Token decimals")
     logo: str | None = Field(None, description="Token logo URL")
     sources: list[TokenSource] = Field(..., description="Token sources")
+    token_type: TokenType = Field(..., description="Token type")
 
 
 class TokenSearchResponse(BaseModel):

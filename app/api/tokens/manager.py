@@ -7,13 +7,17 @@ from redis.commands.search.index_definition import IndexDefinition
 from redis.commands.search.query import Query
 
 from app.api.common.models import Chain, Coin
-from app.api.tokens.models import TokenInfo, TokenSearchResponse, TokenSource
+from app.api.tokens.contants import SPL_TOKEN_2022_PROGRAM_ID, SPL_TOKEN_PROGRAM_ID
+from app.api.tokens.models import TokenInfo, TokenSearchResponse, TokenSource, TokenType
 from app.core.cache import Cache
 
 
 class TokenManager:
     key_prefix = "token"
     index_name = "token_idx"
+
+    # Pre-computed chain lookup for O(1) access
+    _chain_lookup = {chain.chain_id: chain for chain in Chain}
 
     @classmethod
     async def create_index(cls) -> None:
@@ -99,14 +103,7 @@ class TokenManager:
                 # Process each token in the JSON
                 for raw_chain_id, tokens in json_data.items():
                     for address, raw_token_info in tokens.items():
-                        chain = next(
-                            (
-                                chain
-                                for chain in Chain
-                                if chain.chain_id == raw_chain_id
-                            ),
-                            None,
-                        )
+                        chain = cls._chain_lookup.get(raw_chain_id)
                         if not chain:
                             continue
 
@@ -123,21 +120,29 @@ class TokenManager:
                             decimals=decimals,
                             logo=raw_token_info["logo"],
                             sources=[],  # We'll add sources later
+                            token_type=(
+                                TokenType.ERC20
+                                if chain.coin == Coin.ETH
+                                else (
+                                    TokenType.SPL_TOKEN_2022
+                                    if chain.coin == Coin.SOL
+                                    and raw_token_info.get("token2022", False)
+                                    # FIXME(onyb): if token2022 is not present,
+                                    # we should not assume it is a SPL token.
+                                    #
+                                    # Currently, all SOL tokens are assumed to
+                                    # be SPL tokens.
+                                    else (
+                                        TokenType.SPL_TOKEN
+                                        if chain.coin == Coin.SOL
+                                        else TokenType.UNKNOWN
+                                    )
+                                )
+                            ),
                         )
 
-                        key = ":".join(
-                            (
-                                cls.key_prefix,
-                                chain.coin.value.lower(),
-                                chain.chain_id.lower(),
-                                address.lower(),
-                            )
-                        )
-
-                        token_data = token_info.model_dump()
-                        token_data["name_lower"] = token_info.name.lower()
-                        token_data["symbol_lower"] = token_info.symbol.lower()
-                        token_data["address_lower"] = address.lower()
+                        key = cls._build_key(chain.coin, chain.chain_id, address)
+                        token_data = cls._prepare_token_data(token_info)
 
                         # Get existing data for comparison
                         existing = await redis_client.hgetall(key)
@@ -165,15 +170,6 @@ class TokenManager:
 
         async with Cache.get_client() as redis_client:
             for token in json_data:
-                key = ":".join(
-                    (
-                        cls.key_prefix,
-                        Chain.SOLANA.coin.value.lower(),
-                        Chain.SOLANA.chain_id,
-                        token["id"].lower(),
-                    )
-                )
-
                 token_info = TokenInfo(
                     coin=Chain.SOLANA.coin,
                     chain_id=Chain.SOLANA.chain_id,
@@ -183,12 +179,21 @@ class TokenManager:
                     decimals=token["decimals"],
                     logo=token.get("icon", ""),
                     sources=[],  # We'll add sources later
+                    token_type=(
+                        TokenType.SPL_TOKEN
+                        if (program := token["tokenProgram"]) == SPL_TOKEN_PROGRAM_ID
+                        else (
+                            TokenType.SPL_TOKEN_2022
+                            if program == SPL_TOKEN_2022_PROGRAM_ID
+                            else TokenType.UNKNOWN
+                        )
+                    ),
                 )
 
-                token_data = token_info.model_dump()
-                token_data["name_lower"] = token_info.name.lower()
-                token_data["symbol_lower"] = token_info.symbol.lower()
-                token_data["address_lower"] = token["id"].lower()
+                key = cls._build_key(
+                    Chain.SOLANA.coin, Chain.SOLANA.chain_id, token["id"]
+                )
+                token_data = cls._prepare_token_data(token_info)
 
                 existing = await redis_client.hgetall(key)
                 sources = set(json.loads(existing["sources"])) if existing else set()
@@ -206,14 +211,7 @@ class TokenManager:
     async def get(
         cls, coin: Coin, chain_id: str, address: str | None
     ) -> TokenInfo | None:
-        key = ":".join(
-            (
-                cls.key_prefix,
-                coin.lower(),
-                chain_id.lower(),
-                (address or "").lower(),
-            )
-        )
+        key = cls._build_key(coin, chain_id, address)
 
         try:
             async with Cache.get_client() as redis_client:
@@ -222,33 +220,25 @@ class TokenManager:
             if not token_data:
                 return None
 
-            return TokenInfo(
-                coin=coin,
-                chain_id=chain_id,
-                address=address,
-                name=token_data["name"],
-                symbol=token_data["symbol"],
-                decimals=int(token_data["decimals"]),
-                logo=token_data.get("logo") or None,
-                sources=json.loads(token_data.get("sources", "[]")),
-            )
+            return cls._parse_token_from_redis_data(key, token_data)
         except Exception as e:
             print(f"Error retrieving token: {e}")
             return None
 
     @classmethod
-    async def add(cls, token_info: TokenInfo):
-        key = ":".join(
+    def _build_key(cls, coin: Coin, chain_id: str, address: str | None = None) -> str:
+        return ":".join(
             (
                 cls.key_prefix,
-                token_info.coin.lower(),
-                token_info.chain_id.lower(),
-                (token_info.address or "").lower(),
+                coin.value.lower(),
+                chain_id.lower(),
+                (address or "").lower(),
             )
         )
 
-        # Prepare token data
-        token_data = token_info.model_dump()
+    @staticmethod
+    def _prepare_token_data(token_info: TokenInfo) -> dict[str, str]:
+        token_data = token_info.model_dump(mode="json")
         token_data["name_lower"] = token_info.name.lower()
         token_data["symbol_lower"] = token_info.symbol.lower()
         token_data["address_lower"] = (token_info.address or "").lower()
@@ -257,11 +247,37 @@ class TokenManager:
         if "sources" in token_data and isinstance(token_data["sources"], list):
             token_data["sources"] = json.dumps(token_data["sources"])
 
-        # Convert all values to strings
-        token_data = {k: str(v) for k, v in token_data.items()}
+        # Convert None values to empty strings for Redis compatibility
+        for key, value in token_data.items():
+            if value is None:
+                token_data[key] = ""
+
+        return token_data
+
+    @staticmethod
+    def _parse_token_from_redis_data(key: str, token_data: dict[str, str]) -> TokenInfo:
+        # Parse the key to extract coin, chain_id, and address
+        key_parts = key.decode("utf-8") if isinstance(key, bytes) else key
+        _, coin_str, chain_id, address = key_parts.split(":", 3)
+
+        return TokenInfo(
+            coin=Coin(coin_str.upper()),
+            chain_id=chain_id,
+            address=address if address else None,
+            name=token_data["name"],
+            symbol=token_data["symbol"],
+            decimals=int(token_data["decimals"]),
+            logo=token_data.get("logo") or None,
+            sources=json.loads(token_data.get("sources", "[]")),
+            token_type=TokenType(token_data["token_type"]),
+        )
+
+    @classmethod
+    async def add(cls, token_info: TokenInfo):
+        key = cls._build_key(token_info.coin, token_info.chain_id, token_info.address)
+        token_data = cls._prepare_token_data(token_info)
 
         try:
-            # Set hash
             async with Cache.get_client() as redis_client:
                 await redis_client.hset(key, mapping=token_data)
                 print(f"Added/updated token at {key}")
@@ -286,6 +302,7 @@ class TokenManager:
                 decimals=int(doc.decimals),
                 logo=doc.logo,
                 sources=json.loads(doc.sources),
+                token_type=TokenType(doc.token_type),
             )
 
             results.append(token_info)
@@ -293,6 +310,61 @@ class TokenManager:
         return TokenSearchResponse(
             results=results, total=result.total, query=query, offset=offset, limit=limit
         )
+
+    @classmethod
+    async def list_tokens(
+        cls, coin: Coin, chain_id: str | None = None
+    ) -> list[TokenInfo]:
+        """
+        List all tokens for a specific coin and optionally chain_id.
+        If chain_id is None, returns all tokens for the given coin across all chains.
+        """
+        async with Cache.get_client() as redis_client:
+            # Create the key pattern to match all tokens for this coin
+            if chain_id:
+                key_pattern = (
+                    f"{cls.key_prefix}:{coin.value.lower()}:{chain_id.lower()}:*"
+                )
+            else:
+                key_pattern = f"{cls.key_prefix}:{coin.value.lower()}:*"
+
+            # Use SCAN to find all matching keys
+            cursor = 0
+            all_keys = []
+
+            while True:
+                cursor, keys = await redis_client.scan(
+                    cursor, match=key_pattern, count=1_000
+                )
+                all_keys.extend(keys)
+                if cursor == 0:
+                    break
+
+            if not all_keys:
+                return []
+
+            # Use pipeline to batch all HGETALL operations
+            pipe = redis_client.pipeline()
+            for key in all_keys:
+                pipe.hgetall(key)
+
+            # Execute all operations in one round-trip
+            token_data_list = await pipe.execute()
+
+            # Process results
+            results = []
+            for key, token_data in zip(all_keys, token_data_list):
+                if not token_data:
+                    continue
+
+                try:
+                    token_info = cls._parse_token_from_redis_data(key, token_data)
+                    results.append(token_info)
+                except Exception as e:
+                    print(f"Error processing token key {key}: {e}")
+                    continue
+
+            return results
 
     @classmethod
     async def search(cls, query: str, offset: int, limit: int) -> TokenSearchResponse:
