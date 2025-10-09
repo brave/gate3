@@ -6,8 +6,9 @@ import fakeredis
 import pytest
 
 from app.api.common.models import Chain
+from app.api.tokens.contants import SPL_TOKEN_2022_PROGRAM_ID
 from app.api.tokens.manager import TokenManager
-from app.api.tokens.models import TokenInfo, TokenSource
+from app.api.tokens.models import TokenInfo, TokenSource, TokenType
 
 
 class AsyncFakeRedis(fakeredis.FakeAsyncRedis):
@@ -23,8 +24,37 @@ class AsyncFakeRedis(fakeredis.FakeAsyncRedis):
             }
         return result
 
+    def pipeline(self):
+        return MockPipeline(self)
+
     def ft(self, index_name):
         return AsyncMock()
+
+
+class MockPipeline:
+    def __init__(self, redis_client):
+        self.redis_client = redis_client
+        self.commands = []
+
+    def hgetall(self, key):
+        self.commands.append(("hgetall", key))
+        return self
+
+    def hset(self, key, mapping=None):
+        self.commands.append(("hset", key, mapping))
+        return self
+
+    async def execute(self):
+        results = []
+        for command in self.commands:
+            if command[0] == "hgetall":
+                result = await self.redis_client.hgetall(command[1])
+                results.append(result)
+            elif command[0] == "hset":
+                # Actually store the data in the mock Redis client
+                await self.redis_client.hset(command[1], mapping=command[2])
+                results.append(None)
+        return results
 
 
 @dataclass
@@ -61,6 +91,7 @@ def sample_token_info():
         decimals=18,
         logo="https://example.com/logo.png",
         sources=[TokenSource.COINGECKO],
+        token_type=TokenType.ERC20,
     )
 
 
@@ -109,6 +140,7 @@ async def test_add_bitcoin(cache):
         decimals=8,
         logo="https://example.com/btc.png",
         sources=[TokenSource.COINGECKO],
+        token_type=TokenType.UNKNOWN,
     )
 
     # Add the token
@@ -150,6 +182,7 @@ async def test_search_functionality(cache, sample_token_info):
         decimals="18",
         logo="https://example.com/logo.png",
         sources=json.dumps([TokenSource.COINGECKO.value]),
+        token_type=TokenType.ERC20.value,
     )
 
     mock_result = MockSearchResult(docs=[mock_doc], total=1)
@@ -168,6 +201,68 @@ async def test_search_functionality(cache, sample_token_info):
         assert result.results[0].symbol == "TEST"
         assert result.results[0].name == "Test Token"
         assert result.total == 1
+
+
+@pytest.mark.asyncio
+async def test_list_tokens_functionality(cache, sample_token_info):
+    # Add the token first
+    await TokenManager.add(sample_token_info)
+
+    # List tokens for Ethereum
+    result = await TokenManager.list_tokens(
+        Chain.ETHEREUM.coin, Chain.ETHEREUM.chain_id
+    )
+
+    # Verify the list found the token
+    assert len(result) == 1
+    assert result[0].symbol == "TEST"
+    assert result[0].name == "Test Token"
+    assert result[0].coin == Chain.ETHEREUM.coin
+    assert result[0].chain_id == Chain.ETHEREUM.chain_id
+
+    # List tokens for non-existent chain
+    result = await TokenManager.list_tokens(Chain.ETHEREUM.coin, "0x999")
+    assert len(result) == 0
+
+
+@pytest.mark.asyncio
+async def test_list_tokens_without_chain_id(cache, sample_token_info):
+    # Add the token first
+    await TokenManager.add(sample_token_info)
+
+    # Create another token for a different chain to test cross-chain listing
+    solana_token = TokenInfo(
+        coin=Chain.SOLANA.coin,
+        chain_id=Chain.SOLANA.chain_id,
+        address="So11111111111111111111111111111111111111112",
+        name="Wrapped SOL",
+        symbol="WSOL",
+        decimals=9,
+        logo="https://example.com/wsol-logo.png",
+        sources=[TokenSource.JUPITER_VERIFIED],
+        token_type=TokenType.SPL_TOKEN,
+    )
+    await TokenManager.add(solana_token)
+
+    # List tokens for Ethereum coin only (should return only Ethereum tokens)
+    result = await TokenManager.list_tokens(Chain.ETHEREUM.coin, None)
+
+    # Should find only the Ethereum token
+    assert len(result) == 1
+    assert result[0].symbol == "TEST"
+    assert result[0].name == "Test Token"
+    assert result[0].coin == Chain.ETHEREUM.coin
+    assert result[0].chain_id == Chain.ETHEREUM.chain_id
+
+    # List tokens for Solana coin only (should return only Solana tokens)
+    result = await TokenManager.list_tokens(Chain.SOLANA.coin, None)
+
+    # Should find only the Solana token
+    assert len(result) == 1
+    assert result[0].symbol == "WSOL"
+    assert result[0].name == "Wrapped SOL"
+    assert result[0].coin == Chain.SOLANA.coin
+    assert result[0].chain_id == Chain.SOLANA.chain_id
 
 
 @pytest.mark.asyncio
@@ -244,6 +339,7 @@ async def test_refresh_with_jupiter_data(cache):
             "symbol": "SOL",
             "decimals": 9,
             "icon": "https://example.com/sol.png",
+            "tokenProgram": SPL_TOKEN_2022_PROGRAM_ID,
         }
     ]
 
@@ -267,6 +363,7 @@ async def test_refresh_with_jupiter_data(cache):
         assert result.name == "Wrapped SOL"
         assert result.symbol == "SOL"
         assert result.decimals == 9
+        assert result.token_type == TokenType.SPL_TOKEN_2022
         assert TokenSource.JUPITER_VERIFIED in result.sources
 
 
@@ -283,6 +380,7 @@ async def test_multiple_tokens(cache):
             decimals=18,
             logo=f"https://example.com/token{i}.png",
             sources=[TokenSource.COINGECKO],
+            token_type=TokenType.ERC20,
         )
         for i in range(1, 4)  # 3 tokens
     ]
