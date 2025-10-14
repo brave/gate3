@@ -65,13 +65,19 @@ def _get_spam_score_for_solana_collection(collection_name: str | None) -> int:
     )
 
 
-def _token_type_to_simplehash(token_type: AlchemyTokenType) -> SimpleHashTokenType:
+def _token_type_to_simplehash(
+    token_type: AlchemyTokenType | str,
+) -> SimpleHashTokenType:
     if token_type == AlchemyTokenType.ERC721:
         return SimpleHashTokenType.ERC721
     elif token_type == AlchemyTokenType.ERC1155:
         return SimpleHashTokenType.ERC1155
 
-    raise ValueError(f"Unsupported token type: {token_type}")
+    # TODO: Add support for these missing token types:
+    #  - SimpleHashTokenType.NON_FUNGIBLE_EDITION
+    #  - SimpleHashTokenType.PROGRAMMABLE_NON_FUNGIBLE
+
+    return SimpleHashTokenType.UNKNOWN
 
 
 def _transform_alchemy_to_simplehash(

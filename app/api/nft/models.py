@@ -119,7 +119,7 @@ class AlchemyRaw(BaseModel):
 class AlchemyNFT(BaseModel):
     contract: AlchemyContract
     token_id: str
-    token_type: AlchemyTokenType
+    token_type: AlchemyTokenType | str
     name: str | None = None
     description: str | None = None
     image: AlchemyImage | None = None
@@ -140,6 +140,9 @@ class SimpleHashTokenType(str, Enum):
     ERC721 = "ERC721"
     ERC1155 = "ERC1155"
     NON_FUNGIBLE = "NonFungible"
+    NON_FUNGIBLE_EDITION = "NonFungibleEdition"
+    PROGRAMMABLE_NON_FUNGIBLE = "ProgrammableNonFungible"
+    UNKNOWN = "UNKNOWN"
 
 
 class SimpleHashContract(BaseModel):
