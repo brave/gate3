@@ -278,7 +278,7 @@ class SolanaAssetGrouping(BaseModel):
 class SolanaAsset(BaseModel):
     interface: str
     id: str
-    content: SolanaAssetContent
+    content: SolanaAssetContent | None = None
     grouping: list[SolanaAssetGrouping] = Field(default_factory=list)
     mutable: bool
     burnt: bool
