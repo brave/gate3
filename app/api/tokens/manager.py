@@ -256,9 +256,12 @@ class TokenManager:
 
     @staticmethod
     def _parse_token_from_redis_data(key: str, token_data: dict[str, str]) -> TokenInfo:
-        # Parse the key to extract coin, chain_id, and address
+        # Parse the key to extract coin and chain_id (but not address, since it's lowercased in the key)
         key_parts = key.decode("utf-8") if isinstance(key, bytes) else key
-        _, coin_str, chain_id, address = key_parts.split(":", 3)
+        _, coin_str, chain_id, _ = key_parts.split(":", 3)
+
+        # Read the address from token_data to preserve case sensitivity
+        address = token_data.get("address")
 
         return TokenInfo(
             coin=Coin(coin_str.upper()),
