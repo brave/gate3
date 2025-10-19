@@ -1,3 +1,5 @@
+import os
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.api.oauth.config import OAuthConfig
@@ -26,7 +28,7 @@ class Settings(BaseSettings):
     PROMETHEUS_PORT: int = 8090
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=os.getenv("ENV_FILE", ".env"),
         env_nested_delimiter="__",
     )
 
