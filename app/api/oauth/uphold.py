@@ -37,7 +37,7 @@ async def auth(environment: Environment, request: Request) -> RedirectResponse:
 async def token(environment: Environment, request: Request) -> JSONResponse:
     """
     Forward OAuth token exchange request to Uphold.
-    Sets Basic Authorization header forwards the request.
+    Sets Basic Authorization header and forwards the request.
 
     Example: POST /api/oauth/uphold/production/token
     """
