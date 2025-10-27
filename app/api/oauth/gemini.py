@@ -26,7 +26,9 @@ async def auth(environment: Environment, request: Request) -> RedirectResponse:
 
     # Construct redirect URL with query parameters
     redirect_url = str(
-        URL(f"{env_config.oauth_url}/auth").include_query_params(**query_params)
+        URL(f"{str(env_config.oauth_url).rstrip('/')}/auth").include_query_params(
+            **query_params
+        )
     )
 
     return RedirectResponse(url=redirect_url, status_code=302)
@@ -43,7 +45,7 @@ async def token(environment: Environment, request: Request) -> JSONResponse:
     config = settings.oauth.gemini
     env_config = config.get_env_config(environment.value)
 
-    url = f"{env_config.oauth_url}/auth/token"
+    url = f"{str(env_config.oauth_url).rstrip('/')}/auth/token"
 
     # Get original request body and merge with credentials
     body_dict = await request.json()

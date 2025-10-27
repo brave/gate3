@@ -34,9 +34,8 @@ async def auth(environment: Environment, request: Request) -> RedirectResponse:
     )
 
     # Build the upstream auth redirect URL with modified returnUrl
-    redirect_url = URL(f"{env_config.oauth_url}/account/login").include_query_params(
-        returnUrl=str(return_url)
-    )
+    base_url = f"{str(env_config.oauth_url).rstrip('/')}/account/login"
+    redirect_url = URL(base_url).include_query_params(returnUrl=str(return_url))
 
     return RedirectResponse(url=str(redirect_url), status_code=302)
 
@@ -52,7 +51,7 @@ async def token(environment: Environment, request: Request) -> JSONResponse:
     config = settings.oauth.zebpay
     env_config = config.get_env_config(environment.value)
 
-    url = f"{env_config.api_url}/connect/token"
+    url = f"{str(env_config.api_url).rstrip('/')}/connect/token"
     body = await request.body()
     query_params = dict(request.query_params)
 

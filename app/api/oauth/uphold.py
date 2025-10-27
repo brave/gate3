@@ -26,7 +26,7 @@ async def auth(environment: Environment, request: Request) -> RedirectResponse:
     # Construct redirect URL with client_id in path
     redirect_url = str(
         URL(
-            f"{env_config.oauth_url}/authorize/{env_config.client_id}"
+            f"{str(env_config.oauth_url).rstrip('/')}/authorize/{env_config.client_id}"
         ).include_query_params(**query_params)
     )
 
@@ -44,7 +44,7 @@ async def token(environment: Environment, request: Request) -> JSONResponse:
     config = settings.oauth.uphold
     env_config = config.get_env_config(environment.value)
 
-    url = f"{env_config.api_url}/oauth2/token"
+    url = f"{str(env_config.api_url).rstrip('/')}/oauth2/token"
     body = await request.body()
 
     async with httpx.AsyncClient() as client:

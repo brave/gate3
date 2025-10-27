@@ -26,9 +26,9 @@ async def auth(environment: Environment, request: Request) -> RedirectResponse:
 
     # Construct redirect URL with query parameters
     redirect_url = str(
-        URL(f"{env_config.oauth_url}/ex/OAuth/authorize").include_query_params(
-            **query_params
-        )
+        URL(
+            f"{str(env_config.oauth_url).rstrip('/')}/ex/OAuth/authorize"
+        ).include_query_params(**query_params)
     )
 
     return RedirectResponse(url=redirect_url, status_code=302)
@@ -45,7 +45,7 @@ async def token(environment: Environment, request: Request) -> JSONResponse:
     config = settings.oauth.bitflyer
     env_config = config.get_env_config(environment.value)
 
-    url = f"{env_config.oauth_url}/api/link/v1/token"
+    url = f"{str(env_config.oauth_url).rstrip('/')}/api/link/v1/token"
 
     body = await request.json()
     body["client_id"] = env_config.client_id
