@@ -14,6 +14,7 @@ from app.api.nft.routes import (
     simplehash_router as simplehash_nfts_router,
 )
 from app.api.pricing.routes import router as pricing_router
+from app.api.swap.routes import router as swap_router
 from app.api.tokens.routes import router as tokens_router
 from app.config import settings
 from app.core.cache import Cache
@@ -59,6 +60,7 @@ app.include_router(base_router)
 app.include_router(pricing_router)
 app.include_router(nfts_router)
 app.include_router(tokens_router)
+app.include_router(swap_router)
 
 # SimpleHash API adapter
 app.include_router(simplehash_nfts_router)
