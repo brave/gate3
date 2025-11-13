@@ -8,7 +8,7 @@ license = {text = "n"}
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
-    "fastapi[standard] (>=0.119.0,<0.120.0)",
+    "fastapi[standard] (>=0.121.0,<0.122.0)",
     "pydantic-settings (>=2.9.1,<3.0.0)",
     "redis[hiredis] (>=6.2.0,<7.0.0)",
     "orjson (>=3.10.15,<4.0.0)",
