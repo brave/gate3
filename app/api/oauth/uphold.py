@@ -46,6 +46,9 @@ async def token(environment: Environment, request: Request) -> JSONResponse:
 
     url = f"{str(env_config.api_url).rstrip('/')}/oauth2/token"
     body = await request.body()
+    headers = {}
+    if content_type := request.headers.get("content-type"):
+        headers["Content-Type"] = content_type
 
     async with httpx.AsyncClient() as client:
         try:
@@ -53,6 +56,7 @@ async def token(environment: Environment, request: Request) -> JSONResponse:
                 method=request.method,
                 url=url,
                 content=body,
+                headers=headers,
                 auth=(env_config.client_id, env_config.client_secret),
                 timeout=30.0,
             )
