@@ -9,29 +9,29 @@ class EnvironmentConfig(BaseModel):
     client_secret: str
 
 
-class GeminiConfig(BaseModel):
+class ProviderConfigBase(BaseModel):
+    """Base class for OAuth provider configurations."""
+
+    def get_env_config(self, environment: str):
+        """Get environment-specific config."""
+        return self.sandbox if environment == "sandbox" else self.production
+
+
+class GeminiConfig(ProviderConfigBase):
     """Gemini OAuth configuration."""
 
     sandbox: EnvironmentConfig
     production: EnvironmentConfig
 
-    def get_env_config(self, environment: str) -> EnvironmentConfig:
-        """Get environment-specific config."""
-        return self.sandbox if environment == "sandbox" else self.production
 
-
-class BitflyerConfig(BaseModel):
+class BitflyerConfig(ProviderConfigBase):
     """Bitflyer OAuth configuration."""
 
     sandbox: EnvironmentConfig
     production: EnvironmentConfig
 
-    def get_env_config(self, environment: str) -> EnvironmentConfig:
-        """Get environment-specific config."""
-        return self.sandbox if environment == "sandbox" else self.production
 
-
-class UpholdConfig(BaseModel):
+class UpholdConfig(ProviderConfigBase):
     """Uphold OAuth configuration."""
 
     class Config(EnvironmentConfig):
@@ -40,12 +40,8 @@ class UpholdConfig(BaseModel):
     sandbox: Config
     production: Config
 
-    def get_env_config(self, environment: str) -> Config:
-        """Get environment-specific config."""
-        return self.sandbox if environment == "sandbox" else self.production
 
-
-class ZebpayConfig(BaseModel):
+class ZebpayConfig(ProviderConfigBase):
     """Zebpay OAuth configuration."""
 
     class Config(EnvironmentConfig):
@@ -53,10 +49,6 @@ class ZebpayConfig(BaseModel):
 
     sandbox: Config
     production: Config
-
-    def get_env_config(self, environment: str) -> Config:
-        """Get environment-specific config."""
-        return self.sandbox if environment == "sandbox" else self.production
 
 
 class OAuthConfig(BaseModel):
