@@ -74,10 +74,6 @@ async def token(environment: Environment, request: Request) -> JSONResponse:
                 status_code=response.status_code,
             )
         except httpx.RequestError as e:
-            raise HTTPException(
-                status_code=502, detail=f"Zebpay request failed: {e}"
-            ) from e
+            raise HTTPException(status_code=502, detail="Zebpay request failed") from e
         except Exception as e:
-            raise HTTPException(
-                status_code=500, detail=f"Zebpay proxy error: {e}"
-            ) from e
+            raise HTTPException(status_code=500, detail="Zebpay proxy error") from e

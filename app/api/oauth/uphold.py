@@ -66,10 +66,6 @@ async def token(environment: Environment, request: Request) -> JSONResponse:
                 status_code=response.status_code,
             )
         except httpx.RequestError as e:
-            raise HTTPException(
-                status_code=502, detail=f"Uphold request failed: {e}"
-            ) from e
+            raise HTTPException(status_code=502, detail="Uphold request failed") from e
         except Exception as e:
-            raise HTTPException(
-                status_code=500, detail=f"Uphold proxy error: {e}"
-            ) from e
+            raise HTTPException(status_code=500, detail="Uphold proxy error") from e

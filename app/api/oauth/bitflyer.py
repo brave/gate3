@@ -67,9 +67,7 @@ async def token(environment: Environment, request: Request) -> JSONResponse:
             )
         except httpx.RequestError as e:
             raise HTTPException(
-                status_code=502, detail=f"Bitflyer request failed: {e}"
+                status_code=502, detail="Bitflyer request failed"
             ) from e
         except Exception as e:
-            raise HTTPException(
-                status_code=500, detail=f"Bitflyer proxy error: {e}"
-            ) from e
+            raise HTTPException(status_code=500, detail="Bitflyer proxy error") from e

@@ -69,10 +69,6 @@ async def token(environment: Environment, request: Request) -> JSONResponse:
                 status_code=response.status_code,
             )
         except httpx.RequestError as e:
-            raise HTTPException(
-                status_code=502, detail=f"Gemini request failed: {e}"
-            ) from e
+            raise HTTPException(status_code=502, detail="Gemini request failed") from e
         except Exception as e:
-            raise HTTPException(
-                status_code=500, detail=f"Gemini proxy error: {e}"
-            ) from e
+            raise HTTPException(status_code=500, detail="Gemini proxy error") from e
