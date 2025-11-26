@@ -1,6 +1,8 @@
 import asyncio
+import logging
 
 import httpx
+from pydantic import ValidationError
 
 from app.api.common.models import Chain, Coin
 from app.config import settings
@@ -16,6 +18,8 @@ from .models import (
     TokenPriceResponse,
 )
 from .utils import chunk_sequence
+
+logger = logging.getLogger(__name__)
 
 
 class CoinGeckoClient:
@@ -248,11 +252,18 @@ class CoinGeckoClient:
                 elif item["chain_identifier"]:
                     chain_id = hex(item["chain_identifier"])
 
-                platform_map[item["id"]] = CoingeckoPlatform(
-                    id=item["id"],
-                    chain_id=chain_id,
-                    native_token_id=item["native_coin_id"],
-                )
+                # Skip entries that fail Pydantic validation (e.g., null native_token_id)
+                try:
+                    platform_map[item["id"]] = CoingeckoPlatform(
+                        id=item["id"],
+                        chain_id=chain_id,
+                        native_token_id=item["native_coin_id"],
+                    )
+                except ValidationError as e:
+                    logger.error(
+                        f"Skipping item {item.get('id')} in platform map due to validation error: {e}"
+                    )
+                    continue
 
             # Cache in Redis
             await PlatformMapCache.set(platform_map)
