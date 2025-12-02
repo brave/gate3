@@ -155,7 +155,7 @@ def test_get_prices_success(
         coin=Chain.SOLANA.coin,
         chain_id=Chain.SOLANA.chain_id,
         address="5rmx75XP4VkWcxYsmcLSRbbwzN8g2Cy4YDgBabvboop",
-        vs_currency=VsCurrency.EUR,
+        vs_currency=vs_currency,
     )
 
     # Setup mock response
@@ -180,7 +180,7 @@ def test_get_prices_success(
         coin=Chain.SOLANA.coin,
         chain_id=Chain.SOLANA.chain_id,
         address="5rmx75XP4VkWcxYsmcLSRbbwzN8g2Cy4YDgBabvboop",
-        vs_currency=VsCurrency.EUR,
+        vs_currency=vs_currency,
         price=0.0000283013301,
         cache_status=CacheStatus.MISS,
         source=PriceSource.JUPITER,
@@ -189,10 +189,10 @@ def test_get_prices_success(
         BatchTokenPriceRequests(
             requests=[request_eth, request_btc], vs_currency=vs_currency
         ),
-        BatchTokenPriceRequests(requests=[request_sol], vs_currency=VsCurrency.EUR),
+        BatchTokenPriceRequests(requests=[request_sol], vs_currency=vs_currency),
     )
     mock_jupiter_client.filter.return_value = (
-        BatchTokenPriceRequests(requests=[request_sol], vs_currency=VsCurrency.EUR),
+        BatchTokenPriceRequests(requests=[request_sol], vs_currency=vs_currency),
         BatchTokenPriceRequests.from_vs_currency(vs_currency),
     )
     mock_coingecko_client.get_prices.return_value = [
@@ -241,7 +241,7 @@ def test_get_prices_success(
     batch = kwargs["batch"]
     assert len(batch.requests) == 1
     assert batch.requests[0] == request_sol
-    assert batch.vs_currency == VsCurrency.EUR
+    assert batch.vs_currency == vs_currency
 
 
 def test_get_prices_empty_list(client, mock_coingecko_client, mock_jupiter_client):
