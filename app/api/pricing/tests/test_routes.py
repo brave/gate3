@@ -1,8 +1,6 @@
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from fastapi.testclient import TestClient
-
 from app.api.common.models import Chain
 from app.api.pricing.models import (
     BatchTokenPriceRequests,
@@ -14,6 +12,7 @@ from app.api.pricing.models import (
     VsCurrency,
 )
 from app.main import app
+from fastapi.testclient import TestClient
 
 
 @pytest.fixture
@@ -327,3 +326,32 @@ def test_get_prices_cached_response(client):
         mock_cache_get.assert_called_once()
         mock_platform_cache_get.assert_called_once()
         mock_coin_cache_get.assert_called_once()
+
+
+def test_get_prices_invalid_currency(client):
+    """Test that invalid currency values are rejected by Pydantic validation"""
+    # Make request with invalid currency code
+    response = client.post(
+        "/api/pricing/v1/getPrices",
+        params={"vs_currency": "INVALID"},
+        json=[
+            {
+                "coin": Chain.BITCOIN.coin.value,
+                "chain_id": Chain.BITCOIN.chain_id,
+            }
+        ],
+    )
+
+    # FastAPI should return 422 Unprocessable Entity for invalid enum value
+    assert response.status_code == 422
+    response_data = response.json()
+    assert "detail" in response_data
+    assert isinstance(response_data["detail"], list)
+    assert len(response_data["detail"]) > 0
+
+    # Check the error detail structure
+    error_detail = response_data["detail"][0]
+    assert error_detail["type"] == "enum"
+    assert error_detail["loc"] == ["query", "vs_currency"]
+    assert error_detail["input"] == "INVALID"
+    assert "Input should be" in error_detail["msg"]
