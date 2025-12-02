@@ -1,6 +1,8 @@
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from fastapi.testclient import TestClient
+
 from app.api.common.models import Chain
 from app.api.pricing.models import (
     BatchTokenPriceRequests,
@@ -12,7 +14,6 @@ from app.api.pricing.models import (
     VsCurrency,
 )
 from app.main import app
-from fastapi.testclient import TestClient
 
 
 @pytest.fixture

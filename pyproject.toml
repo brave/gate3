@@ -38,3 +38,6 @@ pytest-cov = "6.3.0"
 [tool.pytest.ini_options]
 pythonpath = ["."]
 addopts = "-rvA --cov=app --cov-report=term-missing"
+
+[tool.ruff.lint.isort]
+known-first-party = ["app"]
