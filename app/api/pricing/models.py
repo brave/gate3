@@ -14,6 +14,32 @@ from app.api.common.models import Chain, Coin
 class VsCurrency(str, Enum):
     USD = "USD"
     EUR = "EUR"
+    GBP = "GBP"
+    JPY = "JPY"
+    CNY = "CNY"
+    AUD = "AUD"
+    CAD = "CAD"
+    CHF = "CHF"
+    INR = "INR"
+    MXN = "MXN"
+    BRL = "BRL"
+
+    AED = "AED"
+    ARS = "ARS"
+    DKK = "DKK"
+    HKD = "HKD"
+    ILS = "ILS"
+    KRW = "KRW"
+    NOK = "NOK"
+    NZD = "NZD"
+    PLN = "PLN"
+    RUB = "RUB"
+    SAR = "SAR"
+    SEK = "SEK"
+    SGD = "SGD"
+    THB = "THB"
+    TRY = "TRY"
+    ZAR = "ZAR"
 
 
 class CacheStatus(str, Enum):
