@@ -6,9 +6,9 @@ from redis.commands.search.field import TextField
 from redis.commands.search.index_definition import IndexDefinition
 from redis.commands.search.query import Query
 
-from app.api.common.models import Chain, Coin
+from app.api.common.models import Chain, Coin, TokenInfo, TokenSource, TokenType
 from app.api.tokens.contants import SPL_TOKEN_2022_PROGRAM_ID, SPL_TOKEN_PROGRAM_ID
-from app.api.tokens.models import TokenInfo, TokenSearchResponse, TokenSource, TokenType
+from app.api.tokens.models import TokenSearchResponse
 from app.core.cache import Cache
 
 
@@ -64,6 +64,9 @@ class TokenManager:
             # Ingest Jupiter verified tokens
             await cls.ingest_from_jupiter("verified", pipe)
 
+            # Ingest NEAR Intents tokens
+            await cls.ingest_from_near_intents(pipe)
+
             # Execute all operations atomically
             await pipe.execute()
 
@@ -98,66 +101,59 @@ class TokenManager:
         response = requests.get(url, timeout=10)
         json_data = response.json()
 
-        try:
-            async with Cache.get_client() as redis_client:
-                # Process each token in the JSON
-                for raw_chain_id, tokens in json_data.items():
-                    for address, raw_token_info in tokens.items():
-                        chain = cls._chain_lookup.get(raw_chain_id)
-                        if not chain:
-                            continue
+        for raw_chain_id, tokens in json_data.items():
+            for address, raw_token_info in tokens.items():
+                chain = cls._chain_lookup.get(raw_chain_id)
+                if not chain:
+                    continue
 
-                        decimals = raw_token_info.get("decimals")
-                        if not decimals:
-                            continue
+                decimals = raw_token_info.get("decimals")
+                if not decimals:
+                    continue
 
-                        token_info = TokenInfo(
-                            coin=chain.coin,
-                            chain_id=chain.chain_id,
-                            address=address,
-                            name=raw_token_info["name"],
-                            symbol=raw_token_info["symbol"],
-                            decimals=decimals,
-                            logo=raw_token_info["logo"],
-                            sources=[],  # We'll add sources later
-                            token_type=(
-                                TokenType.ERC20
-                                if chain.coin == Coin.ETH
-                                else (
-                                    TokenType.SPL_TOKEN_2022
-                                    if chain.coin == Coin.SOL
-                                    and raw_token_info.get("token2022", False)
-                                    # FIXME(onyb): if token2022 is not present,
-                                    # we should not assume it is a SPL token.
-                                    #
-                                    # Currently, all SOL tokens are assumed to
-                                    # be SPL tokens.
-                                    else (
-                                        TokenType.SPL_TOKEN
-                                        if chain.coin == Coin.SOL
-                                        else TokenType.UNKNOWN
-                                    )
-                                )
-                            ),
+                token_info = TokenInfo(
+                    coin=chain.coin,
+                    chain_id=chain.chain_id,
+                    address=address,
+                    name=raw_token_info["name"],
+                    symbol=raw_token_info["symbol"],
+                    decimals=decimals,
+                    logo=raw_token_info["logo"],
+                    sources=[],  # We'll add sources later
+                    token_type=(
+                        TokenType.ERC20
+                        if chain.coin == Coin.ETH
+                        else (
+                            TokenType.SPL_TOKEN_2022
+                            if chain.coin == Coin.SOL
+                            and raw_token_info.get("token2022", False)
+                            # FIXME(onyb): if token2022 is not present,
+                            # we should not assume it is a SPL token.
+                            #
+                            # Currently, all SOL tokens are assumed to
+                            # be SPL tokens.
+                            else (
+                                TokenType.SPL_TOKEN
+                                if chain.coin == Coin.SOL
+                                else TokenType.UNKNOWN
+                            )
                         )
+                    ),
+                )
 
-                        key = cls._build_key(chain.coin, chain.chain_id, address)
-                        token_data = cls._prepare_token_data(token_info)
+                key = cls._build_key(chain.coin, chain.chain_id, address)
+                token_data = cls._prepare_token_data(token_info)
 
-                        # Get existing data for comparison
-                        existing = await redis_client.hgetall(key)
-                        sources = (
-                            set(json.loads(existing["sources"])) if existing else set()
-                        )
-                        sources.add(TokenSource.COINGECKO)
-                        token_data["sources"] = json.dumps(sorted(list(sources)))
+                # Get existing data for comparison
+                async with Cache.get_client() as redis_client:
+                    existing = await redis_client.hgetall(key)
 
-                        if existing != token_data:
-                            pipe.hset(key, mapping=token_data)
+                sources = set(json.loads(existing["sources"])) if existing else set()
+                sources.add(TokenSource.COINGECKO)
+                token_data["sources"] = json.dumps(sorted(list(sources)))
 
-        except Exception as e:
-            print(f"Error during ingestion: {e}")
-            raise
+                if existing != token_data:
+                    pipe.hset(key, mapping=token_data)
 
     @classmethod
     async def ingest_from_jupiter(cls, tag: Literal["lst", "verified"], pipe) -> None:
@@ -168,44 +164,80 @@ class TokenManager:
         response = requests.get(url, timeout=10)
         json_data = response.json()
 
-        async with Cache.get_client() as redis_client:
-            for token in json_data:
-                token_info = TokenInfo(
-                    coin=Chain.SOLANA.coin,
-                    chain_id=Chain.SOLANA.chain_id,
-                    address=token["id"],
-                    name=token["name"],
-                    symbol=token["symbol"],
-                    decimals=token["decimals"],
-                    logo=token.get("icon", ""),
-                    sources=[],  # We'll add sources later
-                    token_type=(
-                        TokenType.SPL_TOKEN
-                        if (program := token["tokenProgram"]) == SPL_TOKEN_PROGRAM_ID
-                        else (
-                            TokenType.SPL_TOKEN_2022
-                            if program == SPL_TOKEN_2022_PROGRAM_ID
-                            else TokenType.UNKNOWN
-                        )
-                    ),
-                )
+        for token in json_data:
+            token_info = TokenInfo(
+                coin=Chain.SOLANA.coin,
+                chain_id=Chain.SOLANA.chain_id,
+                address=token["id"],
+                name=token["name"],
+                symbol=token["symbol"],
+                decimals=token["decimals"],
+                logo=token.get("icon", ""),
+                sources=[],  # We'll add sources later
+                token_type=(
+                    TokenType.SPL_TOKEN
+                    if (program := token["tokenProgram"]) == SPL_TOKEN_PROGRAM_ID
+                    else (
+                        TokenType.SPL_TOKEN_2022
+                        if program == SPL_TOKEN_2022_PROGRAM_ID
+                        else TokenType.UNKNOWN
+                    )
+                ),
+            )
 
-                key = cls._build_key(
-                    Chain.SOLANA.coin, Chain.SOLANA.chain_id, token["id"]
-                )
-                token_data = cls._prepare_token_data(token_info)
+            key = cls._build_key(Chain.SOLANA.coin, Chain.SOLANA.chain_id, token["id"])
+            token_data = cls._prepare_token_data(token_info)
 
+            async with Cache.get_client() as redis_client:
                 existing = await redis_client.hgetall(key)
-                sources = set(json.loads(existing["sources"])) if existing else set()
-                sources.add(
-                    TokenSource.JUPITER_LST
-                    if tag == "lst"
-                    else TokenSource.JUPITER_VERIFIED
-                )
-                token_data["sources"] = json.dumps(sorted(list(sources)))
 
-                if existing != token_data:
-                    pipe.hset(key, mapping=token_data)
+            sources = set(json.loads(existing["sources"])) if existing else set()
+            sources.add(
+                TokenSource.JUPITER_LST
+                if tag == "lst"
+                else TokenSource.JUPITER_VERIFIED
+            )
+            token_data["sources"] = json.dumps(sorted(list(sources)))
+
+            if existing != token_data:
+                pipe.hset(key, mapping=token_data)
+
+    @classmethod
+    async def ingest_from_near_intents(cls, pipe) -> None:
+        # Create index if it doesn't exist
+        await cls.create_index()
+
+        # Import here to avoid circular imports
+        from app.api.swap.providers.near_intents.client import NearIntentsClient
+
+        # Get NEAR Intents client with token manager
+        near_intents_client = NearIntentsClient(token_manager=cls)
+
+        # Fetch supported tokens from NEAR Intents
+        tokens = await near_intents_client.get_supported_tokens()
+
+        # Process each token
+        for token_info in tokens:
+            key = cls._build_key(
+                token_info.coin,
+                token_info.chain_id,
+                token_info.address,
+            )
+            async with Cache.get_client() as redis_client:
+                existing = await redis_client.hgetall(key)
+
+            sources = set(json.loads(existing["sources"])) if existing else set()
+            sources.add(TokenSource.NEAR_INTENTS)
+            token_info.sources = sorted(list(sources))
+            token_data = cls._prepare_token_data(token_info)
+
+            if existing:
+                existing["near_intents_asset_id"] = token_data["near_intents_asset_id"]
+                existing["sources"] = token_data["sources"]
+
+                pipe.hset(key, mapping=existing)
+            else:
+                pipe.hset(key, mapping=token_data)
 
     @classmethod
     async def get(
@@ -273,6 +305,7 @@ class TokenManager:
             logo=token_data.get("logo") or None,
             sources=json.loads(token_data.get("sources", "[]")),
             token_type=TokenType(token_data["token_type"]),
+            near_intents_asset_id=token_data.get("near_intents_asset_id") or None,
         )
 
     @classmethod
@@ -306,6 +339,7 @@ class TokenManager:
                 logo=doc.logo,
                 sources=json.loads(doc.sources),
                 token_type=TokenType(doc.token_type),
+                near_intents_asset_id=doc.near_intents_asset_id or None,
             )
 
             results.append(token_info)
