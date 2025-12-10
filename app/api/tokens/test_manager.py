@@ -5,10 +5,9 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 import fakeredis
 import pytest
 
-from app.api.common.models import Chain
+from app.api.common.models import Chain, TokenInfo, TokenSource, TokenType
 from app.api.tokens.contants import SPL_TOKEN_2022_PROGRAM_ID
 from app.api.tokens.manager import TokenManager
-from app.api.tokens.models import TokenInfo, TokenSource, TokenType
 
 
 class AsyncFakeRedis(fakeredis.FakeAsyncRedis):
@@ -183,6 +182,7 @@ async def test_search_functionality(cache, sample_token_info):
         logo="https://example.com/logo.png",
         sources=json.dumps([TokenSource.COINGECKO.value]),
         token_type=TokenType.ERC20.value,
+        near_intents_asset_id=None,
     )
 
     mock_result = MockSearchResult(docs=[mock_doc], total=1)
@@ -309,6 +309,9 @@ async def test_refresh_with_coingecko_data(cache):
         patch.object(TokenManager, "create_index"),
         patch("app.api.tokens.manager.requests.get", return_value=mock_response),
         patch.object(TokenManager, "ingest_from_jupiter"),
+        patch.object(
+            TokenManager, "ingest_from_near_intents"
+        ),  # Mock to avoid external API calls
     ):
         # Refresh tokens (which includes Coingecko ingestion)
         await TokenManager.refresh()
@@ -347,6 +350,9 @@ async def test_refresh_with_jupiter_data(cache):
         patch.object(TokenManager, "create_index"),
         patch("app.api.tokens.manager.requests.get", return_value=mock_response),
         patch.object(TokenManager, "ingest_from_coingecko"),
+        patch.object(
+            TokenManager, "ingest_from_near_intents"
+        ),  # Mock to avoid external API calls
     ):
         # Refresh tokens (which includes Jupiter ingestion)
         await TokenManager.refresh()
