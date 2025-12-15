@@ -1,6 +1,7 @@
 import json
 
 import httpx
+import pytest
 import respx
 from fastapi.testclient import TestClient
 
@@ -15,16 +16,20 @@ client = TestClient(app)
 # ========================================
 
 
-def test_gemini_auth_redirect():
-    """Test Gemini sandbox auth endpoint redirects correctly."""
+@pytest.mark.parametrize(
+    "input_redirect_uri",
+    ["rewards://gemini/authorization", "https://example.com/other"],
+)
+def test_gemini_auth_redirect(input_redirect_uri):
+    """Test Gemini auth always uses the allowed redirect_uri."""
     params = {
         "scope": (
             "balances:read,history:read,crypto:send,account:read,"
             "payments:create,payments:send,"
         ),
-        "redirect_uri": "rewards://gemini/authorization",
         "state": "test_state_123",
         "response_type": "code",
+        "redirect_uri": input_redirect_uri,
     }
 
     response = client.get(
@@ -35,11 +40,13 @@ def test_gemini_auth_redirect():
 
     assert response.status_code == 302
 
-    # Build expected params: sent params + client_id injected
-    expected_params = params.copy()
-    expected_params["client_id"] = "test_gemini_sandbox_client_id"
+    # redirect_uri is always set to the allowed value
+    expected_params = {
+        **params,
+        "client_id": "test_gemini_sandbox_client_id",
+        "redirect_uri": "rewards://gemini/authorization",
+    }
 
-    # Assert redirect URL matches expected
     assert_redirect(
         actual_redirect_url=response.headers["location"],
         expected_base_url="https://oauth.sandbox.gemini.test/auth",

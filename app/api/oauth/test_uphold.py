@@ -1,6 +1,7 @@
 import base64
 
 import httpx
+import pytest
 import respx
 from fastapi.testclient import TestClient
 
@@ -15,12 +16,17 @@ client = TestClient(app)
 # ========================================
 
 
-def test_uphold_auth_redirect():
-    """Test Uphold sandbox auth endpoint redirects correctly."""
+@pytest.mark.parametrize(
+    "input_redirect_uri",
+    ["rewards://uphold/authorization", "https://example.com/other"],
+)
+def test_uphold_auth_redirect(input_redirect_uri):
+    """Test Uphold auth always uses the allowed redirect_uri."""
     params = {
         "response_type": "code",
         "scope": "accounts:read",
         "state": "uphold_state_789",
+        "redirect_uri": input_redirect_uri,
     }
 
     response = client.get(
@@ -31,12 +37,12 @@ def test_uphold_auth_redirect():
 
     assert response.status_code == 302
 
-    # Assert redirect URL matches expected
-    # Note: Uphold puts client_id in path, not query params
+    # redirect_uri is always set to the allowed value
+    expected_params = {**params, "redirect_uri": "rewards://uphold/authorization"}
     assert_redirect(
         actual_redirect_url=response.headers["location"],
         expected_base_url="https://oauth.sandbox.uphold.test/authorize/test_uphold_sandbox_client_id",
-        expected_params=params,
+        expected_params=expected_params,
     )
 
 

@@ -2,6 +2,7 @@ import base64
 import json
 
 import httpx
+import pytest
 import respx
 from fastapi.testclient import TestClient
 
@@ -16,15 +17,19 @@ client = TestClient(app)
 # ========================================
 
 
-def test_bitflyer_auth_redirect():
-    """Test Bitflyer sandbox auth endpoint redirects correctly."""
+@pytest.mark.parametrize(
+    "input_redirect_uri",
+    ["rewards://bitflyer/authorization", "https://example.com/other"],
+)
+def test_bitflyer_auth_redirect(input_redirect_uri):
+    """Test Bitflyer auth always uses the allowed redirect_uri."""
     params = {
         "scope": "assets create_deposit_id withdraw_to_deposit_id",
-        "redirect_uri": "rewards://bitflyer/authorization",
         "state": "test_state_123",
         "response_type": "code",
         "code_challenge_method": "S256",
         "code_challenge": "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
+        "redirect_uri": input_redirect_uri,
     }
 
     response = client.get(
@@ -35,11 +40,13 @@ def test_bitflyer_auth_redirect():
 
     assert response.status_code == 302
 
-    # Build expected params: sent params + client_id injected
-    expected_params = params.copy()
-    expected_params["client_id"] = "test_bitflyer_sandbox_client_id"
+    # redirect_uri is always set to the allowed value
+    expected_params = {
+        **params,
+        "client_id": "test_bitflyer_sandbox_client_id",
+        "redirect_uri": "rewards://bitflyer/authorization",
+    }
 
-    # Assert redirect URL matches expected
     assert_redirect(
         actual_redirect_url=response.headers["location"],
         expected_base_url="https://oauth.sandbox.bitflyer.test/ex/OAuth/authorize",

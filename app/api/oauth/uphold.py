@@ -4,6 +4,7 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from starlette.datastructures import URL
 
 from app.api.oauth.models import Environment
+from app.api.oauth.utils import set_query_params
 from app.config import settings
 
 router = APIRouter(prefix="/uphold")
@@ -22,12 +23,16 @@ async def auth(environment: Environment, request: Request) -> RedirectResponse:
 
     # Build query parameters with OAuth flow params
     query_params = dict(request.query_params)
+    query_params["redirect_uri"] = "rewards://uphold/authorization"
 
     # Construct redirect URL with client_id in path
     redirect_url = str(
-        URL(
-            f"{str(env_config.oauth_url).rstrip('/')}/authorize/{env_config.client_id}"
-        ).include_query_params(**query_params)
+        set_query_params(
+            URL(
+                f"{str(env_config.oauth_url).rstrip('/')}/authorize/{env_config.client_id}"
+            ),
+            **query_params,
+        )
     )
 
     return RedirectResponse(url=redirect_url, status_code=302)

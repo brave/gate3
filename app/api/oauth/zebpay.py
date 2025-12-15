@@ -4,6 +4,7 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from starlette.datastructures import URL
 
 from app.api.oauth.models import Environment
+from app.api.oauth.utils import set_query_params
 from app.config import settings
 
 router = APIRouter(prefix="/zebpay")
@@ -29,13 +30,15 @@ async def auth(environment: Environment, request: Request) -> RedirectResponse:
         raise HTTPException(status_code=400, detail="Missing returnUrl parameter")
 
     # Parse the returnUrl as a URL object
-    return_url = URL(req_return_url).include_query_params(
-        client_id=env_config.client_id
+    return_url = set_query_params(
+        URL(req_return_url),
+        client_id=env_config.client_id,
+        redirect_uri="rewards://zebpay/authorization",
     )
 
     # Build the upstream auth redirect URL with modified returnUrl
     base_url = f"{str(env_config.oauth_url).rstrip('/')}/account/login"
-    redirect_url = URL(base_url).include_query_params(returnUrl=str(return_url))
+    redirect_url = set_query_params(URL(base_url), returnUrl=str(return_url))
 
     return RedirectResponse(url=str(redirect_url), status_code=302)
 

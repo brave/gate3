@@ -4,6 +4,7 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from starlette.datastructures import URL
 
 from app.api.oauth.models import Environment
+from app.api.oauth.utils import set_query_params
 from app.config import settings
 
 router = APIRouter(prefix="/gemini")
@@ -20,14 +21,14 @@ async def auth(environment: Environment, request: Request) -> RedirectResponse:
     config = settings.oauth.gemini
     env_config = config.get_env_config(environment.value)
 
-    # Build query parameters with OAuth flow params
+    # Construct redirect URL with query parameters
     query_params = dict(request.query_params)
     query_params["client_id"] = env_config.client_id
+    query_params["redirect_uri"] = "rewards://gemini/authorization"
 
-    # Construct redirect URL with query parameters
     redirect_url = str(
-        URL(f"{str(env_config.oauth_url).rstrip('/')}/auth").include_query_params(
-            **query_params
+        set_query_params(
+            URL(f"{str(env_config.oauth_url).rstrip('/')}/auth"), **query_params
         )
     )
 

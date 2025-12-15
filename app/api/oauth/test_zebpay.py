@@ -2,6 +2,7 @@ import base64
 import urllib.parse
 
 import httpx
+import pytest
 import respx
 from fastapi.testclient import TestClient
 
@@ -15,32 +16,44 @@ client = TestClient(app)
 # ========================================
 
 
-def test_zebpay_auth_redirect():
-    """Test Zebpay sandbox auth endpoint redirects correctly."""
-    response = client.get(
-        "/api/oauth/zebpay/sandbox/auth",
-        params={
-            "returnUrl": "https://example.com/callback?state=xyz",
-        },
-        follow_redirects=False,
-    )
-
+def _parse_zebpay_redirect(response) -> tuple[str, dict]:
+    """Parse Zebpay redirect response and extract returnUrl params."""
     assert response.status_code == 302
-
-    # Verify redirect location with Zebpay-specific path
     redirect_url = response.headers["location"]
     assert redirect_url.startswith("https://oauth.sandbox.zebpay.test/account/login")
-    assert "returnUrl=" in redirect_url
 
-    # The returnUrl parameter should contain the client_id
     parsed = urllib.parse.urlparse(redirect_url)
     params = urllib.parse.parse_qs(parsed.query)
     assert "returnUrl" in params
 
     return_url = params["returnUrl"][0]
-    assert "client_id=test_zebpay_sandbox_client_id" in return_url
+    return_url_parsed = urllib.parse.urlparse(return_url)
+    return_url_params = urllib.parse.parse_qs(return_url_parsed.query)
+
+    return return_url, return_url_params
+
+
+@pytest.mark.parametrize(
+    "input_redirect_uri",
+    ["rewards://zebpay/authorization", "https://example.com/other"],
+)
+def test_zebpay_auth_redirect(input_redirect_uri):
+    """Test Zebpay auth always uses the allowed redirect_uri."""
+    response = client.get(
+        "/api/oauth/zebpay/sandbox/auth",
+        params={
+            "returnUrl": f"https://example.com/callback?state=xyz&redirect_uri={input_redirect_uri}",
+        },
+        follow_redirects=False,
+    )
+
+    return_url, return_url_params = _parse_zebpay_redirect(response)
+
+    # The returnUrl parameter should contain the client_id and allowed redirect_uri
     assert "https://example.com/callback" in return_url
-    assert "state=xyz" in return_url
+    assert return_url_params["state"] == ["xyz"]
+    assert return_url_params["client_id"] == ["test_zebpay_sandbox_client_id"]
+    assert return_url_params["redirect_uri"] == ["rewards://zebpay/authorization"]
 
 
 # ========================================
