@@ -135,23 +135,28 @@ def test_get_prices_single_token_not_found(
     assert response.json() == []
 
 
-def test_get_prices_success(client, mock_coingecko_client, mock_jupiter_client):
+@pytest.mark.parametrize(
+    "vs_currency", [VsCurrency.USD, VsCurrency.EUR, VsCurrency.GBP]
+)
+def test_get_prices_success(
+    client, mock_coingecko_client, mock_jupiter_client, vs_currency
+):
     request_eth = TokenPriceRequest(
         coin=Chain.ETHEREUM.coin,
         chain_id=Chain.ETHEREUM.chain_id,
         address="0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
-        vs_currency=VsCurrency.USD,
+        vs_currency=vs_currency,
     )
     request_btc = TokenPriceRequest(
         coin=Chain.BITCOIN.coin,
         chain_id=Chain.BITCOIN.chain_id,
-        vs_currency=VsCurrency.USD,
+        vs_currency=vs_currency,
     )
     request_sol = TokenPriceRequest(
         coin=Chain.SOLANA.coin,
         chain_id=Chain.SOLANA.chain_id,
         address="5rmx75XP4VkWcxYsmcLSRbbwzN8g2Cy4YDgBabvboop",
-        vs_currency=VsCurrency.EUR,
+        vs_currency=vs_currency,
     )
 
     # Setup mock response
@@ -159,7 +164,7 @@ def test_get_prices_success(client, mock_coingecko_client, mock_jupiter_client):
         coin=Chain.ETHEREUM.coin,
         chain_id=Chain.ETHEREUM.chain_id,
         address="0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
-        vs_currency=VsCurrency.USD,
+        vs_currency=vs_currency,
         price=1.01,
         cache_status=CacheStatus.MISS,
         source=PriceSource.COINGECKO,
@@ -167,7 +172,7 @@ def test_get_prices_success(client, mock_coingecko_client, mock_jupiter_client):
     response_btc = TokenPriceResponse(
         coin=Chain.BITCOIN.coin,
         chain_id=Chain.BITCOIN.chain_id,
-        vs_currency=VsCurrency.USD,
+        vs_currency=vs_currency,
         price=50000.0,
         cache_status=CacheStatus.MISS,
         source=PriceSource.COINGECKO,
@@ -176,20 +181,20 @@ def test_get_prices_success(client, mock_coingecko_client, mock_jupiter_client):
         coin=Chain.SOLANA.coin,
         chain_id=Chain.SOLANA.chain_id,
         address="5rmx75XP4VkWcxYsmcLSRbbwzN8g2Cy4YDgBabvboop",
-        vs_currency=VsCurrency.EUR,
+        vs_currency=vs_currency,
         price=0.0000283013301,
         cache_status=CacheStatus.MISS,
         source=PriceSource.JUPITER,
     )
     mock_coingecko_client.filter.return_value = (
         BatchTokenPriceRequests(
-            requests=[request_eth, request_btc], vs_currency=VsCurrency.USD
+            requests=[request_eth, request_btc], vs_currency=vs_currency
         ),
-        BatchTokenPriceRequests(requests=[request_sol], vs_currency=VsCurrency.EUR),
+        BatchTokenPriceRequests(requests=[request_sol], vs_currency=vs_currency),
     )
     mock_jupiter_client.filter.return_value = (
-        BatchTokenPriceRequests(requests=[request_sol], vs_currency=VsCurrency.EUR),
-        BatchTokenPriceRequests.from_vs_currency(VsCurrency.USD),
+        BatchTokenPriceRequests(requests=[request_sol], vs_currency=vs_currency),
+        BatchTokenPriceRequests.from_vs_currency(vs_currency),
     )
     mock_coingecko_client.get_prices.return_value = [
         response_eth,
@@ -202,7 +207,7 @@ def test_get_prices_success(client, mock_coingecko_client, mock_jupiter_client):
     # Make request
     response = client.post(
         "/api/pricing/v1/getPrices",
-        params={"vs_currency": VsCurrency.USD.value},
+        params={"vs_currency": vs_currency.value},
         json=[
             {
                 "coin": Chain.ETHEREUM.coin.value,
@@ -230,14 +235,14 @@ def test_get_prices_success(client, mock_coingecko_client, mock_jupiter_client):
     assert len(batch.requests) == 2
     assert batch.requests[0] == request_eth
     assert batch.requests[1] == request_btc
-    assert batch.vs_currency == VsCurrency.USD
+    assert batch.vs_currency == vs_currency
     mock_jupiter_client.get_prices.assert_called_once()
     kwargs = mock_jupiter_client.get_prices.call_args[1]
     assert kwargs["coingecko_client"] is mock_coingecko_client
     batch = kwargs["batch"]
     assert len(batch.requests) == 1
     assert batch.requests[0] == request_sol
-    assert batch.vs_currency == VsCurrency.EUR
+    assert batch.vs_currency == vs_currency
 
 
 def test_get_prices_empty_list(client, mock_coingecko_client, mock_jupiter_client):
@@ -327,3 +332,32 @@ def test_get_prices_cached_response(client):
         mock_cache_get.assert_called_once()
         mock_platform_cache_get.assert_called_once()
         mock_coin_cache_get.assert_called_once()
+
+
+def test_get_prices_invalid_currency(client):
+    """Test that invalid currency values are rejected by Pydantic validation"""
+    # Make request with invalid currency code
+    response = client.post(
+        "/api/pricing/v1/getPrices",
+        params={"vs_currency": "INVALID"},
+        json=[
+            {
+                "coin": Chain.BITCOIN.coin.value,
+                "chain_id": Chain.BITCOIN.chain_id,
+            }
+        ],
+    )
+
+    # FastAPI should return 422 Unprocessable Entity for invalid enum value
+    assert response.status_code == 422
+    response_data = response.json()
+    assert "detail" in response_data
+    assert isinstance(response_data["detail"], list)
+    assert len(response_data["detail"]) > 0
+
+    # Check the error detail structure
+    error_detail = response_data["detail"][0]
+    assert error_detail["type"] == "enum"
+    assert error_detail["loc"] == ["query", "vs_currency"]
+    assert error_detail["input"] == "INVALID"
+    assert "Input should be" in error_detail["msg"]

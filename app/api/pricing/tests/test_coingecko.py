@@ -1,5 +1,6 @@
 from unittest.mock import AsyncMock, patch
 
+import httpx
 import pytest
 
 from app.api.common.models import Chain
@@ -70,3 +71,29 @@ async def test_get_prices_chunking(client, mock_httpx_client):
         for result in results:
             assert result.price == 1.0
             assert result.cache_status == "MISS"
+
+
+@pytest.mark.sanity
+@pytest.mark.asyncio
+async def test_vs_currency_enum_entries_valid():
+    """
+    Validate that our VsCurrency enum entries are supported by CoinGecko API.
+    This test makes a real API call to ensure our enum stays in sync with CoinGecko.
+    If this fails, it means CoinGecko removed support for a currency we're using.
+    """
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        response = await client.get(
+            "https://api.coingecko.com/api/v3/simple/supported_vs_currencies"
+        )
+        response.raise_for_status()
+        supported_currencies = {currency.upper() for currency in response.json()}
+
+    # Get our enum values
+    our_currencies = {currency.value for currency in VsCurrency}
+
+    # Check if all our currencies are supported by CoinGecko
+    unsupported = our_currencies - supported_currencies
+    assert not unsupported, (
+        f"VsCurrency enum contains currencies not supported by CoinGecko API: {unsupported}. "
+        f"Either remove these from the enum or verify CoinGecko still supports them."
+    )

@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     # API keys
     COINGECKO_API_KEY: str | None = None
     ALCHEMY_API_KEY: str | None = None
+    NEAR_INTENTS_JWT: str | None = None
 
     # OAuth Provider credentials (nested)
     # Automatically uses OAUTH_ prefix from OAuthConfig
@@ -22,6 +23,9 @@ class Settings(BaseSettings):
     REDIS_PORT: int = 6379
     REDIS_DB: int = 0
     REDIS_PASSWORD: str | None = None
+
+    # Swap providers
+    NEAR_INTENTS_BASE_URL: str = "https://1click.chaindefuser.com"
 
     # Monitoring
     SENTRY_DSN: str | None = None
