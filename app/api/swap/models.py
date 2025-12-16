@@ -192,6 +192,11 @@ class SwapQuote(BaseModel):
         description="Expiration time for the quote/deposit address",
     )
 
+    price_impact: float | None = Field(
+        default=None,
+        description="Price impact percentage (negative value indicates loss due to slippage/fees)",
+    )
+
 
 class SwapQuoteResponse(BaseModel):
     """Provider-agnostic swap quote response"""
@@ -252,6 +257,10 @@ class SwapStatusResponse(SwapSupportRequest):
         default=None, description="Detailed swap information"
     )
     provider: SwapProviderEnum = Field(description="Provider handling this swap")
+    explorer_url: str | None = Field(
+        default=None,
+        description="Block explorer URL for the swap transaction",
+    )
 
 
 class SwapStatusRequest(BaseModel):

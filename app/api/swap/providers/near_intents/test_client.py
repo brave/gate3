@@ -350,6 +350,12 @@ async def test_get_indicative_quote_success(
         result.quote.deposit_address is None
     )  # Indicative quote has no deposit address
 
+    # Verify price impact calculation
+    # amountInUsd: 2.0373, amountOutUsd: 0.6546
+    # price_impact = (0.6546 / 2.0373 - 1) * 100 ≈ -67.87
+    assert result.quote.price_impact is not None
+    assert result.quote.price_impact == pytest.approx(-67.87, abs=0.1)
+
 
 @pytest.mark.asyncio
 async def test_get_firm_quote_success(
@@ -404,6 +410,12 @@ async def test_get_firm_quote_success(
         result.quote.deposit_address == "9RdSjLtfFJLvj6CAR4w7H7tUbv2kvwkkrYZuoojKDBkE"
     )
     assert result.quote.expires_at is not None
+
+    # Verify price impact calculation
+    # amountInUsd: 2.0373, amountOutUsd: 0.6546
+    # price_impact = (0.6546 / 2.0373 - 1) * 100 ≈ -67.87
+    assert result.quote.price_impact is not None
+    assert result.quote.price_impact == pytest.approx(-67.87, abs=0.1)
 
 
 @pytest.mark.asyncio
@@ -626,6 +638,158 @@ async def test_get_status_with_memo(
     # Verify memo was included in params
     call_args = mock_httpx_client.get.call_args
     assert call_args[1]["params"]["depositMemo"] == "test_memo"
+
+
+@pytest.mark.asyncio
+async def test_quote_price_impact_with_usd_values(
+    client, mock_httpx_client, mock_supported_tokens_cache
+):
+    supported_tokens = [
+        USDC_TOKEN_INFO,
+        BTC_TOKEN_INFO,
+    ]
+    mock_supported_tokens_cache.get.return_value = supported_tokens
+
+    # Mock API response with USD values
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = {
+        "quoteRequest": MOCK_QUOTE_REQUEST,
+        "quote": {
+            **MOCK_INDICATIVE_QUOTE,
+            "amountInUsd": "100.0",
+            "amountOutUsd": "95.0",  # 5% loss
+        },
+    }
+    mock_httpx_client.post.return_value = mock_response
+
+    request = SwapQuoteRequest(
+        source_coin=Chain.SOLANA.coin,
+        source_chain_id=Chain.SOLANA.chain_id,
+        source_token_address="EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+        destination_coin=Chain.BITCOIN.coin,
+        destination_chain_id=Chain.BITCOIN.chain_id,
+        destination_token_address=None,
+        recipient="bc1qpjqsdj3qvfl4hzfa49p28ns9xkpl73cyg9exzn",
+        amount="2037265",
+        slippage_tolerance=50,
+        swap_type=SwapType.EXACT_INPUT,
+        sender="8eekKfUAGSJbq3CdA2TmHb8tKuyzd5gtEas3MYAtXzrT",
+        provider=SwapProviderEnum.NEAR_INTENTS,
+    )
+    request.set_source_token(supported_tokens)
+    request.set_destination_token(supported_tokens)
+
+    result = await client.get_indicative_quote(request)
+
+    # Verify price impact: (95.0 / 100.0 - 1) * 100 = -5.0
+    assert result.quote.price_impact is not None
+    assert result.quote.price_impact == pytest.approx(-5.0, abs=0.01)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "amount_in_usd,amount_out_usd,description",
+    [
+        (None, None, "missing USD values"),
+        ("invalid", "95.0", "invalid amount_in_usd"),
+        ("100.0", "invalid", "invalid amount_out_usd"),
+        ("0", "95.0", "zero amount_in_usd"),
+    ],
+)
+async def test_quote_price_impact_none_cases(
+    client,
+    mock_httpx_client,
+    mock_supported_tokens_cache,
+    amount_in_usd,
+    amount_out_usd,
+    description,
+):
+    supported_tokens = [
+        USDC_TOKEN_INFO,
+        BTC_TOKEN_INFO,
+    ]
+    mock_supported_tokens_cache.get.return_value = supported_tokens
+
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = {
+        "quoteRequest": MOCK_QUOTE_REQUEST,
+        "quote": {
+            **MOCK_INDICATIVE_QUOTE,
+            "amountInUsd": amount_in_usd,
+            "amountOutUsd": amount_out_usd,
+        },
+    }
+    mock_httpx_client.post.return_value = mock_response
+
+    request = SwapQuoteRequest(
+        source_coin=Chain.SOLANA.coin,
+        source_chain_id=Chain.SOLANA.chain_id,
+        source_token_address="EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+        destination_coin=Chain.BITCOIN.coin,
+        destination_chain_id=Chain.BITCOIN.chain_id,
+        destination_token_address=None,
+        recipient="bc1qpjqsdj3qvfl4hzfa49p28ns9xkpl73cyg9exzn",
+        amount="2037265",
+        slippage_tolerance=50,
+        swap_type=SwapType.EXACT_INPUT,
+        sender="8eekKfUAGSJbq3CdA2TmHb8tKuyzd5gtEas3MYAtXzrT",
+        provider=SwapProviderEnum.NEAR_INTENTS,
+    )
+    request.set_source_token(supported_tokens)
+    request.set_destination_token(supported_tokens)
+
+    result = await client.get_indicative_quote(request)
+
+    assert result.quote.price_impact is None
+
+
+@pytest.mark.asyncio
+async def test_quote_price_impact_positive_impact(
+    client, mock_httpx_client, mock_supported_tokens_cache
+):
+    supported_tokens = [
+        USDC_TOKEN_INFO,
+        BTC_TOKEN_INFO,
+    ]
+    mock_supported_tokens_cache.get.return_value = supported_tokens
+
+    # Mock API response with positive price impact (unusual but possible)
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = {
+        "quoteRequest": MOCK_QUOTE_REQUEST,
+        "quote": {
+            **MOCK_INDICATIVE_QUOTE,
+            "amountInUsd": "100.0",
+            "amountOutUsd": "105.0",  # 5% gain
+        },
+    }
+    mock_httpx_client.post.return_value = mock_response
+
+    request = SwapQuoteRequest(
+        source_coin=Chain.SOLANA.coin,
+        source_chain_id=Chain.SOLANA.chain_id,
+        source_token_address="EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+        destination_coin=Chain.BITCOIN.coin,
+        destination_chain_id=Chain.BITCOIN.chain_id,
+        destination_token_address=None,
+        recipient="bc1qpjqsdj3qvfl4hzfa49p28ns9xkpl73cyg9exzn",
+        amount="2037265",
+        slippage_tolerance=50,
+        swap_type=SwapType.EXACT_INPUT,
+        sender="8eekKfUAGSJbq3CdA2TmHb8tKuyzd5gtEas3MYAtXzrT",
+        provider=SwapProviderEnum.NEAR_INTENTS,
+    )
+    request.set_source_token(supported_tokens)
+    request.set_destination_token(supported_tokens)
+
+    result = await client.get_indicative_quote(request)
+
+    # Verify price impact: (105.0 / 100.0 - 1) * 100 = 5.0
+    assert result.quote.price_impact is not None
+    assert result.quote.price_impact == pytest.approx(5.0, abs=0.01)
 
 
 @pytest.mark.asyncio
