@@ -5,7 +5,7 @@ import pytest
 
 from app.api.common.models import Chain, Coin, TokenInfo, TokenSource, TokenType
 from app.api.swap.models import (
-    SwapProvider,
+    SwapProviderEnum,
     SwapQuoteRequest,
     SwapStatusRequest,
     SwapSupportRequest,
@@ -181,7 +181,9 @@ async def test_get_supported_tokens_from_cache(
     tokens = await client.get_supported_tokens()
 
     # Verify cache was checked
-    mock_supported_tokens_cache.get.assert_called_once_with(SwapProvider.NEAR_INTENTS)
+    mock_supported_tokens_cache.get.assert_called_once_with(
+        SwapProviderEnum.NEAR_INTENTS
+    )
 
     # Verify API was NOT called
     mock_httpx_client.get.assert_not_called()
@@ -327,7 +329,7 @@ async def test_get_indicative_quote_success(
         slippage_tolerance=50,
         swap_type=SwapType.EXACT_INPUT,
         sender="8eekKfUAGSJbq3CdA2TmHb8tKuyzd5gtEas3MYAtXzrT",
-        provider=SwapProvider.NEAR_INTENTS,
+        provider=SwapProviderEnum.NEAR_INTENTS,
     )
     request.set_source_token(supported_tokens)
     request.set_destination_token(supported_tokens)
@@ -341,7 +343,7 @@ async def test_get_indicative_quote_success(
     assert call_args[1]["json"]["dry"] is True
 
     # Verify response
-    assert result.provider == SwapProvider.NEAR_INTENTS
+    assert result.provider == SwapProviderEnum.NEAR_INTENTS
     assert result.quote.amount_in == "2037265"
     assert result.quote.amount_out == "711"
     assert (
@@ -381,7 +383,7 @@ async def test_get_firm_quote_success(
         slippage_tolerance=50,
         swap_type=SwapType.EXACT_INPUT,
         sender="8eekKfUAGSJbq3CdA2TmHb8tKuyzd5gtEas3MYAtXzrT",
-        provider=SwapProvider.NEAR_INTENTS,
+        provider=SwapProviderEnum.NEAR_INTENTS,
     )
     request.set_source_token(supported_tokens)
     request.set_destination_token(supported_tokens)
@@ -395,7 +397,7 @@ async def test_get_firm_quote_success(
     assert call_args[1]["json"]["dry"] is False
 
     # Verify response
-    assert result.provider == SwapProvider.NEAR_INTENTS
+    assert result.provider == SwapProviderEnum.NEAR_INTENTS
     assert result.quote.amount_in == "2037265"
     assert result.quote.amount_out == "711"
     assert (
@@ -432,7 +434,7 @@ async def test_get_quote_error_response(
         slippage_tolerance=50,
         swap_type=SwapType.EXACT_INPUT,
         sender="8eekKfUAGSJbq3CdA2TmHb8tKuyzd5gtEas3MYAtXzrT",
-        provider=SwapProvider.NEAR_INTENTS,
+        provider=SwapProviderEnum.NEAR_INTENTS,
     )
     request.set_source_token(supported_tokens)
     request.set_destination_token(supported_tokens)
@@ -461,7 +463,7 @@ async def test_post_submit_hook_success(client, mock_httpx_client):
         tx_hash="4jLC9UPQJUyEK9dbgTywQQHeJTngX54FjJ6ZLPb1BUspGX4ZZGrg3u4P5tjHGqzpuq1c73rD2QwhyFQETvPgWdm5",
         deposit_address="4Rqnz7SPU4EqSUravxbKTSBti4RNf1XGaqvBmnLfvH83",
         deposit_memo=None,
-        provider=SwapProvider.NEAR_INTENTS,
+        provider=SwapProviderEnum.NEAR_INTENTS,
     )
 
     await client.post_submit_hook(request)
@@ -495,7 +497,7 @@ async def test_post_submit_hook_with_memo(client, mock_httpx_client):
         tx_hash="test_hash",
         deposit_address="test_address",
         deposit_memo="test_memo",
-        provider=SwapProvider.NEAR_INTENTS,
+        provider=SwapProviderEnum.NEAR_INTENTS,
     )
 
     await client.post_submit_hook(request)
@@ -517,7 +519,7 @@ async def test_post_submit_hook_error(client, mock_httpx_client):
         tx_hash="invalid_hash",
         deposit_address="test_address",
         deposit_memo=None,
-        provider=SwapProvider.NEAR_INTENTS,
+        provider=SwapProviderEnum.NEAR_INTENTS,
     )
 
     with pytest.raises(ValueError, match="Invalid transaction hash"):
@@ -568,7 +570,7 @@ async def test_get_status_success(
         tx_hash="4jLC9UPQJUyEK9dbgTywQQHeJTngX54FjJ6ZLPb1BUspGX4ZZGrg3u4P5tjHGqzpuq1c73rD2QwhyFQETvPgWdm5",
         deposit_address="4Rqnz7SPU4EqSUravxbKTSBti4RNf1XGaqvBmnLfvH83",
         deposit_memo=None,
-        provider=SwapProvider.NEAR_INTENTS,
+        provider=SwapProviderEnum.NEAR_INTENTS,
     )
 
     result = await client.get_status(request)
@@ -581,7 +583,7 @@ async def test_get_status_success(
 
     # Verify response
     assert result.status.value == "SUCCESS"
-    assert result.provider == SwapProvider.NEAR_INTENTS
+    assert result.provider == SwapProviderEnum.NEAR_INTENTS
     assert result.swap_details is not None
     assert result.swap_details.amount_in == "2005138"
     assert result.swap_details.amount_out == "711"
@@ -616,7 +618,7 @@ async def test_get_status_with_memo(
         tx_hash="test_hash",
         deposit_address="test_address",
         deposit_memo="test_memo",
-        provider=SwapProvider.NEAR_INTENTS,
+        provider=SwapProviderEnum.NEAR_INTENTS,
     )
 
     await client.get_status(request)
@@ -641,7 +643,7 @@ async def test_get_status_error(client, mock_httpx_client, mock_supported_tokens
         tx_hash="invalid_hash",
         deposit_address="invalid_address",
         deposit_memo=None,
-        provider=SwapProvider.NEAR_INTENTS,
+        provider=SwapProviderEnum.NEAR_INTENTS,
     )
 
     with pytest.raises(ValueError, match="Swap not found"):

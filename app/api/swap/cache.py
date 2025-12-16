@@ -3,7 +3,7 @@ from datetime import timedelta
 
 from app.core.cache import Cache
 
-from .models import SwapProvider, TokenInfo
+from .models import SwapProviderEnum, TokenInfo
 
 
 class SupportedTokensCache:
@@ -19,11 +19,11 @@ class SupportedTokensCache:
     DEFAULT_TTL = timedelta(hours=24)
 
     @classmethod
-    def _get_cache_key(cls, provider: SwapProvider) -> str:
+    def _get_cache_key(cls, provider: SwapProviderEnum) -> str:
         return f"{cls.CACHE_PREFIX}:{provider.value}"
 
     @classmethod
-    async def get(cls, provider: SwapProvider) -> list[TokenInfo] | None:
+    async def get(cls, provider: SwapProviderEnum) -> list[TokenInfo] | None:
         cache_key = cls._get_cache_key(provider)
 
         async with Cache.get_client() as redis:
@@ -38,7 +38,7 @@ class SupportedTokensCache:
     @classmethod
     async def set(
         cls,
-        provider: SwapProvider,
+        provider: SwapProviderEnum,
         tokens: list[TokenInfo],
         ttl: timedelta = DEFAULT_TTL,
     ) -> None:
