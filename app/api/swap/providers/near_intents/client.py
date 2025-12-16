@@ -7,16 +7,14 @@ from app.config import settings
 
 from ...cache import SupportedTokensCache
 from ...models import (
-    SwapProvider as SwapProviderEnum,
-)
-from ...models import (
+    SwapProviderEnum,
     SwapQuoteRequest,
     SwapQuoteResponse,
     SwapStatusRequest,
     SwapStatusResponse,
     SwapSupportRequest,
 )
-from ..base import SwapProvider
+from ..base import BaseSwapProvider
 from .models import (
     NearIntentsError,
     NearIntentsQuoteResponse,
@@ -33,8 +31,12 @@ from .transformations import (
 logger = logging.getLogger(__name__)
 
 
-class NearIntentsClient(SwapProvider):
+class NearIntentsClient(BaseSwapProvider):
     """NEAR Intents 1Click API client"""
+
+    @property
+    def provider_id(self) -> SwapProviderEnum:
+        return SwapProviderEnum.NEAR_INTENTS
 
     def __init__(self, token_manager=None):
         self.base_url = settings.NEAR_INTENTS_BASE_URL
@@ -53,7 +55,7 @@ class NearIntentsClient(SwapProvider):
 
     async def get_supported_tokens(self) -> list[TokenInfo]:
         # Check cache first
-        cached_tokens = await SupportedTokensCache.get(SwapProviderEnum.NEAR_INTENTS)
+        cached_tokens = await SupportedTokensCache.get(self.provider_id)
         if cached_tokens:
             return cached_tokens
 
@@ -70,7 +72,7 @@ class NearIntentsClient(SwapProvider):
                     tokens.append(token_info)
 
             # Cache the results
-            await SupportedTokensCache.set(SwapProviderEnum.NEAR_INTENTS, tokens)
+            await SupportedTokensCache.set(self.provider_id, tokens)
             return tokens
 
     @staticmethod

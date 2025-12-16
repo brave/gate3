@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 
 from ..models import (
+    SwapProviderEnum,
     SwapQuoteRequest,
     SwapQuoteResponse,
     SwapStatusRequest,
@@ -10,8 +11,19 @@ from ..models import (
 )
 
 
-class SwapProvider(ABC):
+class BaseSwapProvider(ABC):
     """Abstract base class for swap providers"""
+
+    @property
+    @abstractmethod
+    def provider_id(self) -> SwapProviderEnum:
+        """
+        Get the SwapProviderEnum value that identifies this provider.
+
+        Returns:
+            SwapProviderEnum value for this provider implementation
+        """
+        pass
 
     @abstractmethod
     async def get_supported_tokens(self) -> list[TokenInfo]:

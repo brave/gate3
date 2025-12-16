@@ -4,15 +4,13 @@ from app.api.common.models import Chain, TokenInfo, TokenSource, TokenType
 
 from ...models import (
     SwapDetails,
+    SwapProviderEnum,
     SwapQuote,
     SwapQuoteRequest,
     SwapQuoteResponse,
     SwapStatus,
     SwapStatusResponse,
     SwapTransactionDetails,
-)
-from ...models import (
-    SwapProvider as SwapProviderEnum,
 )
 from .models import (
     NearIntentsDepositMode,

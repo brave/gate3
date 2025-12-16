@@ -4,19 +4,25 @@ from app.api.common.models import Coin
 from app.api.tokens.manager import TokenManager
 
 from .models import (
-    SwapProvider,
+    SwapProviderEnum,
+    SwapProviderInfo,
     SwapQuoteRequest,
     SwapQuoteResponse,
     SwapStatusRequest,
     SwapStatusResponse,
     SwapSupportRequest,
 )
-from .utils import get_provider_client, select_optimal_provider
+from .utils import get_or_select_provider_client, get_provider_client
 
 router = APIRouter(prefix="/api/swap")
 
 
-@router.get("/v1/providers", response_model=list[SwapProvider])
+@router.get("/v1/providers", response_model=list[SwapProviderInfo])
+async def get_providers() -> list[SwapProviderInfo]:
+    return [provider.to_info() for provider in SwapProviderEnum]
+
+
+@router.get("/v1/providers/supported", response_model=list[SwapProviderEnum])
 async def get_supported_providers(
     source_coin: str = Query(..., description="Source coin (e.g., ETH, SOL, BTC)"),
     source_chain_id: str = Query(..., description="Source chain ID"),
@@ -34,11 +40,11 @@ async def get_supported_providers(
         None, description="Recipient address on destination chain"
     ),
     token_manager: TokenManager = Depends(TokenManager),
-) -> list[SwapProvider]:
+) -> list[SwapProviderEnum]:
     """
-    Get list of providers that support a specific token pair swap.
+    Returns a list of providers that support the specified token pair swap.
 
-    Returns providers that can handle the specified source and destination tokens.
+    If at least one provider supports the swap, AUTO is also included in the list.
     """
     try:
         request = SwapSupportRequest(
@@ -53,12 +59,16 @@ async def get_supported_providers(
 
         supported_providers = []
 
-        # Check each available provider
-        for provider in SwapProvider:
+        # Check each available provider (exclude AUTO as it's a meta provider)
+        for provider in SwapProviderEnum:
+            if provider == SwapProviderEnum.AUTO:
+                continue
             try:
-                client = get_provider_client(provider, token_manager)
+                client = await get_provider_client(
+                    provider=provider, token_manager=token_manager
+                )
                 if await client.has_support(request):
-                    supported_providers.append(provider)
+                    supported_providers.append(client.provider_id)
             except NotImplementedError:
                 # Provider not implemented yet, skip
                 continue
@@ -67,7 +77,11 @@ async def get_supported_providers(
                 print(f"Warning: Error checking {provider.value}: {e}")
                 continue
 
-        return supported_providers
+        return (
+            ([SwapProviderEnum.AUTO] + supported_providers)
+            if supported_providers
+            else []
+        )
 
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -91,7 +105,9 @@ async def get_indicative_quote(
     The quote will not include a deposit address or expiration time.
     """
     try:
-        provider = await select_optimal_provider(request, token_manager)
+        provider = await get_or_select_provider_client(
+            request, token_manager, allow_auto=True
+        )
         return await provider.get_indicative_quote(request)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -122,7 +138,9 @@ async def get_firm_quote(
     as it may contain signatures or other data needed for dispute resolution.
     """
     try:
-        provider = await select_optimal_provider(request, token_manager)
+        provider = await get_or_select_provider_client(
+            request, token_manager, allow_auto=False
+        )
         return await provider.get_firm_quote(request)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -149,7 +167,9 @@ async def post_submit_hook(
         Empty dict on success
     """
     try:
-        client = get_provider_client(request.provider, token_manager)
+        client = await get_or_select_provider_client(
+            request=request, token_manager=token_manager, allow_auto=False
+        )
         await client.post_submit_hook(request)
         return {}
     except ValueError as e:
@@ -183,7 +203,9 @@ async def get_swap_status(
     5. REFUNDED - Funds have been refunded to the refund address
     """
     try:
-        client = get_provider_client(request.provider, token_manager)
+        client = await get_or_select_provider_client(
+            request=request, token_manager=token_manager, allow_auto=False
+        )
         return await client.get_status(request)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))

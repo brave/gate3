@@ -10,13 +10,50 @@ from app.api.common.models import Chain, Coin, TokenInfo
 # ============================================================================
 
 
-class SwapProvider(str, Enum):
-    """Supported swap providers"""
-
+class SwapProviderEnum(str, Enum):
+    AUTO = "AUTO"
     NEAR_INTENTS = "NEAR_INTENTS"
     ZERO_EX = "ZERO_EX"
     JUPITER = "JUPITER"
     LIFI = "LIFI"
+
+    def to_info(self) -> "SwapProviderInfo":
+        mapping = {
+            SwapProviderEnum.AUTO: SwapProviderInfo(
+                id=SwapProviderEnum.AUTO, name="Auto", logo=None
+            ),
+            SwapProviderEnum.NEAR_INTENTS: SwapProviderInfo(
+                id=SwapProviderEnum.NEAR_INTENTS,
+                name="NEAR Intents",
+                logo="https://static1.tokenterminal.com//near/products/nearintents/logo.png",
+            ),
+            SwapProviderEnum.ZERO_EX: SwapProviderInfo(
+                id=SwapProviderEnum.ZERO_EX,
+                name="0x",
+                logo="https://static1.tokenterminal.com//0x/logo.png",
+            ),
+            SwapProviderEnum.JUPITER: SwapProviderInfo(
+                id=SwapProviderEnum.JUPITER,
+                name="Jupiter",
+                logo="https://static1.tokenterminal.com/jupiter/logo.png",
+            ),
+            SwapProviderEnum.LIFI: SwapProviderInfo(
+                id=SwapProviderEnum.LIFI,
+                name="LI.FI",
+                logo="https://static1.tokenterminal.com/lifi/logo.png",
+            ),
+        }
+
+        if self not in mapping:
+            raise ValueError(f"Unknown provider: {self}")
+
+        return mapping[self]
+
+
+class SwapProviderInfo(BaseModel):
+    id: SwapProviderEnum = Field(description="Provider identifier")
+    name: str = Field(description="Provider display name")
+    logo: str | None = Field(None, description="Provider logo URL")
 
 
 class SwapType(str, Enum):
@@ -112,7 +149,7 @@ class SwapQuoteRequest(SwapSupportRequest):
     sender: str = Field(description="Sender address on source chain")
 
     # Optional provider selection
-    provider: SwapProvider | None = Field(
+    provider: SwapProviderEnum | None = Field(
         default=None,
         description="Specific provider to use (None for automatic selection)",
     )
@@ -159,7 +196,7 @@ class SwapQuote(BaseModel):
 class SwapQuoteResponse(BaseModel):
     """Provider-agnostic swap quote response"""
 
-    provider: SwapProvider = Field(description="Provider that generated this quote")
+    provider: SwapProviderEnum = Field(description="Provider that generated this quote")
     quote: SwapQuote = Field(description="The swap quote details")
 
 
@@ -214,7 +251,7 @@ class SwapStatusResponse(SwapSupportRequest):
     swap_details: SwapDetails | None = Field(
         default=None, description="Detailed swap information"
     )
-    provider: SwapProvider = Field(description="Provider handling this swap")
+    provider: SwapProviderEnum = Field(description="Provider handling this swap")
 
 
 class SwapStatusRequest(BaseModel):
@@ -223,4 +260,4 @@ class SwapStatusRequest(BaseModel):
     deposit_memo: str | None = Field(
         default=None, description="Deposit memo of the swap (if applicable)"
     )
-    provider: SwapProvider = Field(description="Provider that generated the quote")
+    provider: SwapProviderEnum = Field(description="Provider that generated the quote")
