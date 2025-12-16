@@ -14,6 +14,7 @@ from ...models import (
 )
 from .models import (
     NearIntentsDepositMode,
+    NearIntentsQuoteData,
     NearIntentsQuoteRequestBody,
     NearIntentsQuoteResponse,
     NearIntentsStatusResponse,
@@ -76,8 +77,28 @@ def to_near_intents_request(
     )
 
 
+def _calculate_price_impact(quote_data: NearIntentsQuoteData) -> float | None:
+    if not quote_data.amount_in_usd or not quote_data.amount_out_usd:
+        return None
+
+    try:
+        amount_in = float(quote_data.amount_in_usd)
+        amount_out = float(quote_data.amount_out_usd)
+        if amount_in > 0:
+            # Price impact: (amount_out_usd / amount_in_usd - 1) * 100
+            # Negative values indicate loss due to fees/slippage
+            return ((amount_out / amount_in) - 1) * 100
+    except (ValueError, TypeError):
+        # If conversion fails, return None
+        pass
+
+    return None
+
+
 def from_near_intents_quote(response: NearIntentsQuoteResponse) -> SwapQuoteResponse:
     quote_data = response.quote
+
+    price_impact = _calculate_price_impact(quote_data)
 
     quote = SwapQuote(
         amount_in=quote_data.amount_in,
@@ -91,6 +112,7 @@ def from_near_intents_quote(response: NearIntentsQuoteResponse) -> SwapQuoteResp
         deposit_address=quote_data.deposit_address,
         deposit_memo=quote_data.deposit_memo,
         expires_at=quote_data.deadline,
+        price_impact=price_impact,
     )
 
     return SwapQuoteResponse(provider=SwapProviderEnum.NEAR_INTENTS, quote=quote)
@@ -171,6 +193,14 @@ def from_near_intents_status(
         transactions=transactions,
     )
 
+    # Generate explorer URL for NEAR Intents using deposit address
+    explorer_url = None
+    deposit_address = response.quote_response.quote.deposit_address
+    if deposit_address:
+        explorer_url = (
+            f"https://explorer.near-intents.org/transactions/{deposit_address}"
+        )
+
     return SwapStatusResponse(
         # source
         source_coin=origin_asset.coin,
@@ -185,4 +215,5 @@ def from_near_intents_status(
         status=normalize_near_intents_status(response.status),
         swap_details=swap_details,
         provider=SwapProviderEnum.NEAR_INTENTS,
+        explorer_url=explorer_url,
     )
