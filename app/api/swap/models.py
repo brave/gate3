@@ -136,9 +136,9 @@ class SwapQuoteRequest(SwapSupportRequest):
     )
 
     # Swap parameters
-    slippage_tolerance: int = Field(
-        default=50,
-        description="Slippage tolerance in basis points (e.g., 50 = 0.5%)",
+    slippage_percentage: str = Field(
+        default="0.5",
+        description="Slippage tolerance as a percentage string (e.g., '0.5' = 0.5%)",
     )
     swap_type: SwapType = Field(
         default=SwapType.EXACT_INPUT,
@@ -158,24 +158,16 @@ class SwapQuoteRequest(SwapSupportRequest):
 class SwapQuote(BaseModel):
     """Normalized swap quote response"""
 
-    amount_in: str = Field(description="Input amount in smallest unit")
-    amount_in_formatted: str = Field(description="Input amount in readable format")
-    amount_in_usd: str | None = Field(default=None, description="Input amount in USD")
+    source_amount: str = Field(description="Source amount in smallest unit")
 
-    amount_out: str = Field(description="Expected output amount in smallest unit")
-    amount_out_formatted: str = Field(
-        description="Expected output amount in readable format"
-    )
-    amount_out_usd: str | None = Field(
-        default=None, description="Expected output amount in USD"
+    destination_amount: str = Field(description="Destination amount in smallest unit")
+
+    destination_amount_min: str = Field(
+        description="Minimum destination amount after slippage in smallest unit"
     )
 
-    min_amount_out: str = Field(
-        description="Minimum output amount after slippage in smallest unit"
-    )
-
-    estimated_time: int = Field(
-        description="Estimated time for swap completion in seconds"
+    estimated_time: int | None = Field(
+        default=None, description="Estimated time for swap completion in seconds"
     )
 
     deposit_address: str | None = Field(
@@ -225,18 +217,12 @@ class SwapDetails(BaseModel):
     amount_in_formatted: str | None = Field(
         default=None, description="Actual input amount in readable format"
     )
-    amount_in_usd: str | None = Field(
-        default=None, description="Actual input amount in USD"
-    )
 
     amount_out: str | None = Field(
         default=None, description="Actual output amount in smallest unit"
     )
     amount_out_formatted: str | None = Field(
         default=None, description="Actual output amount in readable format"
-    )
-    amount_out_usd: str | None = Field(
-        default=None, description="Actual output amount in USD"
     )
 
     refunded_amount: str | None = Field(

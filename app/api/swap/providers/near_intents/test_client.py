@@ -326,7 +326,7 @@ async def test_get_indicative_quote_success(
         destination_token_address=None,
         recipient="bc1qpjqsdj3qvfl4hzfa49p28ns9xkpl73cyg9exzn",
         amount="2037265",
-        slippage_tolerance=50,
+        slippage_percentage="0.5",
         swap_type=SwapType.EXACT_INPUT,
         sender="8eekKfUAGSJbq3CdA2TmHb8tKuyzd5gtEas3MYAtXzrT",
         provider=SwapProviderEnum.NEAR_INTENTS,
@@ -344,8 +344,8 @@ async def test_get_indicative_quote_success(
 
     # Verify response
     assert result.provider == SwapProviderEnum.NEAR_INTENTS
-    assert result.quote.amount_in == "2037265"
-    assert result.quote.amount_out == "711"
+    assert result.quote.source_amount == "2037265"
+    assert result.quote.destination_amount == "711"
     assert (
         result.quote.deposit_address is None
     )  # Indicative quote has no deposit address
@@ -386,7 +386,7 @@ async def test_get_firm_quote_success(
         destination_token_address=None,
         recipient="bc1qpjqsdj3qvfl4hzfa49p28ns9xkpl73cyg9exzn",
         amount="2037265",
-        slippage_tolerance=50,
+        slippage_percentage="0.5",
         swap_type=SwapType.EXACT_INPUT,
         sender="8eekKfUAGSJbq3CdA2TmHb8tKuyzd5gtEas3MYAtXzrT",
         provider=SwapProviderEnum.NEAR_INTENTS,
@@ -404,8 +404,8 @@ async def test_get_firm_quote_success(
 
     # Verify response
     assert result.provider == SwapProviderEnum.NEAR_INTENTS
-    assert result.quote.amount_in == "2037265"
-    assert result.quote.amount_out == "711"
+    assert result.quote.source_amount == "2037265"
+    assert result.quote.destination_amount == "711"
     assert (
         result.quote.deposit_address == "9RdSjLtfFJLvj6CAR4w7H7tUbv2kvwkkrYZuoojKDBkE"
     )
@@ -443,7 +443,7 @@ async def test_get_quote_error_response(
         destination_token_address=None,
         recipient="bc1qpjqsdj3qvfl4hzfa49p28ns9xkpl73cyg9exzn",
         amount="2037265",
-        slippage_tolerance=50,
+        slippage_percentage="0.5",
         swap_type=SwapType.EXACT_INPUT,
         sender="8eekKfUAGSJbq3CdA2TmHb8tKuyzd5gtEas3MYAtXzrT",
         provider=SwapProviderEnum.NEAR_INTENTS,
@@ -672,7 +672,7 @@ async def test_quote_price_impact_with_usd_values(
         destination_token_address=None,
         recipient="bc1qpjqsdj3qvfl4hzfa49p28ns9xkpl73cyg9exzn",
         amount="2037265",
-        slippage_tolerance=50,
+        slippage_percentage="0.5",
         swap_type=SwapType.EXACT_INPUT,
         sender="8eekKfUAGSJbq3CdA2TmHb8tKuyzd5gtEas3MYAtXzrT",
         provider=SwapProviderEnum.NEAR_INTENTS,
@@ -732,7 +732,7 @@ async def test_quote_price_impact_none_cases(
         destination_token_address=None,
         recipient="bc1qpjqsdj3qvfl4hzfa49p28ns9xkpl73cyg9exzn",
         amount="2037265",
-        slippage_tolerance=50,
+        slippage_percentage="0.5",
         swap_type=SwapType.EXACT_INPUT,
         sender="8eekKfUAGSJbq3CdA2TmHb8tKuyzd5gtEas3MYAtXzrT",
         provider=SwapProviderEnum.NEAR_INTENTS,
@@ -777,7 +777,7 @@ async def test_quote_price_impact_positive_impact(
         destination_token_address=None,
         recipient="bc1qpjqsdj3qvfl4hzfa49p28ns9xkpl73cyg9exzn",
         amount="2037265",
-        slippage_tolerance=50,
+        slippage_percentage="0.5",
         swap_type=SwapType.EXACT_INPUT,
         sender="8eekKfUAGSJbq3CdA2TmHb8tKuyzd5gtEas3MYAtXzrT",
         provider=SwapProviderEnum.NEAR_INTENTS,
