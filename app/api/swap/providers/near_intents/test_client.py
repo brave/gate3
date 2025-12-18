@@ -5,6 +5,8 @@ import pytest
 
 from app.api.common.models import Chain, Coin, TokenInfo, TokenSource, TokenType
 from app.api.swap.models import (
+    SwapError,
+    SwapErrorKind,
     SwapProviderEnum,
     SwapQuoteRequest,
     SwapStatusRequest,
@@ -293,8 +295,11 @@ async def test_handle_error_response(client):
     mock_response = MagicMock()
     mock_response.json.return_value = {"message": "Invalid swap parameters"}
 
-    with pytest.raises(ValueError, match="Invalid swap parameters"):
+    with pytest.raises(SwapError) as exc_info:
         client._handle_error_response(mock_response)
+
+    assert exc_info.value.message == "Invalid swap parameters"
+    assert exc_info.value.kind == SwapErrorKind.UNKNOWN
 
 
 @pytest.mark.asyncio
@@ -447,8 +452,11 @@ async def test_get_quote_error_response(
     request.set_source_token(supported_tokens)
     request.set_destination_token(supported_tokens)
 
-    with pytest.raises(ValueError, match="Invalid swap parameters"):
+    with pytest.raises(SwapError) as exc_info:
         await client.get_indicative_quote(request)
+
+    assert exc_info.value.message == "Invalid swap parameters"
+    assert exc_info.value.kind == SwapErrorKind.UNKNOWN
 
 
 @pytest.mark.asyncio
@@ -530,8 +538,11 @@ async def test_post_submit_hook_error(client, mock_httpx_client):
         provider=SwapProviderEnum.NEAR_INTENTS,
     )
 
-    with pytest.raises(ValueError, match="Invalid transaction hash"):
+    with pytest.raises(SwapError) as exc_info:
         await client.post_submit_hook(request)
+
+    assert exc_info.value.message == "Invalid transaction hash"
+    assert exc_info.value.kind == SwapErrorKind.UNKNOWN
 
 
 @pytest.mark.asyncio
@@ -806,8 +817,11 @@ async def test_get_status_error(client, mock_httpx_client, mock_supported_tokens
         provider=SwapProviderEnum.NEAR_INTENTS,
     )
 
-    with pytest.raises(ValueError, match="Swap not found"):
+    with pytest.raises(SwapError) as exc_info:
         await client.get_status(request)
+
+    assert exc_info.value.message == "Swap not found"
+    assert exc_info.value.kind == SwapErrorKind.UNKNOWN
 
 
 @pytest.mark.asyncio

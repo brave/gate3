@@ -6,6 +6,31 @@ from pydantic.alias_generators import to_camel
 
 from app.api.common.models import Chain, Coin, TokenInfo
 
+
+# ============================================================================
+# Error Handling
+# ============================================================================
+class SwapErrorKind(str, Enum):
+    INSUFFICIENT_LIQUIDITY = "INSUFFICIENT_LIQUIDITY"
+    UNKNOWN = "UNKNOWN"
+
+
+class SwapError(Exception):
+    def __init__(
+        self,
+        message: str,
+        kind: SwapErrorKind = SwapErrorKind.UNKNOWN,
+        status_code: int = 400,
+    ):
+        self.message = message
+        self.kind = kind
+        self.status_code = status_code
+        super().__init__(self.message)
+
+    def as_dict(self) -> dict:
+        return {"message": self.message, "kind": self.kind.value}
+
+
 # ============================================================================
 # Public Enums (Provider-Agnostic)
 # ============================================================================
