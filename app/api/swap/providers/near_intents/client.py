@@ -77,13 +77,7 @@ class NearIntentsClient(BaseSwapProvider):
 
     @staticmethod
     def _is_address_equal(a: str | None, b: str | None) -> bool:
-        if a is None and b is None:
-            return True
-
-        if a is None or b is None:
-            return False
-
-        return a.lower() == b.lower()
+        return (a or "").lower() == (b or "").lower()
 
     async def has_support(self, request: SwapSupportRequest) -> bool:
         if not request.source_chain or not request.destination_chain:
