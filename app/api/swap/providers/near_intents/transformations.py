@@ -7,7 +7,6 @@ from ...models import (
     SwapProviderEnum,
     SwapQuote,
     SwapQuoteRequest,
-    SwapQuoteResponse,
     SwapStatus,
     SwapStatusResponse,
     SwapTransactionDetails,
@@ -100,12 +99,13 @@ def _calculate_price_impact(quote_data: NearIntentsQuoteData) -> float | None:
     return None
 
 
-def from_near_intents_quote(response: NearIntentsQuoteResponse) -> SwapQuoteResponse:
+def from_near_intents_quote(response: NearIntentsQuoteResponse) -> SwapQuote:
     quote_data = response.quote
 
     price_impact = _calculate_price_impact(quote_data)
 
-    quote = SwapQuote(
+    return SwapQuote(
+        provider=SwapProviderEnum.NEAR_INTENTS,
         source_amount=quote_data.amount_in,
         destination_amount=quote_data.amount_out,
         destination_amount_min=quote_data.min_amount_out,
@@ -115,8 +115,6 @@ def from_near_intents_quote(response: NearIntentsQuoteResponse) -> SwapQuoteResp
         expires_at=quote_data.deadline,
         price_impact=price_impact,
     )
-
-    return SwapQuoteResponse(provider=SwapProviderEnum.NEAR_INTENTS, quote=quote)
 
 
 def normalize_near_intents_status(status: str) -> SwapStatus:
@@ -185,10 +183,8 @@ def from_near_intents_status(
     swap_details = SwapDetails(
         amount_in=swap_details_data.amount_in,
         amount_in_formatted=swap_details_data.amount_in_formatted,
-        amount_in_usd=swap_details_data.amount_in_usd,
         amount_out=swap_details_data.amount_out,
         amount_out_formatted=swap_details_data.amount_out_formatted,
-        amount_out_usd=swap_details_data.amount_out_usd,
         refunded_amount=swap_details_data.refunded_amount,
         refunded_amount_formatted=swap_details_data.refunded_amount_formatted,
         transactions=transactions,

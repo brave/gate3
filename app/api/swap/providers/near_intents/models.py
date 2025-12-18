@@ -80,8 +80,6 @@ class NearIntentsTransactionDetails(BaseModel):
 
 
 class NearIntentsSwapDetails(BaseModel):
-    """Swap details from NEAR Intents status response"""
-
     intent_hashes: list[str] = Field(default_factory=list)
     near_tx_hashes: list[str] = Field(default_factory=list)
 

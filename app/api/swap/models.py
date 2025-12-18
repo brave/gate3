@@ -2,9 +2,9 @@ from datetime import datetime
 from enum import Enum
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic.alias_generators import to_camel
 
 from app.api.common.models import Chain, Coin, TokenInfo
-from pydantic.alias_generators import to_camel
 
 # ============================================================================
 # Public Enums (Provider-Agnostic)
@@ -166,7 +166,7 @@ class SwapQuoteRequest(SwapSupportRequest):
 
 
 class SwapQuote(BaseModel):
-    """Normalized swap quote response"""
+    provider: SwapProviderEnum = Field(description="Provider that generated this quote")
 
     source_amount: str = Field(description="Source amount in smallest unit")
 
@@ -198,13 +198,6 @@ class SwapQuote(BaseModel):
         default=None,
         description="Price impact percentage (negative value indicates loss due to slippage/fees)",
     )
-
-
-class SwapQuoteResponse(BaseModel):
-    """Provider-agnostic swap quote response"""
-
-    provider: SwapProviderEnum = Field(description="Provider that generated this quote")
-    quote: SwapQuote = Field(description="The swap quote details")
 
 
 class SwapTransactionDetails(BaseModel):
