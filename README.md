@@ -1,7 +1,7 @@
 # Gate3
 
 [![Build Status](https://github.com/brave-experiments/gate3/actions/workflows/ci.yml/badge.svg)](https://github.com/brave-experiments/gate3/actions/workflows/ci.yml)
-[![python](https://img.shields.io/badge/Made%20with-Python%203.13-1f425f.svg)](https://www.python.org/)
+[![python](https://img.shields.io/badge/Made%20with-Python%203.14-1f425f.svg)](https://www.python.org/)
 
 
 A FastAPI-based gateway service for web3 applications at Brave.
@@ -11,7 +11,7 @@ A FastAPI-based gateway service for web3 applications at Brave.
 
 ## Prerequisites
 
-- Python 3.13 or higher
+- Python 3.14 or higher
 - Poetry for dependency management
 - Redis server
 
