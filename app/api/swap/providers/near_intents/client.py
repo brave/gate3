@@ -7,6 +7,7 @@ from app.config import settings
 
 from ...cache import SupportedTokensCache
 from ...models import (
+    SwapError,
     SwapProviderEnum,
     SwapQuote,
     SwapQuoteRequest,
@@ -27,6 +28,7 @@ from .transformations import (
     from_near_intents_token,
     to_near_intents_request,
 )
+from .utils import categorize_error
 
 logger = logging.getLogger(__name__)
 
@@ -111,9 +113,10 @@ class NearIntentsClient(BaseSwapProvider):
         return source_supported and destination_supported
 
     def _handle_error_response(self, response: httpx.Response) -> None:
-        """Raise ValueError with error message from NEAR Intents API"""
+        """Raise SwapError with categorized error message from NEAR Intents API"""
         error = NearIntentsError.model_validate(response.json())
-        raise ValueError(error.message)
+        kind = categorize_error(error.message)
+        raise SwapError(message=error.message, kind=kind)
 
     async def _get_quote(self, request: SwapQuoteRequest, dry: bool) -> SwapQuote:
         """Internal method to get quote (indicative or firm)"""
