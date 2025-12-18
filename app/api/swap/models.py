@@ -1,9 +1,10 @@
 from datetime import datetime
 from enum import Enum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.api.common.models import Chain, Coin, TokenInfo
+from pydantic.alias_generators import to_camel
 
 # ============================================================================
 # Public Enums (Provider-Agnostic)
@@ -89,8 +90,17 @@ class SwapSupportRequest(BaseModel):
         default=None, description="Recipient address on destination chain"
     )
 
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
     _source_token: TokenInfo | None = None
     _destination_token: TokenInfo | None = None
+
+    @field_validator(
+        "source_token_address", "destination_token_address", "recipient", mode="before"
+    )
+    @classmethod
+    def empty_string_to_none(cls, v: str | None) -> str | None:
+        return None if v == "" else v
 
     @property
     def source_chain(self) -> Chain | None:
