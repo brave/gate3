@@ -8,8 +8,8 @@ from app.config import settings
 from ...cache import SupportedTokensCache
 from ...models import (
     SwapProviderEnum,
+    SwapQuote,
     SwapQuoteRequest,
-    SwapQuoteResponse,
     SwapStatusRequest,
     SwapStatusResponse,
     SwapSupportRequest,
@@ -115,9 +115,7 @@ class NearIntentsClient(BaseSwapProvider):
         error = NearIntentsError.model_validate(response.json())
         raise ValueError(error.message)
 
-    async def _get_quote(
-        self, request: SwapQuoteRequest, dry: bool
-    ) -> SwapQuoteResponse:
+    async def _get_quote(self, request: SwapQuoteRequest, dry: bool) -> SwapQuote:
         """Internal method to get quote (indicative or firm)"""
         supported_tokens = await self.get_supported_tokens()
         near_request = to_near_intents_request(
@@ -139,12 +137,10 @@ class NearIntentsClient(BaseSwapProvider):
 
             self._handle_error_response(response)
 
-    async def get_indicative_quote(
-        self, request: SwapQuoteRequest
-    ) -> SwapQuoteResponse:
+    async def get_indicative_quote(self, request: SwapQuoteRequest) -> SwapQuote:
         return await self._get_quote(request, dry=True)
 
-    async def get_firm_quote(self, request: SwapQuoteRequest) -> SwapQuoteResponse:
+    async def get_firm_quote(self, request: SwapQuoteRequest) -> SwapQuote:
         return await self._get_quote(request, dry=False)
 
     async def post_submit_hook(self, request: SwapStatusRequest) -> None:

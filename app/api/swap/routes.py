@@ -6,8 +6,8 @@ from app.api.tokens.manager import TokenManager
 from .models import (
     SwapProviderEnum,
     SwapProviderInfo,
+    SwapQuote,
     SwapQuoteRequest,
-    SwapQuoteResponse,
     SwapStatusRequest,
     SwapStatusResponse,
     SwapSupportRequest,
@@ -92,10 +92,10 @@ async def get_supported_providers(
         )
 
 
-@router.post("/v1/quote/indicative", response_model=SwapQuoteResponse)
+@router.post("/v1/quote/indicative", response_model=SwapQuote)
 async def get_indicative_quote(
     request: SwapQuoteRequest, token_manager: TokenManager = Depends(TokenManager)
-) -> SwapQuoteResponse:
+) -> SwapQuote:
     """
     Request an indicative quote without creating a deposit address.
 
@@ -118,10 +118,10 @@ async def get_indicative_quote(
         )
 
 
-@router.post("/v1/quote/firm", response_model=SwapQuoteResponse)
+@router.post("/v1/quote/firm", response_model=SwapQuote)
 async def get_firm_quote(
     request: SwapQuoteRequest, token_manager: TokenManager = Depends(TokenManager)
-) -> SwapQuoteResponse:
+) -> SwapQuote:
     """
     Request a firm quote with a deposit address.
 

@@ -344,17 +344,15 @@ async def test_get_indicative_quote_success(
 
     # Verify response
     assert result.provider == SwapProviderEnum.NEAR_INTENTS
-    assert result.quote.source_amount == "2037265"
-    assert result.quote.destination_amount == "711"
-    assert (
-        result.quote.deposit_address is None
-    )  # Indicative quote has no deposit address
+    assert result.source_amount == "2037265"
+    assert result.destination_amount == "711"
+    assert result.deposit_address is None  # Indicative quote has no deposit address
 
     # Verify price impact calculation
     # amountInUsd: 2.0373, amountOutUsd: 0.6546
     # price_impact = (0.6546 / 2.0373 - 1) * 100 ≈ -67.87
-    assert result.quote.price_impact is not None
-    assert result.quote.price_impact == pytest.approx(-67.87, abs=0.1)
+    assert result.price_impact is not None
+    assert result.price_impact == pytest.approx(-67.87, abs=0.1)
 
 
 @pytest.mark.asyncio
@@ -404,18 +402,16 @@ async def test_get_firm_quote_success(
 
     # Verify response
     assert result.provider == SwapProviderEnum.NEAR_INTENTS
-    assert result.quote.source_amount == "2037265"
-    assert result.quote.destination_amount == "711"
-    assert (
-        result.quote.deposit_address == "9RdSjLtfFJLvj6CAR4w7H7tUbv2kvwkkrYZuoojKDBkE"
-    )
-    assert result.quote.expires_at is not None
+    assert result.source_amount == "2037265"
+    assert result.destination_amount == "711"
+    assert result.deposit_address == "9RdSjLtfFJLvj6CAR4w7H7tUbv2kvwkkrYZuoojKDBkE"
+    assert result.expires_at is not None
 
     # Verify price impact calculation
     # amountInUsd: 2.0373, amountOutUsd: 0.6546
     # price_impact = (0.6546 / 2.0373 - 1) * 100 ≈ -67.87
-    assert result.quote.price_impact is not None
-    assert result.quote.price_impact == pytest.approx(-67.87, abs=0.1)
+    assert result.price_impact is not None
+    assert result.price_impact == pytest.approx(-67.87, abs=0.1)
 
 
 @pytest.mark.asyncio
@@ -683,8 +679,8 @@ async def test_quote_price_impact_with_usd_values(
     result = await client.get_indicative_quote(request)
 
     # Verify price impact: (95.0 / 100.0 - 1) * 100 = -5.0
-    assert result.quote.price_impact is not None
-    assert result.quote.price_impact == pytest.approx(-5.0, abs=0.01)
+    assert result.price_impact is not None
+    assert result.price_impact == pytest.approx(-5.0, abs=0.01)
 
 
 @pytest.mark.asyncio
@@ -742,7 +738,7 @@ async def test_quote_price_impact_none_cases(
 
     result = await client.get_indicative_quote(request)
 
-    assert result.quote.price_impact is None
+    assert result.price_impact is None
 
 
 @pytest.mark.asyncio
@@ -788,8 +784,8 @@ async def test_quote_price_impact_positive_impact(
     result = await client.get_indicative_quote(request)
 
     # Verify price impact: (105.0 / 100.0 - 1) * 100 = 5.0
-    assert result.quote.price_impact is not None
-    assert result.quote.price_impact == pytest.approx(5.0, abs=0.01)
+    assert result.price_impact is not None
+    assert result.price_impact == pytest.approx(5.0, abs=0.01)
 
 
 @pytest.mark.asyncio

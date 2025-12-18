@@ -2,8 +2,8 @@ from abc import ABC, abstractmethod
 
 from ..models import (
     SwapProviderEnum,
+    SwapQuote,
     SwapQuoteRequest,
-    SwapQuoteResponse,
     SwapStatusRequest,
     SwapStatusResponse,
     SwapSupportRequest,
@@ -49,9 +49,7 @@ class BaseSwapProvider(ABC):
         pass
 
     @abstractmethod
-    async def get_indicative_quote(
-        self, request: SwapQuoteRequest
-    ) -> SwapQuoteResponse:
+    async def get_indicative_quote(self, request: SwapQuoteRequest) -> SwapQuote:
         """
         Get an indicative quote without creating a deposit address.
         This is a dry run to preview swap parameters.
@@ -60,7 +58,7 @@ class BaseSwapProvider(ABC):
             request: The swap quote request
 
         Returns:
-            SwapQuoteResponse without deposit address
+            SwapQuote without deposit address
 
         Raises:
             ValueError: If swap is not supported or parameters are invalid
@@ -69,7 +67,7 @@ class BaseSwapProvider(ABC):
         pass
 
     @abstractmethod
-    async def get_firm_quote(self, request: SwapQuoteRequest) -> SwapQuoteResponse:
+    async def get_firm_quote(self, request: SwapQuoteRequest) -> SwapQuote:
         """
         Get a firm quote with a deposit address.
         User must send funds to this address to initiate the swap.
@@ -78,7 +76,7 @@ class BaseSwapProvider(ABC):
             request: The swap quote request
 
         Returns:
-            SwapQuoteResponse with deposit address and deadline
+            SwapQuote with deposit address and deadline
 
         Raises:
             ValueError: If swap is not supported or parameters are invalid
