@@ -1,9 +1,35 @@
 from datetime import datetime
 from enum import Enum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic.alias_generators import to_camel
 
 from app.api.common.models import Chain, Coin, TokenInfo
+
+
+# ============================================================================
+# Error Handling
+# ============================================================================
+class SwapErrorKind(str, Enum):
+    INSUFFICIENT_LIQUIDITY = "INSUFFICIENT_LIQUIDITY"
+    UNKNOWN = "UNKNOWN"
+
+
+class SwapError(Exception):
+    def __init__(
+        self,
+        message: str,
+        kind: SwapErrorKind = SwapErrorKind.UNKNOWN,
+        status_code: int = 400,
+    ):
+        self.message = message
+        self.kind = kind
+        self.status_code = status_code
+        super().__init__(self.message)
+
+    def as_dict(self) -> dict:
+        return {"message": self.message, "kind": self.kind.value}
+
 
 # ============================================================================
 # Public Enums (Provider-Agnostic)
@@ -89,8 +115,17 @@ class SwapSupportRequest(BaseModel):
         default=None, description="Recipient address on destination chain"
     )
 
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
     _source_token: TokenInfo | None = None
     _destination_token: TokenInfo | None = None
+
+    @field_validator(
+        "source_token_address", "destination_token_address", "recipient", mode="before"
+    )
+    @classmethod
+    def empty_string_to_none(cls, v: str | None) -> str | None:
+        return None if v == "" else v
 
     @property
     def source_chain(self) -> Chain | None:
@@ -136,9 +171,9 @@ class SwapQuoteRequest(SwapSupportRequest):
     )
 
     # Swap parameters
-    slippage_tolerance: int = Field(
-        default=50,
-        description="Slippage tolerance in basis points (e.g., 50 = 0.5%)",
+    slippage_percentage: str = Field(
+        default="0.5",
+        description="Slippage tolerance as a percentage string (e.g., '0.5' = 0.5%)",
     )
     swap_type: SwapType = Field(
         default=SwapType.EXACT_INPUT,
@@ -156,26 +191,18 @@ class SwapQuoteRequest(SwapSupportRequest):
 
 
 class SwapQuote(BaseModel):
-    """Normalized swap quote response"""
+    provider: SwapProviderEnum = Field(description="Provider that generated this quote")
 
-    amount_in: str = Field(description="Input amount in smallest unit")
-    amount_in_formatted: str = Field(description="Input amount in readable format")
-    amount_in_usd: str | None = Field(default=None, description="Input amount in USD")
+    source_amount: str = Field(description="Source amount in smallest unit")
 
-    amount_out: str = Field(description="Expected output amount in smallest unit")
-    amount_out_formatted: str = Field(
-        description="Expected output amount in readable format"
-    )
-    amount_out_usd: str | None = Field(
-        default=None, description="Expected output amount in USD"
+    destination_amount: str = Field(description="Destination amount in smallest unit")
+
+    destination_amount_min: str = Field(
+        description="Minimum destination amount after slippage in smallest unit"
     )
 
-    min_amount_out: str = Field(
-        description="Minimum output amount after slippage in smallest unit"
-    )
-
-    estimated_time: int = Field(
-        description="Estimated time for swap completion in seconds"
+    estimated_time: int | None = Field(
+        default=None, description="Estimated time for swap completion in seconds"
     )
 
     deposit_address: str | None = Field(
@@ -198,13 +225,6 @@ class SwapQuote(BaseModel):
     )
 
 
-class SwapQuoteResponse(BaseModel):
-    """Provider-agnostic swap quote response"""
-
-    provider: SwapProviderEnum = Field(description="Provider that generated this quote")
-    quote: SwapQuote = Field(description="The swap quote details")
-
-
 class SwapTransactionDetails(BaseModel):
     coin: Coin = Field(description="Coin identifier")
     chain_id: str = Field(description="Chain identifier")
@@ -225,18 +245,12 @@ class SwapDetails(BaseModel):
     amount_in_formatted: str | None = Field(
         default=None, description="Actual input amount in readable format"
     )
-    amount_in_usd: str | None = Field(
-        default=None, description="Actual input amount in USD"
-    )
 
     amount_out: str | None = Field(
         default=None, description="Actual output amount in smallest unit"
     )
     amount_out_formatted: str | None = Field(
         default=None, description="Actual output amount in readable format"
-    )
-    amount_out_usd: str | None = Field(
-        default=None, description="Actual output amount in USD"
     )
 
     refunded_amount: str | None = Field(

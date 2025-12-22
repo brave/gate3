@@ -5,6 +5,8 @@ import pytest
 
 from app.api.common.models import Chain, Coin, TokenInfo, TokenSource, TokenType
 from app.api.swap.models import (
+    SwapError,
+    SwapErrorKind,
     SwapProviderEnum,
     SwapQuoteRequest,
     SwapStatusRequest,
@@ -293,8 +295,11 @@ async def test_handle_error_response(client):
     mock_response = MagicMock()
     mock_response.json.return_value = {"message": "Invalid swap parameters"}
 
-    with pytest.raises(ValueError, match="Invalid swap parameters"):
+    with pytest.raises(SwapError) as exc_info:
         client._handle_error_response(mock_response)
+
+    assert exc_info.value.message == "Invalid swap parameters"
+    assert exc_info.value.kind == SwapErrorKind.UNKNOWN
 
 
 @pytest.mark.asyncio
@@ -326,7 +331,7 @@ async def test_get_indicative_quote_success(
         destination_token_address=None,
         recipient="bc1qpjqsdj3qvfl4hzfa49p28ns9xkpl73cyg9exzn",
         amount="2037265",
-        slippage_tolerance=50,
+        slippage_percentage="0.5",
         swap_type=SwapType.EXACT_INPUT,
         sender="8eekKfUAGSJbq3CdA2TmHb8tKuyzd5gtEas3MYAtXzrT",
         provider=SwapProviderEnum.NEAR_INTENTS,
@@ -344,17 +349,15 @@ async def test_get_indicative_quote_success(
 
     # Verify response
     assert result.provider == SwapProviderEnum.NEAR_INTENTS
-    assert result.quote.amount_in == "2037265"
-    assert result.quote.amount_out == "711"
-    assert (
-        result.quote.deposit_address is None
-    )  # Indicative quote has no deposit address
+    assert result.source_amount == "2037265"
+    assert result.destination_amount == "711"
+    assert result.deposit_address is None  # Indicative quote has no deposit address
 
     # Verify price impact calculation
     # amountInUsd: 2.0373, amountOutUsd: 0.6546
     # price_impact = (0.6546 / 2.0373 - 1) * 100 ≈ -67.87
-    assert result.quote.price_impact is not None
-    assert result.quote.price_impact == pytest.approx(-67.87, abs=0.1)
+    assert result.price_impact is not None
+    assert result.price_impact == pytest.approx(-67.87, abs=0.1)
 
 
 @pytest.mark.asyncio
@@ -386,7 +389,7 @@ async def test_get_firm_quote_success(
         destination_token_address=None,
         recipient="bc1qpjqsdj3qvfl4hzfa49p28ns9xkpl73cyg9exzn",
         amount="2037265",
-        slippage_tolerance=50,
+        slippage_percentage="0.5",
         swap_type=SwapType.EXACT_INPUT,
         sender="8eekKfUAGSJbq3CdA2TmHb8tKuyzd5gtEas3MYAtXzrT",
         provider=SwapProviderEnum.NEAR_INTENTS,
@@ -404,18 +407,16 @@ async def test_get_firm_quote_success(
 
     # Verify response
     assert result.provider == SwapProviderEnum.NEAR_INTENTS
-    assert result.quote.amount_in == "2037265"
-    assert result.quote.amount_out == "711"
-    assert (
-        result.quote.deposit_address == "9RdSjLtfFJLvj6CAR4w7H7tUbv2kvwkkrYZuoojKDBkE"
-    )
-    assert result.quote.expires_at is not None
+    assert result.source_amount == "2037265"
+    assert result.destination_amount == "711"
+    assert result.deposit_address == "9RdSjLtfFJLvj6CAR4w7H7tUbv2kvwkkrYZuoojKDBkE"
+    assert result.expires_at is not None
 
     # Verify price impact calculation
     # amountInUsd: 2.0373, amountOutUsd: 0.6546
     # price_impact = (0.6546 / 2.0373 - 1) * 100 ≈ -67.87
-    assert result.quote.price_impact is not None
-    assert result.quote.price_impact == pytest.approx(-67.87, abs=0.1)
+    assert result.price_impact is not None
+    assert result.price_impact == pytest.approx(-67.87, abs=0.1)
 
 
 @pytest.mark.asyncio
@@ -443,7 +444,7 @@ async def test_get_quote_error_response(
         destination_token_address=None,
         recipient="bc1qpjqsdj3qvfl4hzfa49p28ns9xkpl73cyg9exzn",
         amount="2037265",
-        slippage_tolerance=50,
+        slippage_percentage="0.5",
         swap_type=SwapType.EXACT_INPUT,
         sender="8eekKfUAGSJbq3CdA2TmHb8tKuyzd5gtEas3MYAtXzrT",
         provider=SwapProviderEnum.NEAR_INTENTS,
@@ -451,8 +452,11 @@ async def test_get_quote_error_response(
     request.set_source_token(supported_tokens)
     request.set_destination_token(supported_tokens)
 
-    with pytest.raises(ValueError, match="Invalid swap parameters"):
+    with pytest.raises(SwapError) as exc_info:
         await client.get_indicative_quote(request)
+
+    assert exc_info.value.message == "Invalid swap parameters"
+    assert exc_info.value.kind == SwapErrorKind.UNKNOWN
 
 
 @pytest.mark.asyncio
@@ -534,8 +538,11 @@ async def test_post_submit_hook_error(client, mock_httpx_client):
         provider=SwapProviderEnum.NEAR_INTENTS,
     )
 
-    with pytest.raises(ValueError, match="Invalid transaction hash"):
+    with pytest.raises(SwapError) as exc_info:
         await client.post_submit_hook(request)
+
+    assert exc_info.value.message == "Invalid transaction hash"
+    assert exc_info.value.kind == SwapErrorKind.UNKNOWN
 
 
 @pytest.mark.asyncio
@@ -672,7 +679,7 @@ async def test_quote_price_impact_with_usd_values(
         destination_token_address=None,
         recipient="bc1qpjqsdj3qvfl4hzfa49p28ns9xkpl73cyg9exzn",
         amount="2037265",
-        slippage_tolerance=50,
+        slippage_percentage="0.5",
         swap_type=SwapType.EXACT_INPUT,
         sender="8eekKfUAGSJbq3CdA2TmHb8tKuyzd5gtEas3MYAtXzrT",
         provider=SwapProviderEnum.NEAR_INTENTS,
@@ -683,8 +690,8 @@ async def test_quote_price_impact_with_usd_values(
     result = await client.get_indicative_quote(request)
 
     # Verify price impact: (95.0 / 100.0 - 1) * 100 = -5.0
-    assert result.quote.price_impact is not None
-    assert result.quote.price_impact == pytest.approx(-5.0, abs=0.01)
+    assert result.price_impact is not None
+    assert result.price_impact == pytest.approx(-5.0, abs=0.01)
 
 
 @pytest.mark.asyncio
@@ -732,7 +739,7 @@ async def test_quote_price_impact_none_cases(
         destination_token_address=None,
         recipient="bc1qpjqsdj3qvfl4hzfa49p28ns9xkpl73cyg9exzn",
         amount="2037265",
-        slippage_tolerance=50,
+        slippage_percentage="0.5",
         swap_type=SwapType.EXACT_INPUT,
         sender="8eekKfUAGSJbq3CdA2TmHb8tKuyzd5gtEas3MYAtXzrT",
         provider=SwapProviderEnum.NEAR_INTENTS,
@@ -742,7 +749,7 @@ async def test_quote_price_impact_none_cases(
 
     result = await client.get_indicative_quote(request)
 
-    assert result.quote.price_impact is None
+    assert result.price_impact is None
 
 
 @pytest.mark.asyncio
@@ -777,7 +784,7 @@ async def test_quote_price_impact_positive_impact(
         destination_token_address=None,
         recipient="bc1qpjqsdj3qvfl4hzfa49p28ns9xkpl73cyg9exzn",
         amount="2037265",
-        slippage_tolerance=50,
+        slippage_percentage="0.5",
         swap_type=SwapType.EXACT_INPUT,
         sender="8eekKfUAGSJbq3CdA2TmHb8tKuyzd5gtEas3MYAtXzrT",
         provider=SwapProviderEnum.NEAR_INTENTS,
@@ -788,8 +795,8 @@ async def test_quote_price_impact_positive_impact(
     result = await client.get_indicative_quote(request)
 
     # Verify price impact: (105.0 / 100.0 - 1) * 100 = 5.0
-    assert result.quote.price_impact is not None
-    assert result.quote.price_impact == pytest.approx(5.0, abs=0.01)
+    assert result.price_impact is not None
+    assert result.price_impact == pytest.approx(5.0, abs=0.01)
 
 
 @pytest.mark.asyncio
@@ -810,8 +817,11 @@ async def test_get_status_error(client, mock_httpx_client, mock_supported_tokens
         provider=SwapProviderEnum.NEAR_INTENTS,
     )
 
-    with pytest.raises(ValueError, match="Swap not found"):
+    with pytest.raises(SwapError) as exc_info:
         await client.get_status(request)
+
+    assert exc_info.value.message == "Swap not found"
+    assert exc_info.value.kind == SwapErrorKind.UNKNOWN
 
 
 @pytest.mark.asyncio

@@ -16,6 +16,7 @@ from app.api.nft.routes import (
 from app.api.oauth.routes import router as oauth_router
 from app.api.pricing.routes import router as pricing_router
 from app.api.swap.routes import router as swap_router
+from app.api.swap.routes import setup_swap_error_handler
 from app.api.tokens.routes import router as tokens_router
 from app.config import settings
 from app.core.cache import Cache
@@ -55,7 +56,6 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 Instrumentator().instrument(app)
 
-
 # API routers
 app.include_router(base_router)
 app.include_router(pricing_router)
@@ -66,3 +66,6 @@ app.include_router(swap_router)
 
 # SimpleHash API adapter
 app.include_router(simplehash_nfts_router)
+
+# Register error handlers
+setup_swap_error_handler(app)

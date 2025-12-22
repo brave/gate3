@@ -7,7 +7,6 @@ from ...models import (
     SwapProviderEnum,
     SwapQuote,
     SwapQuoteRequest,
-    SwapQuoteResponse,
     SwapStatus,
     SwapStatusResponse,
     SwapTransactionDetails,
@@ -61,11 +60,16 @@ def to_near_intents_request(
     request.set_source_token(supported_tokens)
     request.set_destination_token(supported_tokens)
 
+    # Convert percentage string to basis points (bps) for near intents
+    # e.g., "0.5" -> 50 bps, "1.0" -> 100 bps
+    slippage_percentage = float(request.slippage_percentage)
+    slippage_bps = int(slippage_percentage * 100)
+
     return NearIntentsQuoteRequestBody(
         dry=dry,
         deposit_mode=NearIntentsDepositMode.SIMPLE,
         swap_type=request.swap_type,
-        slippage_tolerance=request.slippage_tolerance,
+        slippage_tolerance=slippage_bps,
         origin_asset_id=request.source_token.near_intents_asset_id,
         destination_asset_id=request.destination_token.near_intents_asset_id,
         amount=request.amount,
@@ -95,27 +99,22 @@ def _calculate_price_impact(quote_data: NearIntentsQuoteData) -> float | None:
     return None
 
 
-def from_near_intents_quote(response: NearIntentsQuoteResponse) -> SwapQuoteResponse:
+def from_near_intents_quote(response: NearIntentsQuoteResponse) -> SwapQuote:
     quote_data = response.quote
 
     price_impact = _calculate_price_impact(quote_data)
 
-    quote = SwapQuote(
-        amount_in=quote_data.amount_in,
-        amount_in_formatted=quote_data.amount_in_formatted,
-        amount_in_usd=quote_data.amount_in_usd,
-        amount_out=quote_data.amount_out,
-        amount_out_formatted=quote_data.amount_out_formatted,
-        amount_out_usd=quote_data.amount_out_usd,
-        min_amount_out=quote_data.min_amount_out,
+    return SwapQuote(
+        provider=SwapProviderEnum.NEAR_INTENTS,
+        source_amount=quote_data.amount_in,
+        destination_amount=quote_data.amount_out,
+        destination_amount_min=quote_data.min_amount_out,
         estimated_time=quote_data.time_estimate,
         deposit_address=quote_data.deposit_address,
         deposit_memo=quote_data.deposit_memo,
         expires_at=quote_data.deadline,
         price_impact=price_impact,
     )
-
-    return SwapQuoteResponse(provider=SwapProviderEnum.NEAR_INTENTS, quote=quote)
 
 
 def normalize_near_intents_status(status: str) -> SwapStatus:
@@ -184,10 +183,8 @@ def from_near_intents_status(
     swap_details = SwapDetails(
         amount_in=swap_details_data.amount_in,
         amount_in_formatted=swap_details_data.amount_in_formatted,
-        amount_in_usd=swap_details_data.amount_in_usd,
         amount_out=swap_details_data.amount_out,
         amount_out_formatted=swap_details_data.amount_out_formatted,
-        amount_out_usd=swap_details_data.amount_out_usd,
         refunded_amount=swap_details_data.refunded_amount,
         refunded_amount_formatted=swap_details_data.refunded_amount_formatted,
         transactions=transactions,

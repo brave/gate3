@@ -6,11 +6,11 @@ authors = [
 ]
 license = {text = "n"}
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.14"
 dependencies = [
-    "fastapi[standard] (>=0.121.0,<0.122.0)",
+    "fastapi[standard] (>=0.125.0,<0.126.0)",
     "pydantic-settings (>=2.9.1,<3.0.0)",
-    "redis[hiredis] (>=6.2.0,<7.0.0)",
+    "redis[hiredis] (>=7.1.0,<7.2.0)",
     "orjson (>=3.10.15,<4.0.0)",
     "httpx (>=0.28.1,<0.29.0)",
     "prometheus-client (>=0.23.1,<0.24.0)",
@@ -30,10 +30,10 @@ build-backend = "poetry.core.masonry.api"
 package-mode = false
 
 [tool.poetry.group.dev.dependencies]
-ruff = "0.14.3"
+ruff = "0.14.8"
 pytest = "9.0.2"
 pytest-asyncio = "1.3.0"
-pytest-cov = "6.3.0"
+pytest-cov = "7.0.0"
 respx = "0.22.0"
 
 [tool.pytest.ini_options]

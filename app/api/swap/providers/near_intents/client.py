@@ -7,9 +7,10 @@ from app.config import settings
 
 from ...cache import SupportedTokensCache
 from ...models import (
+    SwapError,
     SwapProviderEnum,
+    SwapQuote,
     SwapQuoteRequest,
-    SwapQuoteResponse,
     SwapStatusRequest,
     SwapStatusResponse,
     SwapSupportRequest,
@@ -27,6 +28,7 @@ from .transformations import (
     from_near_intents_token,
     to_near_intents_request,
 )
+from .utils import categorize_error
 
 logger = logging.getLogger(__name__)
 
@@ -77,13 +79,7 @@ class NearIntentsClient(BaseSwapProvider):
 
     @staticmethod
     def _is_address_equal(a: str | None, b: str | None) -> bool:
-        if a is None and b is None:
-            return True
-
-        if a is None or b is None:
-            return False
-
-        return a.lower() == b.lower()
+        return (a or "").lower() == (b or "").lower()
 
     async def has_support(self, request: SwapSupportRequest) -> bool:
         if not request.source_chain or not request.destination_chain:
@@ -117,13 +113,12 @@ class NearIntentsClient(BaseSwapProvider):
         return source_supported and destination_supported
 
     def _handle_error_response(self, response: httpx.Response) -> None:
-        """Raise ValueError with error message from NEAR Intents API"""
+        """Raise SwapError with categorized error message from NEAR Intents API"""
         error = NearIntentsError.model_validate(response.json())
-        raise ValueError(error.message)
+        kind = categorize_error(error.message)
+        raise SwapError(message=error.message, kind=kind)
 
-    async def _get_quote(
-        self, request: SwapQuoteRequest, dry: bool
-    ) -> SwapQuoteResponse:
+    async def _get_quote(self, request: SwapQuoteRequest, dry: bool) -> SwapQuote:
         """Internal method to get quote (indicative or firm)"""
         supported_tokens = await self.get_supported_tokens()
         near_request = to_near_intents_request(
@@ -145,12 +140,10 @@ class NearIntentsClient(BaseSwapProvider):
 
             self._handle_error_response(response)
 
-    async def get_indicative_quote(
-        self, request: SwapQuoteRequest
-    ) -> SwapQuoteResponse:
+    async def get_indicative_quote(self, request: SwapQuoteRequest) -> SwapQuote:
         return await self._get_quote(request, dry=True)
 
-    async def get_firm_quote(self, request: SwapQuoteRequest) -> SwapQuoteResponse:
+    async def get_firm_quote(self, request: SwapQuoteRequest) -> SwapQuote:
         return await self._get_quote(request, dry=False)
 
     async def post_submit_hook(self, request: SwapStatusRequest) -> None:

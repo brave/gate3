@@ -1,13 +1,16 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, FastAPI, Query, Request
+from fastapi.responses import JSONResponse
 
 from app.api.common.models import Coin
 from app.api.tokens.manager import TokenManager
 
 from .models import (
+    SwapError,
+    SwapErrorKind,
     SwapProviderEnum,
     SwapProviderInfo,
+    SwapQuote,
     SwapQuoteRequest,
-    SwapQuoteResponse,
     SwapStatusRequest,
     SwapStatusResponse,
     SwapSupportRequest,
@@ -15,6 +18,16 @@ from .models import (
 from .utils import get_or_select_provider_client, get_provider_client
 
 router = APIRouter(prefix="/api/swap")
+
+
+def setup_swap_error_handler(app: FastAPI):
+    async def handler(request: Request, exc: SwapError) -> JSONResponse:
+        return JSONResponse(
+            status_code=exc.status_code,
+            content=exc.as_dict(),
+        )
+
+    app.add_exception_handler(SwapError, handler)
 
 
 @router.get("/v1/providers", response_model=list[SwapProviderInfo])
@@ -82,20 +95,23 @@ async def get_supported_providers(
             if supported_providers
             else []
         )
-
+    except SwapError:
+        # Re-raise SwapError as-is
+        raise
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise SwapError(message=str(e), kind=SwapErrorKind.UNKNOWN, status_code=400)
     except Exception as e:
-        raise HTTPException(
+        raise SwapError(
+            message=f"Failed to check provider support: {str(e)}",
+            kind=SwapErrorKind.UNKNOWN,
             status_code=500,
-            detail=f"Failed to check provider support: {str(e)}",
         )
 
 
-@router.post("/v1/quote/indicative", response_model=SwapQuoteResponse)
+@router.post("/v1/quote/indicative", response_model=SwapQuote)
 async def get_indicative_quote(
     request: SwapQuoteRequest, token_manager: TokenManager = Depends(TokenManager)
-) -> SwapQuoteResponse:
+) -> SwapQuote:
     """
     Request an indicative quote without creating a deposit address.
 
@@ -109,19 +125,23 @@ async def get_indicative_quote(
             request, token_manager, allow_auto=True
         )
         return await provider.get_indicative_quote(request)
+    except SwapError:
+        # Re-raise SwapError as-is (from provider)
+        raise
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise SwapError(message=str(e), kind=SwapErrorKind.UNKNOWN, status_code=400)
     except Exception as e:
-        raise HTTPException(
+        raise SwapError(
+            message=f"Failed to get indicative quote: {str(e)}",
+            kind=SwapErrorKind.UNKNOWN,
             status_code=500,
-            detail=f"Failed to get indicative quote: {str(e)}",
         )
 
 
-@router.post("/v1/quote/firm", response_model=SwapQuoteResponse)
+@router.post("/v1/quote/firm", response_model=SwapQuote)
 async def get_firm_quote(
     request: SwapQuoteRequest, token_manager: TokenManager = Depends(TokenManager)
-) -> SwapQuoteResponse:
+) -> SwapQuote:
     """
     Request a firm quote with a deposit address.
 
@@ -142,12 +162,16 @@ async def get_firm_quote(
             request, token_manager, allow_auto=False
         )
         return await provider.get_firm_quote(request)
+    except SwapError:
+        # Re-raise SwapError as-is (from provider)
+        raise
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise SwapError(message=str(e), kind=SwapErrorKind.UNKNOWN, status_code=400)
     except Exception as e:
-        raise HTTPException(
+        raise SwapError(
+            message=f"Failed to get firm quote: {str(e)}",
+            kind=SwapErrorKind.UNKNOWN,
             status_code=500,
-            detail=f"Failed to get firm quote: {str(e)}",
         )
 
 
@@ -172,12 +196,16 @@ async def post_submit_hook(
         )
         await client.post_submit_hook(request)
         return {}
+    except SwapError:
+        # Re-raise SwapError as-is (from provider)
+        raise
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise SwapError(message=str(e), kind=SwapErrorKind.UNKNOWN, status_code=400)
     except Exception as e:
-        raise HTTPException(
+        raise SwapError(
+            message=f"Failed to execute post-submit hook: {str(e)}",
+            kind=SwapErrorKind.UNKNOWN,
             status_code=500,
-            detail=f"Failed to execute post-submit hook: {str(e)}",
         )
 
 
@@ -207,10 +235,14 @@ async def get_swap_status(
             request=request, token_manager=token_manager, allow_auto=False
         )
         return await client.get_status(request)
+    except SwapError:
+        # Re-raise SwapError as-is (from provider)
+        raise
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise SwapError(message=str(e), kind=SwapErrorKind.UNKNOWN, status_code=404)
     except Exception as e:
-        raise HTTPException(
+        raise SwapError(
+            message=f"Failed to get swap status: {str(e)}",
+            kind=SwapErrorKind.UNKNOWN,
             status_code=500,
-            detail=f"Failed to get swap status: {str(e)}",
         )
