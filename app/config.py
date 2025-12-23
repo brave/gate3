@@ -1,4 +1,8 @@
+import os
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from app.api.oauth.config import OAuthConfig
 
 
 class Settings(BaseSettings):
@@ -9,6 +13,10 @@ class Settings(BaseSettings):
     COINGECKO_API_KEY: str | None = None
     ALCHEMY_API_KEY: str | None = None
     NEAR_INTENTS_JWT: str | None = None
+
+    # OAuth Provider credentials (nested)
+    # Automatically uses OAUTH_ prefix from OAuthConfig
+    oauth: OAuthConfig
 
     # Database config
     REDIS_HOST: str = "redis-master"
@@ -23,7 +31,10 @@ class Settings(BaseSettings):
     SENTRY_DSN: str | None = None
     PROMETHEUS_PORT: int = 8090
 
-    model_config = SettingsConfigDict(env_file=".env")
+    model_config = SettingsConfigDict(
+        env_file=os.getenv("ENV_FILE", ".env"),
+        env_nested_delimiter="__",
+    )
 
 
 settings = Settings()
