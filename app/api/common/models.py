@@ -47,6 +47,11 @@ class _c(BaseModel):
     has_nft_support: bool
 
 
+class ChainSpec(BaseModel):
+    coin: Coin = Field(description="Coin identifier")
+    chain_id: str = Field(description="Chain identifier")
+
+
 class Chain(Enum):
     # EVM chains
     ETHEREUM = _c(
@@ -178,8 +183,17 @@ class Chain(Enum):
                 return chain
         return None
 
-    def __repr__(self):
+    def to_spec(self) -> ChainSpec:
+        return ChainSpec(coin=self.coin, chain_id=self.chain_id)
+
+    def __eq__(self, other: Chain) -> bool:
+        return self.coin == other.coin and self.chain_id == other.chain_id
+
+    def __str__(self):
         return f"<{self.__class__.__name__}.{self.name}: coin={self.coin.value} chain_id={self.chain_id}>"
+
+    def __repr__(self):
+        return self.__str__()
 
 
 class TokenSource(str, Enum):
@@ -215,3 +229,6 @@ class TokenInfo(BaseModel):
     @property
     def chain(self) -> Chain | None:
         return Chain.get(self.coin.value, self.chain_id)
+
+    def is_native(self) -> bool:
+        return not self.address
