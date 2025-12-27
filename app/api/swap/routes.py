@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, FastAPI, Query, Request
 from fastapi.responses import JSONResponse
 
-from app.api.common.models import Coin
+from app.api.common.models import Coin, Tags
 from app.api.tokens.manager import TokenManager
 
 from .models import (
@@ -17,7 +17,7 @@ from .models import (
 )
 from .utils import get_or_select_provider_client, get_provider_client
 
-router = APIRouter(prefix="/api/swap")
+router = APIRouter(prefix="/api/swap", tags=[Tags.SWAP])
 
 
 def setup_swap_error_handler(app: FastAPI):

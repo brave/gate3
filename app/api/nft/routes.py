@@ -1,7 +1,7 @@
 import httpx
 from fastapi import APIRouter, Path, Query
 
-from app.api.common.models import Chain, Coin
+from app.api.common.models import Chain, Coin, Tags
 from app.api.common.utils import is_evm_address, is_solana_address
 from app.api.nft.models import (
     AlchemyNFT,
@@ -21,8 +21,8 @@ from app.api.nft.models import (
 )
 from app.config import settings
 
-router = APIRouter(prefix="/api/nft")
-simplehash_router = APIRouter(prefix="/simplehash/api/v0")
+router = APIRouter(prefix="/api/nft", tags=[Tags.NFT])
+simplehash_router = APIRouter(prefix="/simplehash/api/v0", tags=[Tags.NFT])
 
 # Chain mapping dictionaries
 _SIMPLEHASH_TO_CHAIN = {chain.simplehash_id: chain for chain in Chain}

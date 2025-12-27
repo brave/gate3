@@ -1,9 +1,9 @@
 from fastapi import APIRouter
 
-from app.api.common.models import HealthStatus, PingResponse
+from app.api.common.models import HealthStatus, PingResponse, Tags
 from app.core.cache import Cache
 
-router = APIRouter(prefix="/api")
+router = APIRouter(prefix="/api", tags=[Tags.HEALTH])
 
 
 @router.get("/ping", response_model=PingResponse)

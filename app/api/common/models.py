@@ -14,6 +14,17 @@ class HealthStatus(str, Enum):
     KO = "KO"
 
 
+class Tags(str, Enum):
+    """API documentation tags for grouping endpoints in Swagger UI."""
+
+    HEALTH = "Health"
+    NFT = "NFT"
+    OAUTH = "OAuth Proxy"
+    PRICING = "Pricing"
+    SWAP = "Swap"
+    TOKENS = "Tokens"
+
+
 class PingResponse(BaseModel):
     redis: HealthStatus
 
