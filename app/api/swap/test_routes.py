@@ -13,9 +13,19 @@ client = TestClient(app)
 
 
 @pytest.fixture
-def mock_get_or_select_provider_client():
+def mock_get_provider_client_for_request():
     with patch(
-        "app.api.swap.routes.get_or_select_provider_client", new_callable=AsyncMock
+        "app.api.swap.routes.get_provider_client_for_request",
+        new_callable=AsyncMock,
+    ) as mock:
+        yield mock
+
+
+@pytest.fixture
+def mock_get_all_indicative_routes():
+    with patch(
+        "app.api.swap.routes.get_all_indicative_routes",
+        new_callable=AsyncMock,
     ) as mock:
         yield mock
 
@@ -45,22 +55,24 @@ MOCK_REQUEST_DATA = {
     "amount": "1000000",
     "slippagePercentage": "0.5",
     "swapType": "EXACT_INPUT",
-    "sender": "8eekKfUAGSJbq3CdA2TmHb8tKuyzd5gtEas3MYAtXzrT",
+    "refundTo": "8eekKfUAGSJbq3CdA2TmHb8tKuyzd5gtEas3MYAtXzrT",
 }
 
 
 def test_indicative_quote_insufficient_liquidity_error(
-    mock_get_or_select_provider_client, mock_provider_client
+    mock_get_all_indicative_routes,
 ):
     # Setup mock to raise SwapError with INSUFFICIENT_LIQUIDITY kind
     error = SwapError(
         message="Amount is too low for bridge, try at least 1264000",
         kind=SwapErrorKind.INSUFFICIENT_LIQUIDITY,
     )
-    mock_provider_client.get_indicative_quote = AsyncMock(side_effect=error)
-    mock_get_or_select_provider_client.return_value = mock_provider_client
+    mock_get_all_indicative_routes.side_effect = error
 
-    response = client.post("/api/swap/v1/quote/indicative", json=MOCK_REQUEST_DATA)
+    response = client.post(
+        "/api/swap/v1/quote/indicative",
+        json=MOCK_REQUEST_DATA,
+    )
 
     assert response.status_code == 400
     error_data = response.json()
@@ -69,14 +81,16 @@ def test_indicative_quote_insufficient_liquidity_error(
 
 
 def test_firm_quote_insufficient_liquidity_error(
-    mock_get_or_select_provider_client, mock_provider_client, mock_token_manager
+    mock_get_provider_client_for_request,
+    mock_provider_client,
+    mock_token_manager,
 ):
     error = SwapError(
         message="Amount is too small for this swap",
         kind=SwapErrorKind.INSUFFICIENT_LIQUIDITY,
     )
-    mock_provider_client.get_firm_quote = AsyncMock(side_effect=error)
-    mock_get_or_select_provider_client.return_value = mock_provider_client
+    mock_provider_client.get_firm_route = AsyncMock(side_effect=error)
+    mock_get_provider_client_for_request.return_value = mock_provider_client
 
     response = client.post("/api/swap/v1/quote/firm", json=MOCK_REQUEST_DATA)
 
@@ -87,16 +101,18 @@ def test_firm_quote_insufficient_liquidity_error(
 
 
 def test_indicative_quote_unknown_error(
-    mock_get_or_select_provider_client, mock_provider_client
+    mock_get_all_indicative_routes,
 ):
     error = SwapError(
         message="Unexpected error occurred",
         kind=SwapErrorKind.UNKNOWN,
     )
-    mock_provider_client.get_indicative_quote = AsyncMock(side_effect=error)
-    mock_get_or_select_provider_client.return_value = mock_provider_client
+    mock_get_all_indicative_routes.side_effect = error
 
-    response = client.post("/api/swap/v1/quote/indicative", json=MOCK_REQUEST_DATA)
+    response = client.post(
+        "/api/swap/v1/quote/indicative",
+        json=MOCK_REQUEST_DATA,
+    )
 
     assert response.status_code == 400
     error_data = response.json()
@@ -105,14 +121,16 @@ def test_indicative_quote_unknown_error(
 
 
 def test_firm_quote_unknown_error(
-    mock_get_or_select_provider_client, mock_provider_client, mock_token_manager
+    mock_get_provider_client_for_request,
+    mock_provider_client,
+    mock_token_manager,
 ):
     error = SwapError(
         message="An unexpected error happened",
         kind=SwapErrorKind.UNKNOWN,
     )
-    mock_provider_client.get_firm_quote = AsyncMock(side_effect=error)
-    mock_get_or_select_provider_client.return_value = mock_provider_client
+    mock_provider_client.get_firm_route = AsyncMock(side_effect=error)
+    mock_get_provider_client_for_request.return_value = mock_provider_client
 
     response = client.post("/api/swap/v1/quote/firm", json=MOCK_REQUEST_DATA)
 

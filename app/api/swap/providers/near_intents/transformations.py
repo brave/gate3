@@ -1,16 +1,24 @@
-from datetime import datetime, timedelta, timezone
+import uuid
+from datetime import UTC, datetime, timedelta
 
-from app.api.common.models import Chain, TokenInfo, TokenSource, TokenType
+from app.api.common.models import Chain, Coin, TokenInfo, TokenSource, TokenType
 
 from ...models import (
+    BitcoinTransactionParams,
+    EvmTransactionParams,
+    SolanaTransactionParams,
     SwapDetails,
     SwapProviderEnum,
-    SwapQuote,
     SwapQuoteRequest,
+    SwapRoute,
+    SwapRouteStep,
     SwapStatus,
     SwapStatusResponse,
+    SwapStepToken,
     SwapTransactionDetails,
+    TransactionParams,
 )
+from .constants import NEAR_INTENTS_TOOL
 from .models import (
     NearIntentsDepositMode,
     NearIntentsQuoteData,
@@ -19,6 +27,7 @@ from .models import (
     NearIntentsStatusResponse,
     NearIntentsToken,
 )
+from .utils import calculate_price_impact, encode_erc20_transfer
 
 
 def from_near_intents_token(token: NearIntentsToken) -> TokenInfo | None:
@@ -73,47 +82,177 @@ def to_near_intents_request(
         origin_asset_id=request.source_token.near_intents_asset_id,
         destination_asset_id=request.destination_token.near_intents_asset_id,
         amount=request.amount,
-        refund_to=request.sender,
+        refund_to=request.refund_to,
         recipient=request.recipient,
-        deadline=(datetime.now(timezone.utc) + timedelta(minutes=10)).strftime(
-            "%Y-%m-%dT%H:%M:%SZ"
+        deadline=(datetime.now(UTC) + timedelta(minutes=10)).strftime(
+            "%Y-%m-%dT%H:%M:%SZ",
         ),  # ISO 8601 format with Z suffix (UTC)
     )
 
 
-def _calculate_price_impact(quote_data: NearIntentsQuoteData) -> float | None:
-    if not quote_data.amount_in_usd or not quote_data.amount_out_usd:
+def _build_transaction_params(
+    quote_data: NearIntentsQuoteData,
+    request: SwapQuoteRequest,
+) -> TransactionParams | None:
+    """Build transaction parameters for a firm quote.
+
+    This function constructs the appropriate transaction params based on the
+    source chain type (EVM, Solana, or Bitcoin) and whether it's a native
+    or token transfer.
+
+    Args:
+        quote_data: The quote data containing deposit address and amounts
+        request: The original swap quote request containing chain and token info
+
+    Returns:
+        TransactionParams if this is a firm quote (has deposit_address), None otherwise
+
+    """
+    # Only populate transaction params for firm quotes
+    if not quote_data.deposit_address:
         return None
 
-    try:
-        amount_in = float(quote_data.amount_in_usd)
-        amount_out = float(quote_data.amount_out_usd)
-        if amount_in > 0:
-            # Price impact: (amount_out_usd / amount_in_usd - 1) * 100
-            # Negative values indicate loss due to fees/slippage
-            return ((amount_out / amount_in) - 1) * 100
-    except (ValueError, TypeError):
-        # If conversion fails, return None
-        pass
+    if not request.source_chain or not request.source_token:
+        return None
 
-    return None
+    source_chain = request.source_chain
+    source_token = request.source_token
+    deposit_address = quote_data.deposit_address
+    source_amount = quote_data.amount_in
+    refund_to = request.refund_to
+
+    chain_spec = source_chain.to_spec()
+
+    # Build transaction params based on chain
+    if source_chain == Chain.BITCOIN:
+        # Bitcoin transaction
+        return TransactionParams(
+            bitcoin=BitcoinTransactionParams(
+                chain=chain_spec,
+                to=deposit_address,
+                value=source_amount,
+                refund_to=refund_to,
+            ),
+        )
+    if source_chain == Chain.SOLANA:
+        # Solana transaction
+        if source_token.is_native():
+            # Native SOL transfer
+            return TransactionParams(
+                solana=SolanaTransactionParams(
+                    chain=chain_spec,
+                    from_address=refund_to,
+                    to=deposit_address,
+                    value=source_amount,  # Using lamports alias
+                ),
+            )
+        # SPL token transfer
+        return TransactionParams(
+            solana=SolanaTransactionParams(
+                chain=chain_spec,
+                from_address=refund_to,
+                to=deposit_address,
+                value="0",  # No native SOL value for token transfers
+                spl_token_mint=source_token.address,
+                spl_token_amount=source_amount,
+                decimals=source_token.decimals,
+            ),
+        )
+    if source_chain.coin == Coin.ETH:
+        # EVM transaction
+        if source_token.is_native():
+            # Native ETH/chain token transfer
+            return TransactionParams(
+                evm=EvmTransactionParams(
+                    chain=chain_spec,
+                    from_address=refund_to,
+                    to=deposit_address,
+                    value=source_amount,
+                    data="0x",  # Empty data for native transfers
+                ),
+            )
+        # ERC20 token transfer
+        # Encode the transfer function call: transfer(deposit_address, amount)
+        transfer_data = encode_erc20_transfer(deposit_address, source_amount)
+
+        return TransactionParams(
+            evm=EvmTransactionParams(
+                chain=chain_spec,
+                from_address=refund_to,
+                to=source_token.address,  # Token contract address
+                value="0",  # No native value for token transfers
+                data=transfer_data,  # Encoded transfer() call
+            ),
+        )
+
+    # Unsupported chain
+    raise NotImplementedError(f"Unsupported chain: {source_chain}")
 
 
-def from_near_intents_quote(response: NearIntentsQuoteResponse) -> SwapQuote:
+def _token_info_to_step_token(token: TokenInfo) -> SwapStepToken:
+    """Convert TokenInfo to SwapStepToken for route steps."""
+    return SwapStepToken(
+        coin=token.coin,
+        chain_id=token.chain_id,
+        contract_address=token.address,
+        symbol=token.symbol,
+        decimals=token.decimals,
+        logo=token.logo,
+    )
+
+
+def from_near_intents_quote_to_route(
+    response: NearIntentsQuoteResponse,
+    request: SwapQuoteRequest,
+    firm: bool,
+    has_post_submit_hook: bool,
+    requires_token_allowance: bool,
+    requires_firm_route: bool,
+) -> SwapRoute:
+    """Convert NEAR Intents quote response to SwapRoute with steps."""
     quote_data = response.quote
+    price_impact = calculate_price_impact(quote_data)
 
-    price_impact = _calculate_price_impact(quote_data)
+    # Build transaction params for firm quotes
+    transaction_params = None
+    if firm:
+        transaction_params = _build_transaction_params(quote_data, request)
 
-    return SwapQuote(
+    # Get source and destination tokens
+    source_token = request.source_token
+    destination_token = request.destination_token
+
+    if not source_token or not destination_token:
+        raise ValueError("Source and destination tokens must be set")
+
+    # Create single step for NEAR Intents (it handles the route internally)
+    step = SwapRouteStep(
+        source_token=_token_info_to_step_token(source_token),
+        source_amount=quote_data.amount_in,
+        destination_token=_token_info_to_step_token(destination_token),
+        destination_amount=quote_data.amount_out,
+        tool=NEAR_INTENTS_TOOL,
+    )
+
+    # Generate route ID
+    route_id = f"ni_{uuid.uuid4().hex[:12]}"
+
+    return SwapRoute(
+        id=route_id,
         provider=SwapProviderEnum.NEAR_INTENTS,
+        steps=[step],
         source_amount=quote_data.amount_in,
         destination_amount=quote_data.amount_out,
         destination_amount_min=quote_data.min_amount_out,
         estimated_time=quote_data.time_estimate,
+        price_impact=price_impact,
         deposit_address=quote_data.deposit_address,
         deposit_memo=quote_data.deposit_memo,
         expires_at=quote_data.deadline,
-        price_impact=price_impact,
+        transaction_params=transaction_params,
+        has_post_submit_hook=has_post_submit_hook,
+        requires_token_allowance=requires_token_allowance,
+        requires_firm_route=requires_firm_route,
     )
 
 
@@ -131,11 +270,13 @@ def normalize_near_intents_status(status: str) -> SwapStatus:
 
 
 def _find_token_by_asset_id(
-    asset_id: str, supported_tokens: list[TokenInfo]
+    asset_id: str,
+    supported_tokens: list[TokenInfo],
 ) -> TokenInfo | None:
     """Find a token by its NEAR Intents asset ID."""
     return next(
-        (t for t in supported_tokens if t.near_intents_asset_id == asset_id), None
+        (t for t in supported_tokens if t.near_intents_asset_id == asset_id),
+        None,
     )
 
 
@@ -144,10 +285,12 @@ def from_near_intents_status(
     supported_tokens: list[TokenInfo],
 ) -> SwapStatusResponse:
     origin_asset = _find_token_by_asset_id(
-        response.quote_response.quote_request.origin_asset_id, supported_tokens
+        response.quote_response.quote_request.origin_asset_id,
+        supported_tokens,
     )
     destination_asset = _find_token_by_asset_id(
-        response.quote_response.quote_request.destination_asset_id, supported_tokens
+        response.quote_response.quote_request.destination_asset_id,
+        supported_tokens,
     )
 
     if not origin_asset or not destination_asset:
@@ -166,7 +309,7 @@ def from_near_intents_status(
                 chain_id=origin_asset.chain_id,
                 hash=tx.hash,
                 explorer_url=tx.explorer_url,
-            )
+            ),
         )
 
     # Add destination chain transactions
@@ -177,7 +320,7 @@ def from_near_intents_status(
                 chain_id=destination_asset.chain_id,
                 hash=tx.hash,
                 explorer_url=tx.explorer_url,
-            )
+            ),
         )
 
     swap_details = SwapDetails(
