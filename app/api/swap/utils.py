@@ -3,7 +3,14 @@ import logging
 
 from app.api.tokens.manager import TokenManager
 
-from .models import SwapProviderEnum, SwapQuoteRequest, SwapRoute, SwapSupportRequest
+from .models import (
+    RoutePriority,
+    SwapProviderEnum,
+    SwapQuoteRequest,
+    SwapRoute,
+    SwapSupportRequest,
+    SwapType,
+)
 from .providers.base import BaseSwapProvider
 from .providers.near_intents.client import NearIntentsClient
 
@@ -161,7 +168,38 @@ async def get_all_indicative_routes(
             "No provider supports this swap. Please check your token pair and chains.",
         )
 
-    # Sort by destination_amount descending (best rate first)
-    all_routes.sort(key=lambda r: int(r.destination_amount), reverse=True)
+    return sort_routes(all_routes, request.route_priority, request.swap_type)
 
-    return all_routes
+
+def sort_routes(
+    routes: list[SwapRoute],
+    priority: RoutePriority,
+    swap_type: SwapType = SwapType.EXACT_INPUT,
+) -> list[SwapRoute]:
+    """Sort routes based on the given priority, with tie-breaking by the other priority.
+
+    Args:
+        routes: List of routes to sort
+        priority: Primary sort - CHEAPEST or FASTEST
+        swap_type: EXACT_INPUT (cheapest = highest output) or EXACT_OUTPUT (cheapest = lowest input)
+
+    Returns:
+        Sorted list of routes
+    """
+
+    def cheapest_key(r: SwapRoute) -> int:
+        """Lower is better for sorting (will negate for EXACT_INPUT)."""
+        if swap_type == SwapType.EXACT_OUTPUT:
+            return int(r.source_amount)  # Lower input is better
+        return -int(r.destination_amount)  # Higher output is better (negated)
+
+    def fastest_key(r: SwapRoute) -> tuple[bool, int]:
+        """Returns (is_none, time) - None values sort last."""
+        return (r.estimated_time is None, r.estimated_time or 0)
+
+    if priority == RoutePriority.FASTEST:
+        # Primary: fastest, Secondary: cheapest
+        return sorted(routes, key=lambda r: (fastest_key(r), cheapest_key(r)))
+
+    # CHEAPEST: Primary: cheapest, Secondary: fastest
+    return sorted(routes, key=lambda r: (cheapest_key(r), fastest_key(r)))

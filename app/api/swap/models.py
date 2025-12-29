@@ -104,6 +104,11 @@ class SwapType(str, Enum):
     EXACT_OUTPUT = "EXACT_OUTPUT"
 
 
+class RoutePriority(str, Enum):
+    FASTEST = "FASTEST"
+    CHEAPEST = "CHEAPEST"
+
+
 class SwapStatus(str, Enum):
     PENDING = "PENDING"
     PROCESSING = "PROCESSING"
@@ -212,6 +217,16 @@ class SwapQuoteRequest(SwapSupportRequest):
     provider: SwapProviderEnum | None = Field(
         default=None,
         description="Specific provider to use (None for automatic selection)",
+    )
+
+    # Route priority for sorting
+    route_priority: RoutePriority = Field(
+        default=RoutePriority.CHEAPEST,
+        description=(
+            "Priority for sorting routes. "
+            "CHEAPEST: best rate first (highest output for EXACT_INPUT, lowest input for EXACT_OUTPUT). "
+            "FASTEST: lowest estimated time first. Ties are broken by the other priority."
+        ),
     )
 
 
@@ -334,7 +349,7 @@ class SwapRoute(SwapBaseModel):
 
     estimated_time: int | None = Field(
         default=None,
-        description="Total estimated time in seconds",
+        description="Total estimated time in seconds (0 indicates an atomic swap)",
     )
     price_impact: float | None = Field(
         default=None,
