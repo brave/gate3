@@ -3,10 +3,9 @@ import logging
 import httpx
 
 from app.api.common.models import TokenInfo
-from app.config import settings
-
-from ...cache import SupportedTokensCache
-from ...models import (
+from app.api.common.utils import is_address_equal
+from app.api.swap.cache import SupportedTokensCache
+from app.api.swap.models import (
     SwapError,
     SwapProviderEnum,
     SwapQuoteRequest,
@@ -15,7 +14,9 @@ from ...models import (
     SwapStatusResponse,
     SwapSupportRequest,
 )
-from ..base import BaseSwapProvider
+from app.api.swap.providers.base import BaseSwapProvider
+from app.config import settings
+
 from .models import (
     NearIntentsError,
     NearIntentsQuoteResponse,
@@ -92,10 +93,6 @@ class NearIntentsClient(BaseSwapProvider):
             await SupportedTokensCache.set(self.provider_id, tokens)
             return tokens
 
-    @staticmethod
-    def _is_address_equal(a: str | None, b: str | None) -> bool:
-        return (a or "").lower() == (b or "").lower()
-
     async def has_support(self, request: SwapSupportRequest) -> bool:
         if not request.source_chain or not request.destination_chain:
             return False
@@ -113,7 +110,7 @@ class NearIntentsClient(BaseSwapProvider):
         source_supported = any(
             t.coin == request.source_coin
             and t.chain_id == request.source_chain_id
-            and self._is_address_equal(t.address, request.source_token_address)
+            and is_address_equal(t.address, request.source_token_address)
             for t in supported_tokens
         )
 
@@ -121,7 +118,7 @@ class NearIntentsClient(BaseSwapProvider):
         destination_supported = any(
             t.coin == request.destination_coin
             and t.chain_id == request.destination_chain_id
-            and self._is_address_equal(t.address, request.destination_token_address)
+            and is_address_equal(t.address, request.destination_token_address)
             for t in supported_tokens
         )
 
@@ -145,7 +142,6 @@ class NearIntentsClient(BaseSwapProvider):
             dry=dry,
             supported_tokens=supported_tokens,
         )
-
         payload = near_request.model_dump(by_alias=True, mode="json")
 
         async with self._create_client() as client:

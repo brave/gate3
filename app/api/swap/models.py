@@ -5,6 +5,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from pydantic.alias_generators import to_camel
 
 from app.api.common.models import Chain, ChainSpec, Coin, TokenInfo
+from app.api.common.utils import is_address_equal
 
 
 # ============================================================================
@@ -156,7 +157,7 @@ class SwapSupportRequest(SwapRequestBase):
             if (
                 token.coin == self.source_coin
                 and token.chain_id == self.source_chain_id
-                and token.address == self.source_token_address
+                and is_address_equal(token.address, self.source_token_address)
             ):
                 self._source_token = token
                 break
@@ -166,7 +167,7 @@ class SwapSupportRequest(SwapRequestBase):
             if (
                 token.coin == self.destination_coin
                 and token.chain_id == self.destination_chain_id
-                and token.address == self.destination_token_address
+                and is_address_equal(token.address, self.destination_token_address)
             ):
                 self._destination_token = token
                 break
