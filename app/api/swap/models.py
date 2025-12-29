@@ -7,6 +7,20 @@ from pydantic.alias_generators import to_camel
 from app.api.common.models import Chain, ChainSpec, Coin, TokenInfo
 from app.api.common.utils import is_address_equal
 
+# ============================================================================
+# Base Models
+# ============================================================================
+
+
+class SwapBaseModel(BaseModel):
+    """Base model with camelCase serialization for API responses and requests."""
+
+    model_config = ConfigDict(
+        alias_generator=to_camel,
+        populate_by_name=True,
+        serialize_by_alias=True,
+    )
+
 
 # ============================================================================
 # Error Handling
@@ -79,7 +93,7 @@ class SwapProviderEnum(str, Enum):
         return mapping[self]
 
 
-class SwapProviderInfo(BaseModel):
+class SwapProviderInfo(SwapBaseModel):
     id: SwapProviderEnum = Field(description="Provider identifier")
     name: str = Field(description="Provider display name")
     logo: str | None = Field(None, description="Provider logo URL")
@@ -107,13 +121,7 @@ class SwapStatus(str, Enum):
 # ============================================================================
 
 
-class SwapRequestBase(BaseModel):
-    """Base model for swap request models used as route parameters."""
-
-    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
-
-
-class SwapSupportRequest(SwapRequestBase):
+class SwapSupportRequest(SwapBaseModel):
     source_coin: Coin = Field(description="Source coin type")
     source_chain_id: str = Field(description="Source chain ID")
     source_token_address: str | None = Field(
@@ -207,7 +215,7 @@ class SwapQuoteRequest(SwapSupportRequest):
     )
 
 
-class SwapStatusRequest(SwapRequestBase):
+class SwapStatusRequest(SwapBaseModel):
     tx_hash: str = Field(description="Transaction hash of the swap")
     deposit_address: str = Field(description="Deposit address of the swap")
     deposit_memo: str | None = Field(
@@ -222,17 +230,15 @@ class SwapStatusRequest(SwapRequestBase):
 # ============================================================================
 
 
-class EvmTransactionParams(BaseModel):
+class EvmTransactionParams(SwapBaseModel):
     chain: ChainSpec
     from_address: str = Field(alias="from")
     to: str
     value: str
     data: str
 
-    model_config = ConfigDict(populate_by_name=True)
 
-
-class SolanaTransactionParams(BaseModel):
+class SolanaTransactionParams(SwapBaseModel):
     chain: ChainSpec
     from_address: str = Field(alias="from")
     to: str
@@ -246,17 +252,15 @@ class SolanaTransactionParams(BaseModel):
     spl_token_amount: str | None = Field(default=None)
     decimals: int | None = Field(default=None)  # Needed for TransferChecked instruction
 
-    model_config = ConfigDict(populate_by_name=True)
 
-
-class BitcoinTransactionParams(BaseModel):
+class BitcoinTransactionParams(SwapBaseModel):
     chain: ChainSpec
     to: str
     value: str
     refund_to: str
 
 
-class TransactionParams(BaseModel):
+class TransactionParams(SwapBaseModel):
     evm: EvmTransactionParams | None = Field(default=None)
     solana: SolanaTransactionParams | None = Field(default=None)
     bitcoin: BitcoinTransactionParams | None = Field(default=None)
@@ -277,7 +281,7 @@ class TransactionParams(BaseModel):
 # ============================================================================
 
 
-class SwapStepToken(BaseModel):
+class SwapStepToken(SwapBaseModel):
     """Token info for swap step source/destination."""
 
     coin: Coin = Field(description="Coin type (ETH, SOL, BTC, etc.)")
@@ -291,14 +295,14 @@ class SwapStepToken(BaseModel):
     logo: str | None = Field(default=None, description="Token logo URL")
 
 
-class SwapTool(BaseModel):
+class SwapTool(SwapBaseModel):
     """DEX/protocol used for a swap step."""
 
     name: str = Field(description="Display name (e.g., 'Uniswap', 'Jupiter')")
     logo: str | None = Field(default=None, description="Logo URL")
 
 
-class SwapRouteStep(BaseModel):
+class SwapRouteStep(SwapBaseModel):
     """A single hop in a multi-hop swap route."""
 
     source_token: SwapStepToken = Field(description="Source token info")
@@ -310,7 +314,7 @@ class SwapRouteStep(BaseModel):
     tool: SwapTool = Field(description="DEX/protocol used for this step")
 
 
-class SwapRoute(BaseModel):
+class SwapRoute(SwapBaseModel):
     """A complete swap route with one or more steps."""
 
     id: str = Field(description="Unique route identifier")
@@ -367,13 +371,13 @@ class SwapRoute(BaseModel):
     )
 
 
-class SwapQuote(BaseModel):
+class SwapQuote(SwapBaseModel):
     """Response containing multiple route options."""
 
     routes: list[SwapRoute] = Field(description="Available swap routes")
 
 
-class SwapTransactionDetails(BaseModel):
+class SwapTransactionDetails(SwapBaseModel):
     coin: Coin = Field(description="Coin identifier")
     chain_id: str = Field(description="Chain identifier")
     hash: str = Field(description="Transaction hash")
@@ -387,7 +391,7 @@ class SwapTransactionDetails(BaseModel):
         return Chain.get(self.coin, self.chain_id)
 
 
-class SwapDetails(BaseModel):
+class SwapDetails(SwapBaseModel):
     amount_in: str | None = Field(
         default=None,
         description="Actual input amount in smallest unit",

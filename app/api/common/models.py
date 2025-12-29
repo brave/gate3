@@ -1,6 +1,7 @@
 from enum import Enum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
+from pydantic.alias_generators import to_camel
 
 from app.api.common.annotations import (
     ADDRESS_DESCRIPTION,
@@ -50,6 +51,12 @@ class _c(BaseModel):
 class ChainSpec(BaseModel):
     coin: Coin = Field(description="Coin identifier")
     chain_id: str = Field(description="Chain identifier")
+
+    model_config = ConfigDict(
+        alias_generator=to_camel,
+        populate_by_name=True,
+        serialize_by_alias=True,
+    )
 
 
 class Chain(Enum):

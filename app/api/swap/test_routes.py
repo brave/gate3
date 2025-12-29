@@ -3,9 +3,15 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from fastapi.testclient import TestClient
 
+from app.api.common.models import Coin
 from app.api.swap.models import (
     SwapError,
     SwapErrorKind,
+    SwapProviderEnum,
+    SwapRoute,
+    SwapRouteStep,
+    SwapStepToken,
+    SwapTool,
 )
 from app.main import app
 
@@ -57,6 +63,43 @@ MOCK_REQUEST_DATA = {
     "swapType": "EXACT_INPUT",
     "refundTo": "8eekKfUAGSJbq3CdA2TmHb8tKuyzd5gtEas3MYAtXzrT",
 }
+
+
+def create_mock_route():
+    """Helper to create a mock SwapRoute for testing."""
+    return SwapRoute(
+        id="test-route-1",
+        provider=SwapProviderEnum.NEAR_INTENTS,
+        steps=[
+            SwapRouteStep(
+                source_token=SwapStepToken(
+                    coin=Coin.SOL,
+                    chain_id="0x65",
+                    contract_address="EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+                    symbol="USDC",
+                    decimals=6,
+                    logo=None,
+                ),
+                source_amount="1000000",
+                destination_token=SwapStepToken(
+                    coin=Coin.BTC,
+                    chain_id="bitcoin_mainnet",
+                    contract_address=None,
+                    symbol="BTC",
+                    decimals=8,
+                    logo=None,
+                ),
+                destination_amount="3500",
+                tool=SwapTool(name="NEAR Intents", logo=None),
+            )
+        ],
+        source_amount="1000000",
+        destination_amount="3500",
+        destination_amount_min="3450",
+        has_post_submit_hook=True,
+        requires_token_allowance=False,
+        requires_firm_route=True,
+    )
 
 
 def test_indicative_quote_insufficient_liquidity_error(
@@ -138,3 +181,54 @@ def test_firm_quote_unknown_error(
     error_data = response.json()
     assert error_data["message"] == "An unexpected error happened"
     assert error_data["kind"] == "UNKNOWN"
+
+
+def test_indicative_quote_response(mock_get_all_indicative_routes):
+    mock_get_all_indicative_routes.return_value = [create_mock_route()]
+
+    response = client.post("/api/swap/v1/quote/indicative", json=MOCK_REQUEST_DATA)
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "routes": [
+            {
+                "id": "test-route-1",
+                "provider": "NEAR_INTENTS",
+                "steps": [
+                    {
+                        "sourceToken": {
+                            "coin": "SOL",
+                            "chainId": "0x65",
+                            "contractAddress": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+                            "symbol": "USDC",
+                            "decimals": 6,
+                            "logo": None,
+                        },
+                        "sourceAmount": "1000000",
+                        "destinationToken": {
+                            "coin": "BTC",
+                            "chainId": "bitcoin_mainnet",
+                            "contractAddress": None,
+                            "symbol": "BTC",
+                            "decimals": 8,
+                            "logo": None,
+                        },
+                        "destinationAmount": "3500",
+                        "tool": {"name": "NEAR Intents", "logo": None},
+                    }
+                ],
+                "sourceAmount": "1000000",
+                "destinationAmount": "3500",
+                "destinationAmountMin": "3450",
+                "estimatedTime": None,
+                "priceImpact": None,
+                "depositAddress": None,
+                "depositMemo": None,
+                "expiresAt": None,
+                "transactionParams": None,
+                "hasPostSubmitHook": True,
+                "requiresTokenAllowance": False,
+                "requiresFirmRoute": True,
+            }
+        ]
+    }
