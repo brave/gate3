@@ -127,6 +127,10 @@ async def get_all_indicative_routes(
     Uses get_supported_provider_clients to get eligible provider clients, then fetches
     routes from those in parallel. Routes are sorted by destination_amount (highest first).
 
+    If at least one client returns routes, returns them successfully. If no routes are
+    returned but there were exceptions, raises the first exception. If no routes and
+    no exceptions, raises a ValueError.
+
     Args:
         request: The swap quote request
         token_manager: Token manager instance
@@ -135,7 +139,8 @@ async def get_all_indicative_routes(
         List of SwapRoute from all providers, sorted by destination_amount descending
 
     Raises:
-        ValueError: If no provider supports the swap
+        Exception: The first exception encountered if no routes are returned
+        ValueError: If no provider supports the swap and no exceptions occurred
 
     """
     clients = await get_supported_provider_clients(request, token_manager)
@@ -145,14 +150,18 @@ async def get_all_indicative_routes(
             "No provider supports this swap. Please check your token pair and chains.",
         )
 
+    # Track exceptions from each client
+    exceptions: list[Exception] = []
+
     async def fetch_routes(client: BaseSwapProvider) -> list[SwapRoute]:
-        """Fetch routes from a client, returning empty list on error."""
+        """Fetch routes from a client, returning empty list and tracking exceptions."""
         try:
             return await client.get_indicative_routes(request)
         except Exception as e:
             logger.warning(
                 f"Error fetching routes from {client.provider_id.value}: {e}"
             )
+            exceptions.append(e)
             return []
 
     # Fetch routes from all clients in parallel
@@ -163,12 +172,18 @@ async def get_all_indicative_routes(
     for routes in results:
         all_routes.extend(routes)
 
-    if not all_routes:
-        raise ValueError(
-            "No provider supports this swap. Please check your token pair and chains.",
-        )
+    # If we got routes, return them (ignore any exceptions from other clients)
+    if all_routes:
+        return sort_routes(all_routes, request.route_priority, request.swap_type)
 
-    return sort_routes(all_routes, request.route_priority, request.swap_type)
+    # No routes - if there were exceptions, raise the first one
+    if exceptions:
+        raise exceptions[0]
+
+    # No routes, no exceptions - shouldn't happen but handle gracefully
+    raise ValueError(
+        "No provider supports this swap. Please check your token pair and chains.",
+    )
 
 
 def sort_routes(

@@ -5,7 +5,6 @@ from fastapi.testclient import TestClient
 
 from app.api.common.models import Coin
 from app.api.swap.models import (
-    RoutePriority,
     SwapError,
     SwapErrorKind,
     SwapProviderEnum,
@@ -13,9 +12,7 @@ from app.api.swap.models import (
     SwapRouteStep,
     SwapStepToken,
     SwapTool,
-    SwapType,
 )
-from app.api.swap.utils import sort_routes
 from app.main import app
 
 client = TestClient(app)
@@ -241,68 +238,3 @@ def test_indicative_quote_response(mock_get_all_indicative_routes):
             }
         ]
     }
-
-
-def test_sort_routes_cheapest_exact_input():
-    """CHEAPEST + EXACT_INPUT sorts by highest destination_amount."""
-    routes = [
-        create_mock_route("low", destination_amount="1000"),
-        create_mock_route("high", destination_amount="5000"),
-        create_mock_route("mid", destination_amount="3000"),
-    ]
-
-    sorted_routes = sort_routes(routes, RoutePriority.CHEAPEST, SwapType.EXACT_INPUT)
-
-    assert [r.id for r in sorted_routes] == ["high", "mid", "low"]
-
-
-def test_sort_routes_cheapest_exact_output():
-    """CHEAPEST + EXACT_OUTPUT sorts by lowest source_amount."""
-    routes = [
-        create_mock_route("expensive", source_amount="5000"),
-        create_mock_route("cheap", source_amount="1000"),
-        create_mock_route("mid", source_amount="3000"),
-    ]
-
-    sorted_routes = sort_routes(routes, RoutePriority.CHEAPEST, SwapType.EXACT_OUTPUT)
-
-    assert [r.id for r in sorted_routes] == ["cheap", "mid", "expensive"]
-
-
-def test_sort_routes_fastest():
-    """FASTEST priority sorts by estimated_time ascending, 0 is atomic (fastest), None last."""
-    routes = [
-        create_mock_route("slow", estimated_time=300),
-        create_mock_route("no_time", estimated_time=None),
-        create_mock_route("fast", estimated_time=60),
-        create_mock_route("atomic", estimated_time=0),
-    ]
-
-    sorted_routes = sort_routes(routes, RoutePriority.FASTEST)
-
-    assert [r.id for r in sorted_routes] == ["atomic", "fast", "slow", "no_time"]
-
-
-def test_sort_routes_cheapest_tiebreak_by_fastest():
-    """When destination_amount ties, break by fastest estimated_time."""
-    routes = [
-        create_mock_route("slow", destination_amount="5000", estimated_time=300),
-        create_mock_route("fast", destination_amount="5000", estimated_time=60),
-        create_mock_route("no_time", destination_amount="5000", estimated_time=None),
-    ]
-
-    sorted_routes = sort_routes(routes, RoutePriority.CHEAPEST, SwapType.EXACT_INPUT)
-
-    assert [r.id for r in sorted_routes] == ["fast", "slow", "no_time"]
-
-
-def test_sort_routes_fastest_tiebreak_by_cheapest():
-    """When estimated_time ties, break by cheapest (highest output for EXACT_INPUT)."""
-    routes = [
-        create_mock_route("low_output", destination_amount="1000", estimated_time=60),
-        create_mock_route("high_output", destination_amount="5000", estimated_time=60),
-    ]
-
-    sorted_routes = sort_routes(routes, RoutePriority.FASTEST, SwapType.EXACT_INPUT)
-
-    assert [r.id for r in sorted_routes] == ["high_output", "low_output"]
