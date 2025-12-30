@@ -267,6 +267,12 @@ class SolanaTransactionParams(SwapBaseModel):
     spl_token_amount: str | None = Field(default=None)
     decimals: int | None = Field(default=None)  # Needed for TransferChecked instruction
 
+    # Pre-built versioned transaction (base64-encoded)
+    versioned_transaction: str | None = Field(
+        default=None,
+        description="Base64-encoded versioned transaction for signing",
+    )
+
 
 class BitcoinTransactionParams(SwapBaseModel):
     chain: ChainSpec
