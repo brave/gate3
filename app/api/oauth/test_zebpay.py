@@ -42,7 +42,7 @@ def test_zebpay_auth_redirect(input_redirect_uri):
     response = client.get(
         "/api/oauth/zebpay/sandbox/auth",
         params={
-            "returnUrl": f"https://example.com/callback?state=xyz&redirect_uri={input_redirect_uri}",
+            "returnUrl": f"https://oauth.sandbox.zebpay.test/connect/authorize/callback?state=xyz&redirect_uri={input_redirect_uri}",
         },
         follow_redirects=False,
     )
@@ -50,11 +50,30 @@ def test_zebpay_auth_redirect(input_redirect_uri):
     return_url, return_url_params = _parse_zebpay_redirect(response)
 
     # The returnUrl parameter should contain the client_id and allowed redirect_uri
-    assert "https://example.com/callback" in return_url
+    assert return_url.startswith(
+        "https://oauth.sandbox.zebpay.test/connect/authorize/callback"
+    )
     assert return_url_params["state"] == ["xyz"]
     assert return_url_params["client_id"] == ["test_zebpay_sandbox_client_id"]
     assert return_url_params["redirect_uri"] == ["rewards://zebpay/authorization"]
 
+
+@pytest.mark.parametrize(
+    "malicious_return_url",
+    [
+        "https://evil.example.com/steal?cb=https://another.evil/",
+        "javascript:alert(1)",
+    ],
+)
+def test_zebpay_auth_rejects_open_redirect_attempt(malicious_return_url):
+    """Ensure auth endpoint does not allow user-controlled returnUrl hosts."""
+    response = client.get(
+        "/api/oauth/zebpay/sandbox/auth",
+        params={"returnUrl": malicious_return_url},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Invalid returnUrl parameter"
 
 # ========================================
 # Token Endpoint Tests

@@ -29,6 +29,16 @@ async def auth(environment: Environment, request: Request) -> RedirectResponse:
     if not req_return_url:
         raise HTTPException(status_code=400, detail="Missing returnUrl parameter")
 
+    # Validate the provided returnUrl matches the expected Zebpay callback target
+    parsed_return = URL(req_return_url)
+    expected_host = URL(str(env_config.oauth_url)).hostname
+    if (
+        parsed_return.scheme != "https"
+        or parsed_return.hostname != expected_host
+        or not parsed_return.path.startswith("/connect/authorize/callback")
+    ):
+        raise HTTPException(status_code=400, detail="Invalid returnUrl parameter")
+
     # Parse the returnUrl as a URL object
     return_url = set_query_params(
         URL(req_return_url),
