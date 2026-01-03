@@ -345,7 +345,11 @@ class SwapRoute(SwapBaseModel):
         description="Ordered list of hops in this route",
     )
 
-    source_amount: str = Field(description="Total source amount in smallest unit")
+    source_amount: str = Field(
+        description=(
+            "Total source amount in smallest unit. For EXACT_OUTPUT, this is minimum amount required to proceed with the swap."
+        )
+    )
     destination_amount: str = Field(
         description="Total destination amount in smallest unit"
     )

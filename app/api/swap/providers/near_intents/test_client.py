@@ -20,6 +20,9 @@ from .mocks import (
     BTC_TOKEN_DATA,
     BTC_TOKEN_INFO,
     ETH_TOKEN_INFO,
+    MOCK_EXACT_OUTPUT_FIRM_QUOTE,
+    MOCK_EXACT_OUTPUT_INDICATIVE_QUOTE,
+    MOCK_EXACT_OUTPUT_QUOTE_REQUEST,
     MOCK_FIRM_QUOTE,
     MOCK_INDICATIVE_QUOTE,
     MOCK_QUOTE_REQUEST,
@@ -1090,3 +1093,161 @@ async def test_create_client_without_jwt():
         call_kwargs = mock_client_class.call_args[1]
         assert "Authorization" not in call_kwargs["headers"]
         assert call_kwargs["timeout"] == 30.0
+
+
+# ============================================================================
+# EXACT_OUTPUT Tests
+# ============================================================================
+
+
+@pytest.mark.asyncio
+async def test_get_exact_output_indicative_route(
+    client,
+    mock_httpx_client,
+    mock_supported_tokens_cache,
+):
+    supported_tokens = [
+        USDC_ON_SOLANA_TOKEN_INFO,
+        BTC_TOKEN_INFO,
+    ]
+    mock_supported_tokens_cache.get.return_value = supported_tokens
+
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = {
+        "quoteRequest": MOCK_EXACT_OUTPUT_QUOTE_REQUEST,
+        "quote": MOCK_EXACT_OUTPUT_INDICATIVE_QUOTE,
+    }
+    mock_httpx_client.post.return_value = mock_response
+
+    request = SwapQuoteRequest(
+        source_coin=Chain.SOLANA.coin,
+        source_chain_id=Chain.SOLANA.chain_id,
+        source_token_address="EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+        destination_coin=Chain.BITCOIN.coin,
+        destination_chain_id=Chain.BITCOIN.chain_id,
+        destination_token_address=None,
+        recipient="bc1qpjqsdj3qvfl4hzfa49p28ns9xkpl73cyg9exzn",
+        amount="711",  # Desired output amount
+        slippage_percentage="0.5",
+        swap_type=SwapType.EXACT_OUTPUT,
+        refund_to="8eekKfUAGSJbq3CdA2TmHb8tKuyzd5gtEas3MYAtXzrT",
+        provider=SwapProviderEnum.NEAR_INTENTS,
+    )
+    request.set_source_token(supported_tokens)
+    request.set_destination_token(supported_tokens)
+
+    routes = await client.get_indicative_routes(request)
+
+    assert len(routes) == 1
+    result = routes[0]
+
+    # For EXACT_OUTPUT, source_amount is the min_amount_in (minimum required to proceed)
+    assert result.source_amount == "2017265"
+
+    # Destination amount is the exact requested amount
+    assert result.destination_amount == "711"
+    assert result.destination_amount_min == "711"
+
+    # Indicative quote has no deposit address
+    assert result.deposit_address is None
+    assert result.transaction_params is None
+
+
+@pytest.mark.asyncio
+async def test_get_exact_output_firm_route_uses_max_amount_in(
+    client,
+    mock_httpx_client,
+    mock_supported_tokens_cache,
+):
+    supported_tokens = [
+        USDC_ON_SOLANA_TOKEN_INFO,
+        BTC_TOKEN_INFO,
+    ]
+    mock_supported_tokens_cache.get.return_value = supported_tokens
+
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = {
+        "quoteRequest": {**MOCK_EXACT_OUTPUT_QUOTE_REQUEST, "dry": False},
+        "quote": MOCK_EXACT_OUTPUT_FIRM_QUOTE,
+    }
+    mock_httpx_client.post.return_value = mock_response
+
+    request = SwapQuoteRequest(
+        source_coin=Chain.SOLANA.coin,
+        source_chain_id=Chain.SOLANA.chain_id,
+        source_token_address="EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+        destination_coin=Chain.BITCOIN.coin,
+        destination_chain_id=Chain.BITCOIN.chain_id,
+        destination_token_address=None,
+        recipient="bc1qpjqsdj3qvfl4hzfa49p28ns9xkpl73cyg9exzn",
+        amount="711",  # Desired output amount
+        slippage_percentage="0.5",
+        swap_type=SwapType.EXACT_OUTPUT,
+        refund_to="8eekKfUAGSJbq3CdA2TmHb8tKuyzd5gtEas3MYAtXzrT",
+        provider=SwapProviderEnum.NEAR_INTENTS,
+    )
+    request.set_source_token(supported_tokens)
+    request.set_destination_token(supported_tokens)
+
+    result = await client.get_firm_route(request)
+
+    # For EXACT_OUTPUT, source_amount is min_amount_in (minimum required to proceed)
+    assert result.source_amount == "2017265"
+    assert result.destination_amount == "711"
+
+    # Verify deposit address is set
+    assert result.deposit_address == "9RdSjLtfFJLvj6CAR4w7H7tUbv2kvwkkrYZuoojKDBkE"
+
+    # Verify transaction params use max_amount_in (2057265) not amount_in (2037265)
+    # This ensures the swap will succeed; any excess is refunded
+    assert result.transaction_params is not None
+    assert result.transaction_params.solana is not None
+    assert result.transaction_params.solana.spl_token_amount == "2057265"
+
+
+@pytest.mark.asyncio
+async def test_exact_input_route_uses_amount_in(
+    client,
+    mock_httpx_client,
+    mock_supported_tokens_cache,
+):
+    supported_tokens = [
+        USDC_ON_SOLANA_TOKEN_INFO,
+        BTC_TOKEN_INFO,
+    ]
+    mock_supported_tokens_cache.get.return_value = supported_tokens
+
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = {
+        "quoteRequest": MOCK_QUOTE_REQUEST,
+        "quote": MOCK_INDICATIVE_QUOTE,
+    }
+    mock_httpx_client.post.return_value = mock_response
+
+    request = SwapQuoteRequest(
+        source_coin=Chain.SOLANA.coin,
+        source_chain_id=Chain.SOLANA.chain_id,
+        source_token_address="EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+        destination_coin=Chain.BITCOIN.coin,
+        destination_chain_id=Chain.BITCOIN.chain_id,
+        destination_token_address=None,
+        recipient="bc1qpjqsdj3qvfl4hzfa49p28ns9xkpl73cyg9exzn",
+        amount="2037265",
+        slippage_percentage="0.5",
+        swap_type=SwapType.EXACT_INPUT,
+        refund_to="8eekKfUAGSJbq3CdA2TmHb8tKuyzd5gtEas3MYAtXzrT",
+        provider=SwapProviderEnum.NEAR_INTENTS,
+    )
+    request.set_source_token(supported_tokens)
+    request.set_destination_token(supported_tokens)
+
+    routes = await client.get_indicative_routes(request)
+
+    assert len(routes) == 1
+    result = routes[0]
+
+    # For EXACT_INPUT, source_amount is the amount_in from the quote
+    assert result.source_amount == "2037265"

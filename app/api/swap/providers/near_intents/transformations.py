@@ -16,6 +16,7 @@ from ...models import (
     SwapStatusResponse,
     SwapStepToken,
     SwapTransactionDetails,
+    SwapType,
     TransactionParams,
 )
 from .constants import NEAR_INTENTS_TOOL
@@ -100,6 +101,10 @@ def _build_transaction_params(
     source chain type (EVM, Solana, or Bitcoin) and whether it's a native
     or token transfer.
 
+    For EXACT_OUTPUT swaps, uses max_amount_in as the deposit amount:
+    - If input > max_amount_in: swap proceeds, excess refunded to refundTo
+    - If input < min_amount_in: deposit refunded by deadline
+
     Args:
         quote_data: The quote data containing deposit address and amounts
         request: The original swap quote request containing chain and token info
@@ -118,8 +123,14 @@ def _build_transaction_params(
     source_chain = request.source_chain
     source_token = request.source_token
     deposit_address = quote_data.deposit_address
-    source_amount = quote_data.amount_in
     refund_to = request.refund_to
+
+    # For EXACT_OUTPUT, use max_amount_in as the deposit amount
+    # This ensures the swap will succeed; any excess is refunded
+    if request.swap_type == SwapType.EXACT_OUTPUT and quote_data.max_amount_in:
+        source_amount = quote_data.max_amount_in
+    else:
+        source_amount = quote_data.amount_in
 
     chain_spec = source_chain.to_spec()
 
@@ -237,11 +248,16 @@ def from_near_intents_quote_to_route(
     # Generate route ID
     route_id = f"ni_{uuid.uuid4().hex[:12]}"
 
+    # For EXACT_OUTPUT, set the minimum input amount
+    source_amount_min = None
+    if request.swap_type == SwapType.EXACT_OUTPUT:
+        source_amount_min = quote_data.min_amount_in
+
     return SwapRoute(
         id=route_id,
         provider=SwapProviderEnum.NEAR_INTENTS,
         steps=[step],
-        source_amount=quote_data.amount_in,
+        source_amount=source_amount_min or quote_data.amount_in,
         destination_amount=quote_data.amount_out,
         destination_amount_min=quote_data.min_amount_out,
         estimated_time=quote_data.time_estimate,

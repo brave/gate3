@@ -134,3 +134,33 @@ MOCK_INDICATIVE_QUOTE = {
     "depositAddress": None,
     "deadline": None,
 }
+
+# EXACT_OUTPUT mock quote request
+MOCK_EXACT_OUTPUT_QUOTE_REQUEST = {
+    **MOCK_QUOTE_REQUEST,
+    "swapType": "EXACT_OUTPUT",
+    "amount": "711",  # Desired output amount in base units
+}
+
+# EXACT_OUTPUT mock quote - has minAmountIn and maxAmountIn
+MOCK_EXACT_OUTPUT_FIRM_QUOTE = {
+    "amountIn": "2037265",  # Expected input amount
+    "amountInFormatted": "2.037265",
+    "amountInUsd": "2.0373",
+    "minAmountIn": "2017265",  # Minimum input to proceed with swap
+    "maxAmountIn": "2057265",  # Maximum input (excess refunded)
+    "amountOut": "711",  # Exact output amount requested
+    "amountOutFormatted": "0.00000711",
+    "amountOutUsd": "0.6546",
+    "minAmountOut": "711",  # For EXACT_OUTPUT, this equals amountOut
+    "timeEstimate": 465,
+    "depositAddress": "9RdSjLtfFJLvj6CAR4w7H7tUbv2kvwkkrYZuoojKDBkE",
+    "depositMemo": None,
+    "deadline": "2025-12-11T13:48:50.883000Z",
+}
+
+MOCK_EXACT_OUTPUT_INDICATIVE_QUOTE = {
+    **MOCK_EXACT_OUTPUT_FIRM_QUOTE,
+    "depositAddress": None,
+    "deadline": None,
+}
