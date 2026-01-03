@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, Query
 from app.api.common.annotations import (
     VS_CURRENCY_DESCRIPTION,
 )
+from app.api.common.models import Tags
 
 from .coingecko import CoinGeckoClient
 from .jupiter import JupiterClient
@@ -16,7 +17,7 @@ from .models import (
 )
 from .utils import deduplicate_batch
 
-router = APIRouter(prefix="/api/pricing")
+router = APIRouter(prefix="/api/pricing", tags=[Tags.PRICING])
 
 
 def get_coingecko_client() -> CoinGeckoClient:

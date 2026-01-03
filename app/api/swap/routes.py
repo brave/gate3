@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, FastAPI, Query, Request
 from fastapi.responses import JSONResponse
 
-from app.api.common.models import Coin
+from app.api.common.models import Coin, Tags
 from app.api.tokens.manager import TokenManager
 
 from .models import (
@@ -15,9 +15,13 @@ from .models import (
     SwapStatusResponse,
     SwapSupportRequest,
 )
-from .utils import get_or_select_provider_client, get_provider_client
+from .utils import (
+    get_all_indicative_routes,
+    get_provider_client_for_request,
+    get_supported_provider_clients,
+)
 
-router = APIRouter(prefix="/api/swap")
+router = APIRouter(prefix="/api/swap", tags=[Tags.SWAP])
 
 
 def setup_swap_error_handler(app: FastAPI):
@@ -40,22 +44,25 @@ async def get_supported_providers(
     source_coin: str = Query(..., description="Source coin (e.g., ETH, SOL, BTC)"),
     source_chain_id: str = Query(..., description="Source chain ID"),
     source_token_address: str | None = Query(
-        None, description="Source token address (None for native)"
+        None,
+        description="Source token address (None for native)",
     ),
     destination_coin: str = Query(
-        ..., description="Destination coin (e.g., ETH, SOL, BTC)"
+        ...,
+        description="Destination coin (e.g., ETH, SOL, BTC)",
     ),
     destination_chain_id: str = Query(..., description="Destination chain ID"),
     destination_token_address: str | None = Query(
-        None, description="Destination token address (None for native)"
+        None,
+        description="Destination token address (None for native)",
     ),
     recipient: str | None = Query(
-        None, description="Recipient address on destination chain"
+        None,
+        description="Recipient address on destination chain",
     ),
     token_manager: TokenManager = Depends(TokenManager),
 ) -> list[SwapProviderEnum]:
-    """
-    Returns a list of providers that support the specified token pair swap.
+    """Returns a list of providers that support the specified token pair swap.
 
     If at least one provider supports the swap, AUTO is also included in the list.
     """
@@ -70,25 +77,8 @@ async def get_supported_providers(
             recipient=recipient,
         )
 
-        supported_providers = []
-
-        # Check each available provider (exclude AUTO as it's a meta provider)
-        for provider in SwapProviderEnum:
-            if provider == SwapProviderEnum.AUTO:
-                continue
-            try:
-                client = await get_provider_client(
-                    provider=provider, token_manager=token_manager
-                )
-                if await client.has_support(request):
-                    supported_providers.append(client.provider_id)
-            except NotImplementedError:
-                # Provider not implemented yet, skip
-                continue
-            except Exception as e:
-                # Provider error, skip but log
-                print(f"Warning: Error checking {provider.value}: {e}")
-                continue
+        clients = await get_supported_provider_clients(request, token_manager)
+        supported_providers = [c.provider_id for c in clients]
 
         return (
             ([SwapProviderEnum.AUTO] + supported_providers)
@@ -102,7 +92,7 @@ async def get_supported_providers(
         raise SwapError(message=str(e), kind=SwapErrorKind.UNKNOWN, status_code=400)
     except Exception as e:
         raise SwapError(
-            message=f"Failed to check provider support: {str(e)}",
+            message=f"Failed to check provider support: {e!s}",
             kind=SwapErrorKind.UNKNOWN,
             status_code=500,
         )
@@ -110,21 +100,33 @@ async def get_supported_providers(
 
 @router.post("/v1/quote/indicative", response_model=SwapQuote)
 async def get_indicative_quote(
-    request: SwapQuoteRequest, token_manager: TokenManager = Depends(TokenManager)
+    request: SwapQuoteRequest,
+    token_manager: TokenManager = Depends(TokenManager),
 ) -> SwapQuote:
-    """
-    Request an indicative quote without creating a deposit address.
+    """Request indicative quotes without creating a deposit address.
 
     This is a dry run to preview swap parameters, pricing, and estimated time.
     No funds should be sent based on an indicative quote.
 
-    The quote will not include a deposit address or expiration time.
+    Returns multiple route options for comparison. Each route may have multiple
+    steps (hops) if it's a multi-hop swap. Routes are sorted by best rate
+    (highest destination amount first).
+
+    When using AUTO mode (or no provider specified), routes from all eligible
+    providers are fetched and combined.
+
+    The quotes may not include deposit addresses or expiration times.
     """
     try:
-        provider = await get_or_select_provider_client(
-            request, token_manager, allow_auto=True
-        )
-        return await provider.get_indicative_quote(request)
+        # For AUTO mode, fetch routes from all eligible providers
+        if request.provider is None or request.provider == SwapProviderEnum.AUTO:
+            routes = await get_all_indicative_routes(request, token_manager)
+            return SwapQuote(routes=routes)
+
+        # For specific provider, get routes from that provider only
+        provider = await get_provider_client_for_request(request, token_manager)
+        routes = await provider.get_indicative_routes(request)
+        return SwapQuote(routes=routes)
     except SwapError:
         # Re-raise SwapError as-is (from provider)
         raise
@@ -132,7 +134,7 @@ async def get_indicative_quote(
         raise SwapError(message=str(e), kind=SwapErrorKind.UNKNOWN, status_code=400)
     except Exception as e:
         raise SwapError(
-            message=f"Failed to get indicative quote: {str(e)}",
+            message=f"Failed to get indicative quote: {e!s}",
             kind=SwapErrorKind.UNKNOWN,
             status_code=500,
         )
@@ -140,10 +142,10 @@ async def get_indicative_quote(
 
 @router.post("/v1/quote/firm", response_model=SwapQuote)
 async def get_firm_quote(
-    request: SwapQuoteRequest, token_manager: TokenManager = Depends(TokenManager)
+    request: SwapQuoteRequest,
+    token_manager: TokenManager = Depends(TokenManager),
 ) -> SwapQuote:
-    """
-    Request a firm quote with a deposit address.
+    """Request a firm quote with a deposit address.
 
     This creates a real swap intent with a unique deposit address.
     Funds sent to this address will initiate the swap.
@@ -153,15 +155,15 @@ async def get_firm_quote(
     - Deposit memo (if required for the chain, e.g., Stellar)
     - Expiration time/deadline
     - Guaranteed output amount (accounting for slippage)
+    - Transaction parameters for the deposit
 
     Important: Save the entire response, including provider metadata,
     as it may contain signatures or other data needed for dispute resolution.
     """
     try:
-        provider = await get_or_select_provider_client(
-            request, token_manager, allow_auto=False
-        )
-        return await provider.get_firm_quote(request)
+        provider = await get_provider_client_for_request(request, token_manager)
+        route = await provider.get_firm_route(request)
+        return SwapQuote(routes=[route])
     except SwapError:
         # Re-raise SwapError as-is (from provider)
         raise
@@ -169,7 +171,7 @@ async def get_firm_quote(
         raise SwapError(message=str(e), kind=SwapErrorKind.UNKNOWN, status_code=400)
     except Exception as e:
         raise SwapError(
-            message=f"Failed to get firm quote: {str(e)}",
+            message=f"Failed to get firm quote: {e!s}",
             kind=SwapErrorKind.UNKNOWN,
             status_code=500,
         )
@@ -180,8 +182,7 @@ async def post_submit_hook(
     request: SwapStatusRequest,
     token_manager: TokenManager = Depends(TokenManager),
 ) -> dict:
-    """
-    Post-submit hook called after a deposit transaction is submitted.
+    """Post-submit hook called after a deposit transaction is submitted.
 
     This endpoint allows providers to perform provider-specific actions after
     a deposit transaction has been submitted. The exact behavior depends on
@@ -189,11 +190,10 @@ async def post_submit_hook(
 
     Returns:
         Empty dict on success
+
     """
     try:
-        client = await get_or_select_provider_client(
-            request=request, token_manager=token_manager, allow_auto=False
-        )
+        client = await get_provider_client_for_request(request, token_manager)
         await client.post_submit_hook(request)
         return {}
     except SwapError:
@@ -203,7 +203,7 @@ async def post_submit_hook(
         raise SwapError(message=str(e), kind=SwapErrorKind.UNKNOWN, status_code=400)
     except Exception as e:
         raise SwapError(
-            message=f"Failed to execute post-submit hook: {str(e)}",
+            message=f"Failed to execute post-submit hook: {e!s}",
             kind=SwapErrorKind.UNKNOWN,
             status_code=500,
         )
@@ -214,8 +214,7 @@ async def get_swap_status(
     request: SwapStatusRequest,
     token_manager: TokenManager = Depends(TokenManager),
 ) -> SwapStatusResponse:
-    """
-    Check the status of a swap by deposit address.
+    """Check the status of a swap by deposit address.
 
     Returns:
     - Current status (PENDING, PROCESSING, SUCCESS, FAILED, REFUNDED)
@@ -229,11 +228,10 @@ async def get_swap_status(
     3. SUCCESS - Swap completed successfully
     4. FAILED - Swap failed (funds will be refunded)
     5. REFUNDED - Funds have been refunded to the refund address
+
     """
     try:
-        client = await get_or_select_provider_client(
-            request=request, token_manager=token_manager, allow_auto=False
-        )
+        client = await get_provider_client_for_request(request, token_manager)
         return await client.get_status(request)
     except SwapError:
         # Re-raise SwapError as-is (from provider)
@@ -242,7 +240,7 @@ async def get_swap_status(
         raise SwapError(message=str(e), kind=SwapErrorKind.UNKNOWN, status_code=404)
     except Exception as e:
         raise SwapError(
-            message=f"Failed to get swap status: {str(e)}",
+            message=f"Failed to get swap status: {e!s}",
             kind=SwapErrorKind.UNKNOWN,
             status_code=500,
         )

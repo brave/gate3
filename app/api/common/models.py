@@ -1,6 +1,7 @@
 from enum import Enum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
+from pydantic.alias_generators import to_camel
 
 from app.api.common.annotations import (
     ADDRESS_DESCRIPTION,
@@ -12,6 +13,17 @@ from app.api.common.annotations import (
 class HealthStatus(str, Enum):
     OK = "OK"
     KO = "KO"
+
+
+class Tags(str, Enum):
+    """API documentation tags for grouping endpoints in Swagger UI."""
+
+    HEALTH = "Health"
+    NFT = "NFT"
+    OAUTH = "OAuth Proxy"
+    PRICING = "Pricing"
+    SWAP = "Swap"
+    TOKENS = "Tokens"
 
 
 class PingResponse(BaseModel):
@@ -34,6 +46,17 @@ class _c(BaseModel):
     alchemy_id: str
     near_intents_id: str | None = None
     has_nft_support: bool
+
+
+class ChainSpec(BaseModel):
+    coin: Coin = Field(description="Coin identifier")
+    chain_id: str = Field(description="Chain identifier")
+
+    model_config = ConfigDict(
+        alias_generator=to_camel,
+        populate_by_name=True,
+        serialize_by_alias=True,
+    )
 
 
 class Chain(Enum):
@@ -167,8 +190,17 @@ class Chain(Enum):
                 return chain
         return None
 
-    def __repr__(self):
+    def to_spec(self) -> ChainSpec:
+        return ChainSpec(coin=self.coin, chain_id=self.chain_id)
+
+    def __eq__(self, other: Chain) -> bool:
+        return self.coin == other.coin and self.chain_id == other.chain_id
+
+    def __str__(self):
         return f"<{self.__class__.__name__}.{self.name}: coin={self.coin.value} chain_id={self.chain_id}>"
+
+    def __repr__(self):
+        return self.__str__()
 
 
 class TokenSource(str, Enum):
@@ -204,3 +236,6 @@ class TokenInfo(BaseModel):
     @property
     def chain(self) -> Chain | None:
         return Chain.get(self.coin.value, self.chain_id)
+
+    def is_native(self) -> bool:
+        return not self.address

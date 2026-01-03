@@ -29,6 +29,9 @@ build-backend = "poetry.core.masonry.api"
 [tool.poetry]
 package-mode = false
 
+[tool.poetry.requires-plugins]
+poethepoet = { version = "~0.38.0", extras = ["poetry_plugin"]}
+
 [tool.poetry.group.dev.dependencies]
 ruff = "0.14.8"
 pytest = "9.0.2"
@@ -45,3 +48,9 @@ markers = [
 
 [tool.ruff.lint.isort]
 known-first-party = ["app"]
+
+[tool.poe]
+poetry_command = ""
+
+[tool.poe.tasks]
+format = { shell = "ruff check --select I --fix . && ruff check --fix . && ruff format" }

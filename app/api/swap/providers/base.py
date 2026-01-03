@@ -2,8 +2,8 @@ from abc import ABC, abstractmethod
 
 from ..models import (
     SwapProviderEnum,
-    SwapQuote,
     SwapQuoteRequest,
+    SwapRoute,
     SwapStatusRequest,
     SwapStatusResponse,
     SwapSupportRequest,
@@ -17,77 +17,104 @@ class BaseSwapProvider(ABC):
     @property
     @abstractmethod
     def provider_id(self) -> SwapProviderEnum:
-        """
-        Get the SwapProviderEnum value that identifies this provider.
+        """Get the SwapProviderEnum value that identifies this provider.
 
         Returns:
             SwapProviderEnum value for this provider implementation
+
         """
-        pass
+
+    @property
+    def has_post_submit_hook(self) -> bool:
+        """Whether client must call post-submit hook after deposit transaction.
+
+        Returns:
+            True if post-submit hook is required, False otherwise
+
+        """
+        return False
+
+    @property
+    def requires_token_allowance(self) -> bool:
+        """Whether client must check/approve ERC20 token allowance before swap (EVM only).
+
+        Returns:
+            True if allowance check is required, False otherwise
+
+        """
+        return False
+
+    @property
+    def requires_firm_route(self) -> bool:
+        """Whether client must fetch a firm route before executing the swap.
+
+        Some providers include all necessary details in the indicative route,
+        making a separate firm route request unnecessary.
+
+        Returns:
+            True if firm route is required, False otherwise
+
+        """
+        return True
 
     @abstractmethod
     async def get_supported_tokens(self) -> list[TokenInfo]:
-        """
-        Get list of tokens supported by this provider.
+        """Get list of tokens supported by this provider.
 
         Returns:
             List of TokenInfo with supported tokens
+
         """
-        pass
 
     @abstractmethod
     async def has_support(self, request: SwapSupportRequest) -> bool:
-        """
-        Check if provider supports the requested swap parameters.
+        """Check if provider supports the requested swap parameters.
 
         Args:
             request: The swap support request
 
         Returns:
             True if provider supports this swap, False otherwise
+
         """
-        pass
 
     @abstractmethod
-    async def get_indicative_quote(self, request: SwapQuoteRequest) -> SwapQuote:
-        """
-        Get an indicative quote without creating a deposit address.
+    async def get_indicative_routes(self, request: SwapQuoteRequest) -> list[SwapRoute]:
+        """Get indicative routes for a swap.
         This is a dry run to preview swap parameters.
 
         Args:
             request: The swap quote request
 
         Returns:
-            SwapQuote without deposit address
+            List of SwapRoute options
 
         Raises:
             ValueError: If swap is not supported or parameters are invalid
             httpx.HTTPError: If API request fails
+
         """
-        pass
 
     @abstractmethod
-    async def get_firm_quote(self, request: SwapQuoteRequest) -> SwapQuote:
-        """
-        Get a firm quote with a deposit address.
-        User must send funds to this address to initiate the swap.
+    async def get_firm_route(self, request: SwapQuoteRequest) -> SwapRoute:
+        """Get a firm route for a swap.
+        User must send funds to the deposit address to initiate the swap.
 
         Args:
             request: The swap quote request
 
         Returns:
-            SwapQuote with deposit address and deadline
+            SwapRoute with deposit address, deadline, and transaction params
 
         Raises:
             ValueError: If swap is not supported or parameters are invalid
             httpx.HTTPError: If API request fails
+
         """
-        pass
 
     @abstractmethod
     async def get_status(self, request: SwapStatusRequest) -> SwapStatusResponse:
-        """
-        Get the current status of a swap.
+        """Get the current status of a swap.
 
         Args:
             request: The swap status request
@@ -98,13 +125,12 @@ class BaseSwapProvider(ABC):
         Raises:
             ValueError: If swap status request is not supported
             httpx.HTTPError: If API request fails
+
         """
-        pass
 
     @abstractmethod
     async def post_submit_hook(self, request: SwapStatusRequest) -> None:
-        """
-        Post-submit hook called after a deposit transaction is submitted.
+        """Post-submit hook called after a deposit transaction is submitted.
 
         This hook can be used by providers to perform provider-specific actions
         after a deposit transaction has been submitted. The exact behavior and
@@ -116,5 +142,5 @@ class BaseSwapProvider(ABC):
         Raises:
             ValueError: If the hook operation fails
             httpx.HTTPError: If API request fails
+
         """
-        pass

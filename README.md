@@ -46,6 +46,12 @@ A FastAPI-based gateway service for web3 applications at Brave.
     poetry run fastapi dev
     ```
 
+6. Format code
+
+    ```bash
+    poetry format
+    ```
+
 ### Deployments
 
 Deployments are managed using the [generalized docker build pipeline](https://github.com/brave-intl/general-docker-build-pipeline-action). To create a new deployment, simply publish a new release on GitHub.

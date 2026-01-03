@@ -6,14 +6,14 @@ from app.api.common.annotations import (
     CHAIN_ID_DESCRIPTION,
     COIN_DESCRIPTION,
 )
-from app.api.common.models import Coin
+from app.api.common.models import Coin, Tags
 from app.api.tokens.manager import TokenManager
 from app.api.tokens.models import (
     TokenInfo,
     TokenSearchResponse,
 )
 
-router = APIRouter(prefix="/api/tokens")
+router = APIRouter(prefix="/api/tokens", tags=[Tags.TOKENS])
 
 
 @router.get("/v1/get", response_model=TokenInfo)

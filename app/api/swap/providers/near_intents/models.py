@@ -48,7 +48,10 @@ class NearIntentsQuoteData(BaseModel):
     amount_in: str
     amount_in_formatted: str
     amount_in_usd: str | None = Field(default=None)
+
+    # EXACT_OUTPUT fields: min/max input amounts
     min_amount_in: str | None = Field(default=None)
+    max_amount_in: str | None = Field(default=None)
 
     amount_out: str
     amount_out_formatted: str

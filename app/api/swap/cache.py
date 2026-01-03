@@ -7,8 +7,7 @@ from .models import SwapProviderEnum, TokenInfo
 
 
 class SupportedTokensCache:
-    """
-    Single-level Redis cache for supported tokens per provider.
+    """Single-level Redis cache for supported tokens per provider.
 
     # This cache only applies to providers that expose an API endpoint for
     # listing supported tokens. For providers that do not offer such an
