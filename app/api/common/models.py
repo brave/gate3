@@ -47,6 +47,10 @@ class _c(BaseModel):
     near_intents_id: str | None = None
     has_nft_support: bool
 
+    # Native token info
+    symbol: str
+    decimals: int
+
 
 class ChainSpec(BaseModel):
     coin: Coin = Field(description="Coin identifier")
@@ -68,6 +72,8 @@ class Chain(Enum):
         alchemy_id="eth-mainnet",
         near_intents_id="eth",
         has_nft_support=True,
+        symbol="ETH",
+        decimals=18,
     )
     ARBITRUM = _c(
         coin=Coin.ETH,
@@ -76,6 +82,8 @@ class Chain(Enum):
         alchemy_id="arb-mainnet",
         near_intents_id="arb",
         has_nft_support=True,
+        symbol="ETH",
+        decimals=18,
     )
     AVALANCHE = _c(
         coin=Coin.ETH,
@@ -84,6 +92,8 @@ class Chain(Enum):
         alchemy_id="avax-mainnet",
         near_intents_id="avax",
         has_nft_support=True,
+        symbol="AVAX",
+        decimals=18,
     )
     BASE = _c(
         coin=Coin.ETH,
@@ -92,6 +102,8 @@ class Chain(Enum):
         alchemy_id="base-mainnet",
         near_intents_id="base",
         has_nft_support=True,
+        symbol="ETH",
+        decimals=18,
     )
     BNB_CHAIN = _c(
         coin=Coin.ETH,
@@ -100,6 +112,8 @@ class Chain(Enum):
         alchemy_id="bnb-mainnet",
         near_intents_id="bsc",
         has_nft_support=False,
+        symbol="BNB",
+        decimals=18,
     )
     OPTIMISM = _c(
         coin=Coin.ETH,
@@ -108,6 +122,8 @@ class Chain(Enum):
         alchemy_id="opt-mainnet",
         near_intents_id="op",
         has_nft_support=True,
+        symbol="ETH",
+        decimals=18,
     )
     POLYGON = _c(
         coin=Coin.ETH,
@@ -116,6 +132,8 @@ class Chain(Enum):
         alchemy_id="polygon-mainnet",
         near_intents_id="pol",
         has_nft_support=True,
+        symbol="POL",
+        decimals=18,
     )
 
     # Non-EVM chains
@@ -126,6 +144,8 @@ class Chain(Enum):
         alchemy_id="bitcoin-mainnet",
         near_intents_id="btc",
         has_nft_support=False,
+        symbol="BTC",
+        decimals=8,
     )
     SOLANA = _c(
         coin=Coin.SOL,
@@ -134,6 +154,8 @@ class Chain(Enum):
         alchemy_id="solana-mainnet",
         near_intents_id="sol",
         has_nft_support=True,
+        symbol="SOL",
+        decimals=9,
     )
     FILECOIN = _c(
         coin=Coin.FIL,
@@ -142,6 +164,8 @@ class Chain(Enum):
         alchemy_id="filecoin-mainnet",
         near_intents_id=None,
         has_nft_support=False,
+        symbol="FIL",
+        decimals=18,
     )
     CARDANO = _c(
         coin=Coin.ADA,
@@ -150,6 +174,8 @@ class Chain(Enum):
         alchemy_id="cardano-mainnet",
         near_intents_id="cardano",
         has_nft_support=False,
+        symbol="ADA",
+        decimals=6,
     )
     ZCASH = _c(
         coin=Coin.ZEC,
@@ -158,6 +184,8 @@ class Chain(Enum):
         alchemy_id="zcash-mainnet",
         near_intents_id="zec",
         has_nft_support=False,
+        symbol="ZEC",
+        decimals=8,
     )
 
     def __getattr__(self, name):
@@ -170,6 +198,8 @@ class Chain(Enum):
             "alchemy_id",
             "near_intents_id",
             "has_nft_support",
+            "symbol",
+            "decimals",
         ]:
             return getattr(self.value, name)
 

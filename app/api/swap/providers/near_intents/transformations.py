@@ -28,7 +28,7 @@ from .models import (
     NearIntentsStatusResponse,
     NearIntentsToken,
 )
-from .utils import calculate_price_impact, encode_erc20_transfer
+from .utils import calculate_price_impact, compute_network_fee, encode_erc20_transfer
 
 
 def from_near_intents_token(token: NearIntentsToken) -> TokenInfo | None:
@@ -212,7 +212,7 @@ def _token_info_to_step_token(token: TokenInfo) -> SwapStepToken:
     )
 
 
-def from_near_intents_quote_to_route(
+async def from_near_intents_quote_to_route(
     response: NearIntentsQuoteResponse,
     request: SwapQuoteRequest,
     firm: bool,
@@ -228,6 +228,9 @@ def from_near_intents_quote_to_route(
     transaction_params = None
     if firm:
         transaction_params = _build_transaction_params(quote_data, request)
+
+    # Compute estimated network fee based on source chain
+    network_fee = await compute_network_fee(request)
 
     # Get source and destination tokens
     source_token = request.source_token
@@ -262,6 +265,7 @@ def from_near_intents_quote_to_route(
         destination_amount_min=quote_data.min_amount_out,
         estimated_time=quote_data.time_estimate,
         price_impact=price_impact,
+        network_fee=network_fee,
         deposit_address=quote_data.deposit_address,
         deposit_memo=quote_data.deposit_memo,
         expires_at=quote_data.deadline,

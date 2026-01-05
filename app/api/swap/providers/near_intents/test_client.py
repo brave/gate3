@@ -394,6 +394,11 @@ async def test_get_firm_route_solana_native_sol(
     assert result.transaction_params.solana.spl_token_amount is None
     assert result.transaction_params.solana.decimals is None
 
+    # Verify network fee is computed on the route
+    assert result.network_fee is not None
+    assert result.network_fee.symbol == "SOL"
+    assert result.network_fee.decimals == 9
+
 
 @pytest.mark.asyncio
 async def test_get_firm_route_solana_spl_token(
@@ -483,13 +488,26 @@ async def test_get_firm_route_solana_spl_token(
     assert result.transaction_params.solana.spl_token_amount == "2037265"
     assert result.transaction_params.solana.decimals == 6
 
+    # Verify network fee is computed on the route
+    assert result.network_fee is not None
+    assert result.network_fee.symbol == "SOL"
+    assert result.network_fee.decimals == 9
+
 
 @pytest.mark.asyncio
+@patch(
+    "app.api.swap.providers.near_intents.utils.get_evm_gas_price",
+    new_callable=AsyncMock,
+)
 async def test_get_firm_route_evm_native_eth(
+    mock_get_evm_gas_price,
     client,
     mock_httpx_client,
     mock_supported_tokens_cache,
 ):
+    # Mock gas price to 1 wei so fee = gas_limit * 1 = gas_limit
+    mock_get_evm_gas_price.return_value = 1
+
     # Mock supported tokens - native ETH and BTC
     supported_tokens = [
         ETH_TOKEN_INFO,
@@ -554,13 +572,27 @@ async def test_get_firm_route_evm_native_eth(
     assert result.transaction_params.evm.value == "1000000000000000000"
     assert result.transaction_params.evm.data == "0x"
 
+    # Verify network fee is computed on the route
+    assert result.network_fee is not None
+    assert result.network_fee.amount == "21000"  # Native transfer gas limit * 1 wei
+    assert result.network_fee.symbol == Chain.ETHEREUM.symbol
+    assert result.network_fee.decimals == Chain.ETHEREUM.decimals
+
 
 @pytest.mark.asyncio
+@patch(
+    "app.api.swap.providers.near_intents.utils.get_evm_gas_price",
+    new_callable=AsyncMock,
+)
 async def test_get_firm_route_evm_erc20_token(
+    mock_get_evm_gas_price,
     client,
     mock_httpx_client,
     mock_supported_tokens_cache,
 ):
+    # Mock gas price to 1 wei so fee = gas_limit * 1 = gas_limit
+    mock_get_evm_gas_price.return_value = 1
+
     # Mock supported tokens - ERC20 USDC and BTC
     supported_tokens = [
         USDC_ON_ETHEREUM_TOKEN_INFO,
@@ -629,6 +661,12 @@ async def test_get_firm_route_evm_erc20_token(
         "0xa9059cbb",
     )  # transfer function selector
     assert len(result.transaction_params.evm.data) == 138
+
+    # Verify network fee is computed on the route
+    assert result.network_fee is not None
+    assert result.network_fee.amount == "65000"  # ERC20 transfer gas limit * 1 wei
+    assert result.network_fee.symbol == Chain.ETHEREUM.symbol
+    assert result.network_fee.decimals == Chain.ETHEREUM.decimals
 
 
 @pytest.mark.asyncio

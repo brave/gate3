@@ -153,7 +153,7 @@ class NearIntentsClient(BaseSwapProvider):
             if 200 <= response.status_code < 300:
                 data = response.json()
                 near_response = NearIntentsQuoteResponse.model_validate(data)
-                return from_near_intents_quote_to_route(
+                return await from_near_intents_quote_to_route(
                     response=near_response,
                     request=request,
                     firm=not dry,

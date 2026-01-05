@@ -193,6 +193,13 @@ def sort_routes(
 ) -> list[SwapRoute]:
     """Sort routes based on the given priority, with tie-breaking by the other priority.
 
+    For CHEAPEST priority:
+    - EXACT_INPUT: Prefer highest destination_amount, then lowest network_fee
+    - EXACT_OUTPUT: Prefer lowest source_amount, then lowest network_fee
+
+    For FASTEST priority:
+    - Primary sort by estimated_time, then cheapest as tiebreaker
+
     Args:
         routes: List of routes to sort
         priority: Primary sort - CHEAPEST or FASTEST
@@ -202,19 +209,40 @@ def sort_routes(
         Sorted list of routes
     """
 
-    def cheapest_key(r: SwapRoute) -> int:
-        """Lower is better for sorting (will negate for EXACT_INPUT)."""
+    def network_fee_key(r: SwapRoute) -> tuple[bool, float]:
+        """Returns (is_none, fee) - None values sort last, lower fee is better.
+
+        Gasless routes with None network_fee are treated as zero fee (fee already
+        included in output/input amounts).
+        """
+        if r.network_fee is None:
+            # If gasless, treat as zero fee (fee already included in amounts)
+            if r.gasless:
+                return (False, 0.0)
+            # Otherwise, couldn't compute fee - sort last
+            return (True, 0.0)
+        return (False, float(r.network_fee.amount))
+
+    def cheapest_key(r: SwapRoute) -> tuple[int, tuple[bool, int]]:
+        """Returns (amount_key, network_fee_key) for sorting.
+
+        For EXACT_INPUT: Prefer highest destination_amount (negated for ascending sort)
+        For EXACT_OUTPUT: Prefer lowest source_amount
+        In both cases, lower network fee is better as a tiebreaker.
+        """
         if swap_type == SwapType.EXACT_OUTPUT:
-            return int(r.source_amount)  # Lower input is better
-        return -int(r.destination_amount)  # Higher output is better (negated)
+            # Lower input is better, then lower network fee
+            return (int(r.source_amount), network_fee_key(r))
+        # Higher output is better (negated), then lower network fee
+        return (-int(r.destination_amount), network_fee_key(r))
 
     def fastest_key(r: SwapRoute) -> tuple[bool, int]:
         """Returns (is_none, time) - None values sort last."""
         return (r.estimated_time is None, r.estimated_time or 0)
 
     if priority == RoutePriority.FASTEST:
-        # Primary: fastest, Secondary: cheapest
+        # Primary: fastest, Secondary: cheapest (including network fee)
         return sorted(routes, key=lambda r: (fastest_key(r), cheapest_key(r)))
 
-    # CHEAPEST: Primary: cheapest, Secondary: fastest
+    # CHEAPEST: Primary: cheapest (amount + network fee), Secondary: fastest
     return sorted(routes, key=lambda r: (cheapest_key(r), fastest_key(r)))

@@ -228,6 +228,8 @@ def test_indicative_quote_response(mock_get_all_indicative_routes):
                 "destinationAmountMin": "3450",
                 "estimatedTime": None,
                 "priceImpact": None,
+                "networkFee": None,
+                "gasless": False,
                 "depositAddress": None,
                 "depositMemo": None,
                 "expiresAt": None,

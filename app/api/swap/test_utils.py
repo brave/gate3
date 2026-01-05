@@ -4,6 +4,7 @@ import pytest
 
 from app.api.common.models import Coin
 from app.api.swap.models import (
+    NetworkFee,
     RoutePriority,
     SwapError,
     SwapErrorKind,
@@ -23,6 +24,8 @@ def create_mock_route(
     source_amount: str = "1000000",
     destination_amount: str = "3500",
     estimated_time: int | None = None,
+    network_fee: NetworkFee | None = None,
+    gasless: bool = False,
 ):
     """Helper to create a mock SwapRoute for testing."""
     return SwapRoute(
@@ -55,6 +58,8 @@ def create_mock_route(
         destination_amount=destination_amount,
         destination_amount_min="3450",
         estimated_time=estimated_time,
+        network_fee=network_fee,
+        gasless=gasless,
         has_post_submit_hook=True,
         requires_token_allowance=False,
         requires_firm_route=True,
@@ -147,6 +152,159 @@ def test_sort_routes_fastest_tiebreak_by_cheapest():
     sorted_routes = sort_routes(routes, RoutePriority.FASTEST, SwapType.EXACT_INPUT)
 
     assert [r.id for r in sorted_routes] == ["high_output", "low_output"]
+
+
+def test_sort_routes_cheapest_exact_input_tiebreak_by_network_fee():
+    """When destination_amount ties, break by lowest network_fee."""
+    routes = [
+        create_mock_route(
+            "high_fee",
+            destination_amount="5000",
+            network_fee=NetworkFee(amount="100000", decimals=18, symbol="ETH"),
+        ),
+        create_mock_route(
+            "low_fee",
+            destination_amount="5000",
+            network_fee=NetworkFee(amount="10000", decimals=18, symbol="ETH"),
+        ),
+        create_mock_route(
+            "no_fee",
+            destination_amount="5000",
+            network_fee=None,
+        ),
+    ]
+
+    sorted_routes = sort_routes(routes, RoutePriority.CHEAPEST, SwapType.EXACT_INPUT)
+
+    # Lower fee is better, None sorts last
+    assert [r.id for r in sorted_routes] == ["low_fee", "high_fee", "no_fee"]
+
+
+def test_sort_routes_cheapest_exact_output_tiebreak_by_network_fee():
+    """When source_amount ties, break by lowest network_fee."""
+    routes = [
+        create_mock_route(
+            "high_fee",
+            source_amount="1000",
+            network_fee=NetworkFee(amount="50000", decimals=9, symbol="SOL"),
+        ),
+        create_mock_route(
+            "low_fee",
+            source_amount="1000",
+            network_fee=NetworkFee(amount="5000", decimals=9, symbol="SOL"),
+        ),
+        create_mock_route(
+            "no_fee",
+            source_amount="1000",
+            network_fee=None,
+        ),
+    ]
+
+    sorted_routes = sort_routes(routes, RoutePriority.CHEAPEST, SwapType.EXACT_OUTPUT)
+
+    # Lower fee is better, None sorts last
+    assert [r.id for r in sorted_routes] == ["low_fee", "high_fee", "no_fee"]
+
+
+def test_sort_routes_cheapest_exact_input_amount_beats_fee():
+    """Higher destination_amount beats lower network_fee for EXACT_INPUT."""
+    routes = [
+        create_mock_route(
+            "high_output_high_fee",
+            destination_amount="6000",
+            network_fee=NetworkFee(amount="100000", decimals=18, symbol="ETH"),
+        ),
+        create_mock_route(
+            "low_output_low_fee",
+            destination_amount="5000",
+            network_fee=NetworkFee(amount="10000", decimals=18, symbol="ETH"),
+        ),
+    ]
+
+    sorted_routes = sort_routes(routes, RoutePriority.CHEAPEST, SwapType.EXACT_INPUT)
+
+    # Higher output is more important than lower fee
+    assert [r.id for r in sorted_routes] == [
+        "high_output_high_fee",
+        "low_output_low_fee",
+    ]
+
+
+def test_sort_routes_cheapest_exact_output_amount_beats_fee():
+    """Lower source_amount beats lower network_fee for EXACT_OUTPUT."""
+    routes = [
+        create_mock_route(
+            "low_input_high_fee",
+            source_amount="900",
+            network_fee=NetworkFee(amount="100000", decimals=18, symbol="ETH"),
+        ),
+        create_mock_route(
+            "high_input_low_fee",
+            source_amount="1000",
+            network_fee=NetworkFee(amount="10000", decimals=18, symbol="ETH"),
+        ),
+    ]
+
+    sorted_routes = sort_routes(routes, RoutePriority.CHEAPEST, SwapType.EXACT_OUTPUT)
+
+    # Lower input is more important than lower fee
+    assert [r.id for r in sorted_routes] == ["low_input_high_fee", "high_input_low_fee"]
+
+
+def test_sort_routes_gasless_treated_as_zero_fee_exact_input():
+    """Gasless routes with None network_fee are treated as zero fee for EXACT_INPUT."""
+    routes = [
+        create_mock_route(
+            "with_fee",
+            destination_amount="5000",
+            network_fee=NetworkFee(amount="10000", decimals=18, symbol="ETH"),
+        ),
+        create_mock_route(
+            "gasless",
+            destination_amount="5000",
+            network_fee=None,
+            gasless=True,
+        ),
+        create_mock_route(
+            "no_fee_info",
+            destination_amount="5000",
+            network_fee=None,
+            gasless=False,
+        ),
+    ]
+
+    sorted_routes = sort_routes(routes, RoutePriority.CHEAPEST, SwapType.EXACT_INPUT)
+
+    # Gasless (zero fee) should be best, then with_fee, then no_fee_info (sorts last)
+    assert [r.id for r in sorted_routes] == ["gasless", "with_fee", "no_fee_info"]
+
+
+def test_sort_routes_gasless_treated_as_zero_fee_exact_output():
+    """Gasless routes with None network_fee are treated as zero fee for EXACT_OUTPUT."""
+    routes = [
+        create_mock_route(
+            "with_fee",
+            source_amount="1000",
+            network_fee=NetworkFee(amount="5000", decimals=9, symbol="SOL"),
+        ),
+        create_mock_route(
+            "gasless",
+            source_amount="1000",
+            network_fee=None,
+            gasless=True,
+        ),
+        create_mock_route(
+            "no_fee_info",
+            source_amount="1000",
+            network_fee=None,
+            gasless=False,
+        ),
+    ]
+
+    sorted_routes = sort_routes(routes, RoutePriority.CHEAPEST, SwapType.EXACT_OUTPUT)
+
+    # Gasless (zero fee) should be best, then with_fee, then no_fee_info (sorts last)
+    assert [r.id for r in sorted_routes] == ["gasless", "with_fee", "no_fee_info"]
 
 
 # =============================================================================

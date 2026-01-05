@@ -245,12 +245,30 @@ class SwapStatusRequest(SwapBaseModel):
 # ============================================================================
 
 
+class NetworkFee(SwapBaseModel):
+    """Network fee information for a transaction."""
+
+    amount: str = Field(description="Fee amount in smallest unit (wei, lamports, etc.)")
+    decimals: int = Field(description="Decimals for the fee token")
+    symbol: str = Field(description="Symbol of the fee token (e.g., 'ETH', 'SOL')")
+
+
 class EvmTransactionParams(SwapBaseModel):
     chain: ChainSpec
     from_address: str = Field(alias="from")
     to: str
     value: str
     data: str
+
+    # Gas fee parameters (optional)
+    gas_limit: str | None = Field(
+        default=None,
+        description="Gas limit for the transaction",
+    )
+    gas_price: str | None = Field(
+        default=None,
+        description="Gas price in wei",
+    )
 
 
 class SolanaTransactionParams(SwapBaseModel):
@@ -271,6 +289,16 @@ class SolanaTransactionParams(SwapBaseModel):
     versioned_transaction: str | None = Field(
         default=None,
         description="Base64-encoded versioned transaction for signing",
+    )
+
+    # Priority fee parameters (optional)
+    compute_unit_limit: str | None = Field(
+        default=None,
+        description="Compute unit limit for the transaction",
+    )
+    compute_unit_price: str | None = Field(
+        default=None,
+        description="Priority fee in micro-lamports per compute unit",
     )
 
 
@@ -364,6 +392,17 @@ class SwapRoute(SwapBaseModel):
     price_impact: float | None = Field(
         default=None,
         description="Price impact percentage",
+    )
+    network_fee: NetworkFee | None = Field(
+        default=None,
+        description=(
+            "Total estimated network fee for the swap route. "
+            "None indicates that network fees could not be fetched or computed."
+        ),
+    )
+    gasless: bool = Field(
+        default=False,
+        description="Whether this route operates in gasless mode (network fees are sponsored/waived)",
     )
 
     # Fields typically only provided for firm quotes (with few exceptions)

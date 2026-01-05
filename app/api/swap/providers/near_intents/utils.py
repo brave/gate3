@@ -1,4 +1,14 @@
-from ...models import SwapErrorKind
+from app.api.common.evm.gas import get_evm_gas_price
+from app.api.common.models import Chain, Coin
+
+from ...models import NetworkFee, SwapErrorKind, SwapQuoteRequest
+from .constants import (
+    EVM_GAS_LIMIT_ERC20_TRANSFER,
+    EVM_GAS_LIMIT_NATIVE_TRANSFER,
+    SOLANA_BASE_FEE_LAMPORTS,
+    SOLANA_COMPUTE_UNIT_LIMIT,
+    SOLANA_COMPUTE_UNIT_PRICE_LAMPORTS,
+)
 from .models import NearIntentsQuoteData
 
 
@@ -113,3 +123,53 @@ def categorize_error(error_message: str) -> SwapErrorKind:
 
     # Default to unknown if no pattern matches
     return SwapErrorKind.UNKNOWN
+
+
+async def compute_network_fee(request: SwapQuoteRequest) -> NetworkFee | None:
+    """Compute estimated network fee based on source chain.
+
+    Returns NetworkFee with the estimated fee amount in the chain's native token.
+    For EVM chains, this queries current gas prices from Alchemy.
+    For Solana, this is based on compute units and priority fee estimates.
+
+    Note: These are estimates. Actual fees may vary based on network conditions.
+    """
+    source_chain = request.source_chain
+    source_token = request.source_token
+
+    if not source_chain or not source_token:
+        return None
+
+    if source_chain == Chain.SOLANA:
+        # Solana fee = base_fee + (compute_unit_limit * compute_unit_price)
+        fee_lamports = SOLANA_BASE_FEE_LAMPORTS + (
+            SOLANA_COMPUTE_UNIT_LIMIT * SOLANA_COMPUTE_UNIT_PRICE_LAMPORTS
+        )
+        return NetworkFee(
+            amount=str(fee_lamports),
+            decimals=source_chain.decimals,
+            symbol=source_chain.symbol,
+        )
+
+    if source_chain.coin == Coin.ETH:
+        gas_limit = (
+            EVM_GAS_LIMIT_NATIVE_TRANSFER
+            if source_token.is_native()
+            else EVM_GAS_LIMIT_ERC20_TRANSFER
+        )
+
+        # Try to get actual gas price from ETH JSON RPC
+        gas_price = await get_evm_gas_price(source_chain)
+        if gas_price:
+            total_fee_wei = gas_limit * gas_price
+            return NetworkFee(
+                amount=str(total_fee_wei),
+                decimals=source_chain.decimals,
+                symbol=source_chain.symbol,
+            )
+
+        # Return None if gas price unavailable
+        return None
+
+    # Return None for other chains - no fee estimate available
+    return None
