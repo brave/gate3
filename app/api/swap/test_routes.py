@@ -3,9 +3,15 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from fastapi.testclient import TestClient
 
+from app.api.common.models import Coin
 from app.api.swap.models import (
     SwapError,
     SwapErrorKind,
+    SwapProviderEnum,
+    SwapRoute,
+    SwapRouteStep,
+    SwapStepToken,
+    SwapTool,
 )
 from app.main import app
 
@@ -13,9 +19,19 @@ client = TestClient(app)
 
 
 @pytest.fixture
-def mock_get_or_select_provider_client():
+def mock_get_provider_client_for_request():
     with patch(
-        "app.api.swap.routes.get_or_select_provider_client", new_callable=AsyncMock
+        "app.api.swap.routes.get_provider_client_for_request",
+        new_callable=AsyncMock,
+    ) as mock:
+        yield mock
+
+
+@pytest.fixture
+def mock_get_all_indicative_routes():
+    with patch(
+        "app.api.swap.routes.get_all_indicative_routes",
+        new_callable=AsyncMock,
     ) as mock:
         yield mock
 
@@ -45,22 +61,67 @@ MOCK_REQUEST_DATA = {
     "amount": "1000000",
     "slippagePercentage": "0.5",
     "swapType": "EXACT_INPUT",
-    "sender": "8eekKfUAGSJbq3CdA2TmHb8tKuyzd5gtEas3MYAtXzrT",
+    "refundTo": "8eekKfUAGSJbq3CdA2TmHb8tKuyzd5gtEas3MYAtXzrT",
 }
 
 
+def create_mock_route(
+    route_id: str = "test-route-1",
+    source_amount: str = "1000000",
+    destination_amount: str = "3500",
+    estimated_time: int | None = None,
+):
+    """Helper to create a mock SwapRoute for testing."""
+    return SwapRoute(
+        id=route_id,
+        provider=SwapProviderEnum.NEAR_INTENTS,
+        steps=[
+            SwapRouteStep(
+                source_token=SwapStepToken(
+                    coin=Coin.SOL,
+                    chain_id="0x65",
+                    contract_address="EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+                    symbol="USDC",
+                    decimals=6,
+                    logo=None,
+                ),
+                source_amount=source_amount,
+                destination_token=SwapStepToken(
+                    coin=Coin.BTC,
+                    chain_id="bitcoin_mainnet",
+                    contract_address=None,
+                    symbol="BTC",
+                    decimals=8,
+                    logo=None,
+                ),
+                destination_amount=destination_amount,
+                tool=SwapTool(name="NEAR Intents", logo=None),
+            )
+        ],
+        source_amount=source_amount,
+        destination_amount=destination_amount,
+        destination_amount_min="3450",
+        estimated_time=estimated_time,
+        has_post_submit_hook=True,
+        requires_token_allowance=False,
+        requires_firm_route=True,
+    )
+
+
 def test_indicative_quote_insufficient_liquidity_error(
-    mock_get_or_select_provider_client, mock_provider_client
+    mock_get_all_indicative_routes,
 ):
     # Setup mock to raise SwapError with INSUFFICIENT_LIQUIDITY kind
     error = SwapError(
         message="Amount is too low for bridge, try at least 1264000",
         kind=SwapErrorKind.INSUFFICIENT_LIQUIDITY,
     )
-    mock_provider_client.get_indicative_quote = AsyncMock(side_effect=error)
-    mock_get_or_select_provider_client.return_value = mock_provider_client
+    mock_get_all_indicative_routes.side_effect = error
 
-    response = client.post("/api/swap/v1/quote/indicative", json=MOCK_REQUEST_DATA)
+    response = client.post(
+        "/api/swap/v1/quote/indicative",
+        json=MOCK_REQUEST_DATA,
+    )
 
     assert response.status_code == 400
     error_data = response.json()
@@ -69,14 +130,16 @@ def test_indicative_quote_insufficient_liquidity_error(
 
 
 def test_firm_quote_insufficient_liquidity_error(
-    mock_get_or_select_provider_client, mock_provider_client, mock_token_manager
+    mock_get_provider_client_for_request,
+    mock_provider_client,
+    mock_token_manager,
 ):
     error = SwapError(
         message="Amount is too small for this swap",
         kind=SwapErrorKind.INSUFFICIENT_LIQUIDITY,
     )
-    mock_provider_client.get_firm_quote = AsyncMock(side_effect=error)
-    mock_get_or_select_provider_client.return_value = mock_provider_client
+    mock_provider_client.get_firm_route = AsyncMock(side_effect=error)
+    mock_get_provider_client_for_request.return_value = mock_provider_client
 
     response = client.post("/api/swap/v1/quote/firm", json=MOCK_REQUEST_DATA)
 
@@ -87,16 +150,18 @@ def test_firm_quote_insufficient_liquidity_error(
 
 
 def test_indicative_quote_unknown_error(
-    mock_get_or_select_provider_client, mock_provider_client
+    mock_get_all_indicative_routes,
 ):
     error = SwapError(
         message="Unexpected error occurred",
         kind=SwapErrorKind.UNKNOWN,
     )
-    mock_provider_client.get_indicative_quote = AsyncMock(side_effect=error)
-    mock_get_or_select_provider_client.return_value = mock_provider_client
+    mock_get_all_indicative_routes.side_effect = error
 
-    response = client.post("/api/swap/v1/quote/indicative", json=MOCK_REQUEST_DATA)
+    response = client.post(
+        "/api/swap/v1/quote/indicative",
+        json=MOCK_REQUEST_DATA,
+    )
 
     assert response.status_code == 400
     error_data = response.json()
@@ -105,14 +170,16 @@ def test_indicative_quote_unknown_error(
 
 
 def test_firm_quote_unknown_error(
-    mock_get_or_select_provider_client, mock_provider_client, mock_token_manager
+    mock_get_provider_client_for_request,
+    mock_provider_client,
+    mock_token_manager,
 ):
     error = SwapError(
         message="An unexpected error happened",
         kind=SwapErrorKind.UNKNOWN,
     )
-    mock_provider_client.get_firm_quote = AsyncMock(side_effect=error)
-    mock_get_or_select_provider_client.return_value = mock_provider_client
+    mock_provider_client.get_firm_route = AsyncMock(side_effect=error)
+    mock_get_provider_client_for_request.return_value = mock_provider_client
 
     response = client.post("/api/swap/v1/quote/firm", json=MOCK_REQUEST_DATA)
 
@@ -120,3 +187,56 @@ def test_firm_quote_unknown_error(
     error_data = response.json()
     assert error_data["message"] == "An unexpected error happened"
     assert error_data["kind"] == "UNKNOWN"
+
+
+def test_indicative_quote_response(mock_get_all_indicative_routes):
+    mock_get_all_indicative_routes.return_value = [create_mock_route()]
+
+    response = client.post("/api/swap/v1/quote/indicative", json=MOCK_REQUEST_DATA)
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "routes": [
+            {
+                "id": "test-route-1",
+                "provider": "NEAR_INTENTS",
+                "steps": [
+                    {
+                        "sourceToken": {
+                            "coin": "SOL",
+                            "chainId": "0x65",
+                            "contractAddress": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+                            "symbol": "USDC",
+                            "decimals": 6,
+                            "logo": None,
+                        },
+                        "sourceAmount": "1000000",
+                        "destinationToken": {
+                            "coin": "BTC",
+                            "chainId": "bitcoin_mainnet",
+                            "contractAddress": None,
+                            "symbol": "BTC",
+                            "decimals": 8,
+                            "logo": None,
+                        },
+                        "destinationAmount": "3500",
+                        "tool": {"name": "NEAR Intents", "logo": None},
+                    }
+                ],
+                "sourceAmount": "1000000",
+                "destinationAmount": "3500",
+                "destinationAmountMin": "3450",
+                "estimatedTime": None,
+                "priceImpact": None,
+                "networkFee": None,
+                "gasless": False,
+                "depositAddress": None,
+                "depositMemo": None,
+                "expiresAt": None,
+                "transactionParams": None,
+                "hasPostSubmitHook": True,
+                "requiresTokenAllowance": False,
+                "requiresFirmRoute": True,
+            }
+        ]
+    }

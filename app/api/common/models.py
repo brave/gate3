@@ -1,6 +1,7 @@
 from enum import Enum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
+from pydantic.alias_generators import to_camel
 
 from app.api.common.annotations import (
     ADDRESS_DESCRIPTION,
@@ -12,6 +13,17 @@ from app.api.common.annotations import (
 class HealthStatus(str, Enum):
     OK = "OK"
     KO = "KO"
+
+
+class Tags(str, Enum):
+    """API documentation tags for grouping endpoints in Swagger UI."""
+
+    HEALTH = "Health"
+    NFT = "NFT"
+    OAUTH = "OAuth Proxy"
+    PRICING = "Pricing"
+    SWAP = "Swap"
+    TOKENS = "Tokens"
 
 
 class PingResponse(BaseModel):
@@ -35,6 +47,21 @@ class _c(BaseModel):
     near_intents_id: str | None = None
     has_nft_support: bool
 
+    # Native token info
+    symbol: str
+    decimals: int
+
+
+class ChainSpec(BaseModel):
+    coin: Coin = Field(description="Coin identifier")
+    chain_id: str = Field(description="Chain identifier")
+
+    model_config = ConfigDict(
+        alias_generator=to_camel,
+        populate_by_name=True,
+        serialize_by_alias=True,
+    )
+
 
 class Chain(Enum):
     # EVM chains
@@ -45,6 +72,8 @@ class Chain(Enum):
         alchemy_id="eth-mainnet",
         near_intents_id="eth",
         has_nft_support=True,
+        symbol="ETH",
+        decimals=18,
     )
     ARBITRUM = _c(
         coin=Coin.ETH,
@@ -53,6 +82,8 @@ class Chain(Enum):
         alchemy_id="arb-mainnet",
         near_intents_id="arb",
         has_nft_support=True,
+        symbol="ETH",
+        decimals=18,
     )
     AVALANCHE = _c(
         coin=Coin.ETH,
@@ -61,6 +92,8 @@ class Chain(Enum):
         alchemy_id="avax-mainnet",
         near_intents_id="avax",
         has_nft_support=True,
+        symbol="AVAX",
+        decimals=18,
     )
     BASE = _c(
         coin=Coin.ETH,
@@ -69,6 +102,8 @@ class Chain(Enum):
         alchemy_id="base-mainnet",
         near_intents_id="base",
         has_nft_support=True,
+        symbol="ETH",
+        decimals=18,
     )
     BNB_CHAIN = _c(
         coin=Coin.ETH,
@@ -77,6 +112,8 @@ class Chain(Enum):
         alchemy_id="bnb-mainnet",
         near_intents_id="bsc",
         has_nft_support=False,
+        symbol="BNB",
+        decimals=18,
     )
     OPTIMISM = _c(
         coin=Coin.ETH,
@@ -85,6 +122,8 @@ class Chain(Enum):
         alchemy_id="opt-mainnet",
         near_intents_id="op",
         has_nft_support=True,
+        symbol="ETH",
+        decimals=18,
     )
     POLYGON = _c(
         coin=Coin.ETH,
@@ -93,6 +132,8 @@ class Chain(Enum):
         alchemy_id="polygon-mainnet",
         near_intents_id="pol",
         has_nft_support=True,
+        symbol="POL",
+        decimals=18,
     )
 
     # Non-EVM chains
@@ -103,6 +144,8 @@ class Chain(Enum):
         alchemy_id="bitcoin-mainnet",
         near_intents_id="btc",
         has_nft_support=False,
+        symbol="BTC",
+        decimals=8,
     )
     SOLANA = _c(
         coin=Coin.SOL,
@@ -111,6 +154,8 @@ class Chain(Enum):
         alchemy_id="solana-mainnet",
         near_intents_id="sol",
         has_nft_support=True,
+        symbol="SOL",
+        decimals=9,
     )
     FILECOIN = _c(
         coin=Coin.FIL,
@@ -119,6 +164,8 @@ class Chain(Enum):
         alchemy_id="filecoin-mainnet",
         near_intents_id=None,
         has_nft_support=False,
+        symbol="FIL",
+        decimals=18,
     )
     CARDANO = _c(
         coin=Coin.ADA,
@@ -127,6 +174,8 @@ class Chain(Enum):
         alchemy_id="cardano-mainnet",
         near_intents_id="cardano",
         has_nft_support=False,
+        symbol="ADA",
+        decimals=6,
     )
     ZCASH = _c(
         coin=Coin.ZEC,
@@ -135,6 +184,8 @@ class Chain(Enum):
         alchemy_id="zcash-mainnet",
         near_intents_id="zec",
         has_nft_support=False,
+        symbol="ZEC",
+        decimals=8,
     )
 
     def __getattr__(self, name):
@@ -147,6 +198,8 @@ class Chain(Enum):
             "alchemy_id",
             "near_intents_id",
             "has_nft_support",
+            "symbol",
+            "decimals",
         ]:
             return getattr(self.value, name)
 
@@ -167,8 +220,17 @@ class Chain(Enum):
                 return chain
         return None
 
-    def __repr__(self):
+    def to_spec(self) -> ChainSpec:
+        return ChainSpec(coin=self.coin, chain_id=self.chain_id)
+
+    def __eq__(self, other: Chain) -> bool:
+        return self.coin == other.coin and self.chain_id == other.chain_id
+
+    def __str__(self):
         return f"<{self.__class__.__name__}.{self.name}: coin={self.coin.value} chain_id={self.chain_id}>"
+
+    def __repr__(self):
+        return self.__str__()
 
 
 class TokenSource(str, Enum):
@@ -204,3 +266,6 @@ class TokenInfo(BaseModel):
     @property
     def chain(self) -> Chain | None:
         return Chain.get(self.coin.value, self.chain_id)
+
+    def is_native(self) -> bool:
+        return not self.address

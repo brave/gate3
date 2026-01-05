@@ -1,10 +1,25 @@
 from datetime import datetime
 from enum import Enum
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from pydantic.alias_generators import to_camel
 
-from app.api.common.models import Chain, Coin, TokenInfo
+from app.api.common.models import Chain, ChainSpec, Coin, TokenInfo
+from app.api.common.utils import is_address_equal
+
+# ============================================================================
+# Base Models
+# ============================================================================
+
+
+class SwapBaseModel(BaseModel):
+    """Base model with camelCase serialization for API responses and requests."""
+
+    model_config = ConfigDict(
+        alias_generator=to_camel,
+        populate_by_name=True,
+        serialize_by_alias=True,
+    )
 
 
 # ============================================================================
@@ -43,20 +58,22 @@ class SwapProviderEnum(str, Enum):
     JUPITER = "JUPITER"
     LIFI = "LIFI"
 
-    def to_info(self) -> "SwapProviderInfo":
+    def to_info(self) -> SwapProviderInfo:
         mapping = {
             SwapProviderEnum.AUTO: SwapProviderInfo(
-                id=SwapProviderEnum.AUTO, name="Auto", logo=None
+                id=SwapProviderEnum.AUTO,
+                name="Auto",
+                logo=None,
             ),
             SwapProviderEnum.NEAR_INTENTS: SwapProviderInfo(
                 id=SwapProviderEnum.NEAR_INTENTS,
                 name="NEAR Intents",
-                logo="https://static1.tokenterminal.com//near/products/nearintents/logo.png",
+                logo="https://static1.tokenterminal.com/near/products/nearintents/logo.png",
             ),
             SwapProviderEnum.ZERO_EX: SwapProviderInfo(
                 id=SwapProviderEnum.ZERO_EX,
                 name="0x",
-                logo="https://static1.tokenterminal.com//0x/logo.png",
+                logo="https://static1.tokenterminal.com/0x/logo.png",
             ),
             SwapProviderEnum.JUPITER: SwapProviderInfo(
                 id=SwapProviderEnum.JUPITER,
@@ -76,7 +93,7 @@ class SwapProviderEnum(str, Enum):
         return mapping[self]
 
 
-class SwapProviderInfo(BaseModel):
+class SwapProviderInfo(SwapBaseModel):
     id: SwapProviderEnum = Field(description="Provider identifier")
     name: str = Field(description="Provider display name")
     logo: str | None = Field(None, description="Provider logo URL")
@@ -85,6 +102,11 @@ class SwapProviderInfo(BaseModel):
 class SwapType(str, Enum):
     EXACT_INPUT = "EXACT_INPUT"
     EXACT_OUTPUT = "EXACT_OUTPUT"
+
+
+class RoutePriority(str, Enum):
+    FASTEST = "FASTEST"
+    CHEAPEST = "CHEAPEST"
 
 
 class SwapStatus(str, Enum):
@@ -99,29 +121,37 @@ class SwapStatus(str, Enum):
 # Public Models (Provider-Agnostic Common Format)
 # ============================================================================
 
+# ============================================================================
+# Request Models
+# ============================================================================
 
-class SwapSupportRequest(BaseModel):
+
+class SwapSupportRequest(SwapBaseModel):
     source_coin: Coin = Field(description="Source coin type")
     source_chain_id: str = Field(description="Source chain ID")
     source_token_address: str | None = Field(
-        default=None, description="Source token address (None for native)"
+        default=None,
+        description="Source token address (None for native)",
     )
     destination_coin: Coin = Field(description="Destination coin type")
     destination_chain_id: str = Field(description="Destination chain ID")
     destination_token_address: str | None = Field(
-        default=None, description="Destination token address (None for native)"
+        default=None,
+        description="Destination token address (None for native)",
     )
     recipient: str | None = Field(
-        default=None, description="Recipient address on destination chain"
+        default=None,
+        description="Recipient address on destination chain",
     )
-
-    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
     _source_token: TokenInfo | None = None
     _destination_token: TokenInfo | None = None
 
     @field_validator(
-        "source_token_address", "destination_token_address", "recipient", mode="before"
+        "source_token_address",
+        "destination_token_address",
+        "recipient",
+        mode="before",
     )
     @classmethod
     def empty_string_to_none(cls, v: str | None) -> str | None:
@@ -140,7 +170,7 @@ class SwapSupportRequest(BaseModel):
             if (
                 token.coin == self.source_coin
                 and token.chain_id == self.source_chain_id
-                and token.address == self.source_token_address
+                and is_address_equal(token.address, self.source_token_address)
             ):
                 self._source_token = token
                 break
@@ -150,7 +180,7 @@ class SwapSupportRequest(BaseModel):
             if (
                 token.coin == self.destination_coin
                 and token.chain_id == self.destination_chain_id
-                and token.address == self.destination_token_address
+                and is_address_equal(token.address, self.destination_token_address)
             ):
                 self._destination_token = token
                 break
@@ -180,8 +210,8 @@ class SwapQuoteRequest(SwapSupportRequest):
         description="Type of swap - how to interpret amounts",
     )
 
-    # Sender address
-    sender: str = Field(description="Sender address on source chain")
+    # Refund address
+    refund_to: str = Field(description="Refund address on source chain if swap fails")
 
     # Optional provider selection
     provider: SwapProviderEnum | None = Field(
@@ -189,22 +219,193 @@ class SwapQuoteRequest(SwapSupportRequest):
         description="Specific provider to use (None for automatic selection)",
     )
 
+    # Route priority for sorting
+    route_priority: RoutePriority = Field(
+        default=RoutePriority.CHEAPEST,
+        description=(
+            "Priority for sorting routes. "
+            "CHEAPEST: best rate first (highest output for EXACT_INPUT, lowest input for EXACT_OUTPUT). "
+            "FASTEST: lowest estimated time first. Ties are broken by the other priority."
+        ),
+    )
 
-class SwapQuote(BaseModel):
-    provider: SwapProviderEnum = Field(description="Provider that generated this quote")
 
-    source_amount: str = Field(description="Source amount in smallest unit")
+class SwapStatusRequest(SwapBaseModel):
+    tx_hash: str = Field(description="Transaction hash of the swap")
+    deposit_address: str = Field(description="Deposit address of the swap")
+    deposit_memo: str | None = Field(
+        default=None,
+        description="Deposit memo of the swap (if applicable)",
+    )
+    provider: SwapProviderEnum = Field(description="Provider that generated the quote")
 
-    destination_amount: str = Field(description="Destination amount in smallest unit")
 
+# ============================================================================
+# Response Models
+# ============================================================================
+
+
+class NetworkFee(SwapBaseModel):
+    """Network fee information for a transaction."""
+
+    amount: str = Field(description="Fee amount in smallest unit (wei, lamports, etc.)")
+    decimals: int = Field(description="Decimals for the fee token")
+    symbol: str = Field(description="Symbol of the fee token (e.g., 'ETH', 'SOL')")
+
+
+class EvmTransactionParams(SwapBaseModel):
+    chain: ChainSpec
+    from_address: str = Field(alias="from")
+    to: str
+    value: str
+    data: str
+
+    # Gas fee parameters (optional)
+    gas_limit: str | None = Field(
+        default=None,
+        description="Gas limit for the transaction",
+    )
+    gas_price: str | None = Field(
+        default=None,
+        description="Gas price in wei",
+    )
+
+
+class SolanaTransactionParams(SwapBaseModel):
+    chain: ChainSpec
+    from_address: str = Field(alias="from")
+    to: str
+
+    # Common field for both system and SPL transfers. It is recommended to use
+    # lamports alias for system transfers, otherwise use value for SPL transfers
+    value: str = Field(alias="lamports")
+
+    # For SPL transfers only
+    spl_token_mint: str | None = Field(default=None)
+    spl_token_amount: str | None = Field(default=None)
+    decimals: int | None = Field(default=None)  # Needed for TransferChecked instruction
+
+    # Pre-built versioned transaction (base64-encoded)
+    versioned_transaction: str | None = Field(
+        default=None,
+        description="Base64-encoded versioned transaction for signing",
+    )
+
+    # Priority fee parameters (optional)
+    compute_unit_limit: str | None = Field(
+        default=None,
+        description="Compute unit limit for the transaction",
+    )
+    compute_unit_price: str | None = Field(
+        default=None,
+        description="Priority fee in micro-lamports per compute unit",
+    )
+
+
+class BitcoinTransactionParams(SwapBaseModel):
+    chain: ChainSpec
+    to: str
+    value: str
+    refund_to: str
+
+
+class TransactionParams(SwapBaseModel):
+    evm: EvmTransactionParams | None = Field(default=None)
+    solana: SolanaTransactionParams | None = Field(default=None)
+    bitcoin: BitcoinTransactionParams | None = Field(default=None)
+
+    @model_validator(mode="after")
+    def only_one_field_not_none(self):
+        field_names = list(TransactionParams.model_fields.keys())
+        not_none_fields = [
+            name for name in field_names if getattr(self, name) is not None
+        ]
+        if len(not_none_fields) != 1:
+            raise ValueError(f"Exactly one of {field_names!r} must be not None")
+        return self
+
+
+# ============================================================================
+# Route / Step Models
+# ============================================================================
+
+
+class SwapStepToken(SwapBaseModel):
+    """Token info for swap step source/destination."""
+
+    coin: Coin = Field(description="Coin type (ETH, SOL, BTC, etc.)")
+    chain_id: str = Field(description="Chain ID")
+    contract_address: str | None = Field(
+        default=None,
+        description="Token contract address (None for native)",
+    )
+    symbol: str = Field(description="Token symbol (e.g., 'USDC', 'ETH')")
+    decimals: int = Field(description="Token decimals")
+    logo: str | None = Field(default=None, description="Token logo URL")
+
+
+class SwapTool(SwapBaseModel):
+    """DEX/protocol used for a swap step."""
+
+    name: str = Field(description="Display name (e.g., 'Uniswap', 'Jupiter')")
+    logo: str | None = Field(default=None, description="Logo URL")
+
+
+class SwapRouteStep(SwapBaseModel):
+    """A single hop in a multi-hop swap route."""
+
+    source_token: SwapStepToken = Field(description="Source token info")
+    source_amount: str = Field(description="Amount in smallest unit")
+
+    destination_token: SwapStepToken = Field(description="Destination token info")
+    destination_amount: str = Field(description="Amount in smallest unit")
+
+    tool: SwapTool = Field(description="DEX/protocol used for this step")
+
+
+class SwapRoute(SwapBaseModel):
+    """A complete swap route with one or more steps."""
+
+    id: str = Field(description="Unique route identifier")
+    provider: SwapProviderEnum = Field(description="Provider for this route")
+
+    steps: list[SwapRouteStep] = Field(
+        description="Ordered list of hops in this route",
+    )
+
+    source_amount: str = Field(
+        description=(
+            "Total source amount in smallest unit. For EXACT_OUTPUT, this is minimum amount required to proceed with the swap."
+        )
+    )
+    destination_amount: str = Field(
+        description="Total destination amount in smallest unit"
+    )
     destination_amount_min: str = Field(
-        description="Minimum destination amount after slippage in smallest unit"
+        description="Minimum destination amount after slippage in smallest unit",
     )
 
     estimated_time: int | None = Field(
-        default=None, description="Estimated time for swap completion in seconds"
+        default=None,
+        description="Total estimated time in seconds (0 indicates an atomic swap)",
+    )
+    price_impact: float | None = Field(
+        default=None,
+        description="Price impact percentage",
+    )
+    network_fee: NetworkFee | None = Field(
+        default=None,
+        description=(
+            "Total estimated network fee for the swap route. "
+            "None indicates that network fees could not be fetched or computed."
+        ),
+    )
+    gasless: bool = Field(
+        default=False,
+        description="Whether this route operates in gasless mode (network fees are sponsored/waived)",
     )
 
+    # Fields typically only provided for firm quotes (with few exceptions)
     deposit_address: str | None = Field(
         default=None,
         description="Address to deposit funds (only provided for firm quotes)",
@@ -213,24 +414,40 @@ class SwapQuote(BaseModel):
         default=None,
         description="Memo required for deposit (if applicable, e.g., for Stellar)",
     )
-
     expires_at: datetime | None = Field(
         default=None,
         description="Expiration time for the quote/deposit address",
     )
-
-    price_impact: float | None = Field(
+    transaction_params: TransactionParams | None = Field(
         default=None,
-        description="Price impact percentage (negative value indicates loss due to slippage/fees)",
+        description="Transaction parameters for the swap",
+    )
+
+    # Provider-specific requirements
+    has_post_submit_hook: bool = Field(
+        description="Whether client must call post-submit hook after deposit transaction",
+    )
+    requires_token_allowance: bool = Field(
+        description="Whether client must check/approve token allowance before swap (EVM only)",
+    )
+    requires_firm_route: bool = Field(
+        description="Whether client must fetch a firm route before executing the swap",
     )
 
 
-class SwapTransactionDetails(BaseModel):
+class SwapQuote(SwapBaseModel):
+    """Response containing multiple route options."""
+
+    routes: list[SwapRoute] = Field(description="Available swap routes")
+
+
+class SwapTransactionDetails(SwapBaseModel):
     coin: Coin = Field(description="Coin identifier")
     chain_id: str = Field(description="Chain identifier")
     hash: str = Field(description="Transaction hash")
     explorer_url: str | None = Field(
-        default=None, description="Block explorer URL for this transaction"
+        default=None,
+        description="Block explorer URL for this transaction",
     )
 
     @property
@@ -238,49 +455,48 @@ class SwapTransactionDetails(BaseModel):
         return Chain.get(self.coin, self.chain_id)
 
 
-class SwapDetails(BaseModel):
+class SwapDetails(SwapBaseModel):
     amount_in: str | None = Field(
-        default=None, description="Actual input amount in smallest unit"
+        default=None,
+        description="Actual input amount in smallest unit",
     )
     amount_in_formatted: str | None = Field(
-        default=None, description="Actual input amount in readable format"
+        default=None,
+        description="Actual input amount in readable format",
     )
 
     amount_out: str | None = Field(
-        default=None, description="Actual output amount in smallest unit"
+        default=None,
+        description="Actual output amount in smallest unit",
     )
     amount_out_formatted: str | None = Field(
-        default=None, description="Actual output amount in readable format"
+        default=None,
+        description="Actual output amount in readable format",
     )
 
     refunded_amount: str | None = Field(
-        default=None, description="Refunded amount in smallest unit (if any)"
+        default=None,
+        description="Refunded amount in smallest unit (if any)",
     )
     refunded_amount_formatted: str | None = Field(
-        default=None, description="Refunded amount in readable format"
+        default=None,
+        description="Refunded amount in readable format",
     )
 
     transactions: list[SwapTransactionDetails] = Field(
-        default_factory=list, description="All transactions involved in the swap"
+        default_factory=list,
+        description="All transactions involved in the swap",
     )
 
 
 class SwapStatusResponse(SwapSupportRequest):
     status: SwapStatus = Field(description="Current status of the swap")
     swap_details: SwapDetails | None = Field(
-        default=None, description="Detailed swap information"
+        default=None,
+        description="Detailed swap information",
     )
     provider: SwapProviderEnum = Field(description="Provider handling this swap")
     explorer_url: str | None = Field(
         default=None,
         description="Block explorer URL for the swap transaction",
     )
-
-
-class SwapStatusRequest(BaseModel):
-    tx_hash: str = Field(description="Transaction hash of the swap")
-    deposit_address: str = Field(description="Deposit address of the swap")
-    deposit_memo: str | None = Field(
-        default=None, description="Deposit memo of the swap (if applicable)"
-    )
-    provider: SwapProviderEnum = Field(description="Provider that generated the quote")
