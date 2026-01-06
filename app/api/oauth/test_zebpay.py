@@ -34,26 +34,60 @@ def _parse_zebpay_redirect(response) -> tuple[str, dict]:
 
 
 @pytest.mark.parametrize(
-    "input_redirect_uri",
-    ["rewards://zebpay/authorization", "https://example.com/other"],
+    "return_url_base,redirect_uri",
+    [
+        ("https://example.com/login", "rewards://zebpay/authorization"),
+        ("https://example.com/login", "https://example.com/auth"),
+        ("/connect/authorize/callback", "rewards://zebpay/authorization"),
+        ("/connect/authorize/callback", "http://example.com/test"),
+    ],
 )
-def test_zebpay_auth_redirect(input_redirect_uri):
+def test_zebpay_auth_redirect(return_url_base, redirect_uri):
     """Test Zebpay auth always uses the allowed redirect_uri."""
+    return_url_params = {
+        "client_id": "some_client_id",
+        "grant_type": "authorization_code",
+        "redirect_uri": redirect_uri,
+        "response_type": "code",
+        "scope": "openid profile",
+        "state": "xyz",
+    }
+    return_url = f"{return_url_base}?{urllib.parse.urlencode(return_url_params)}"
+
+    # Pass returnUrl to the API - path and redirect_uri should be forced
     response = client.get(
         "/api/oauth/zebpay/sandbox/auth",
         params={
-            "returnUrl": f"https://example.com/callback?state=xyz&redirect_uri={input_redirect_uri}",
+            "returnUrl": return_url,
         },
         follow_redirects=False,
     )
 
-    return_url, return_url_params = _parse_zebpay_redirect(response)
+    return_url, parsed_return_url_params = _parse_zebpay_redirect(response)
+    parsed_return_url = urllib.parse.urlparse(return_url)
+    assert not parsed_return_url.scheme and not parsed_return_url.netloc, (
+        f"returnUrl should be a relative path without host, got: {return_url}"
+    )
+    assert parsed_return_url.path == "/connect/authorize/callback", (
+        f"returnUrl path should be /connect/authorize/callback, got: {parsed_return_url.path}"
+    )
 
-    # The returnUrl parameter should contain the client_id and allowed redirect_uri
-    assert "https://example.com/callback" in return_url
-    assert return_url_params["state"] == ["xyz"]
-    assert return_url_params["client_id"] == ["test_zebpay_sandbox_client_id"]
-    assert return_url_params["redirect_uri"] == ["rewards://zebpay/authorization"]
+    # Query params from input should be preserved (except client_id and redirect_uri which are overridden)
+    for key, value in return_url_params.items():
+        if key not in ["client_id", "redirect_uri"]:
+            assert parsed_return_url_params.get(key) == [value], (
+                f"Param '{key}' should be preserved: expected {[value]}, got {parsed_return_url_params.get(key)}"
+            )
+
+    # client_id is always set to the allowed value
+    assert parsed_return_url_params["client_id"] == ["test_zebpay_sandbox_client_id"]
+
+    # redirect_uri is always set to the allowed value
+    assert parsed_return_url_params["redirect_uri"] == [
+        "rewards://zebpay/authorization"
+    ], (
+        f"redirect_uri should be forced to rewards://zebpay/authorization, got: {parsed_return_url_params['redirect_uri']}"
+    )
 
 
 # ========================================
