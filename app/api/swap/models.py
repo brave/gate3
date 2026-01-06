@@ -302,17 +302,31 @@ class SolanaTransactionParams(SwapBaseModel):
     )
 
 
-class BitcoinTransactionParams(SwapBaseModel):
+class UtxoChainTransactionParams(SwapBaseModel):
     chain: ChainSpec
     to: str
     value: str
     refund_to: str
 
 
+class BitcoinTransactionParams(UtxoChainTransactionParams):
+    pass
+
+
+class CardanoTransactionParams(UtxoChainTransactionParams):
+    pass
+
+
+class ZcashTransactionParams(UtxoChainTransactionParams):
+    pass
+
+
 class TransactionParams(SwapBaseModel):
     evm: EvmTransactionParams | None = Field(default=None)
     solana: SolanaTransactionParams | None = Field(default=None)
     bitcoin: BitcoinTransactionParams | None = Field(default=None)
+    cardano: CardanoTransactionParams | None = Field(default=None)
+    zcash: ZcashTransactionParams | None = Field(default=None)
 
     @model_validator(mode="after")
     def only_one_field_not_none(self):
