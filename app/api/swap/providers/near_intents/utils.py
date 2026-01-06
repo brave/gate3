@@ -174,7 +174,7 @@ async def compute_network_fee(request: SwapQuoteRequest) -> NetworkFee | None:
     # Cardano and Zcash are UTXO-based chains like Bitcoin
     # Fee estimation would require querying network state
     # For now, return None to indicate fee estimation is not available
-    if source_chain == Chain.CARDANO or source_chain == Chain.ZCASH:
+    if source_chain in (Chain.CARDANO, Chain.ZCASH, Chain.BITCOIN):
         return None
 
     # Return None for other chains - no fee estimate available
