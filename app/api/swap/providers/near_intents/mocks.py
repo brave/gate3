@@ -96,6 +96,32 @@ ZEC_TOKEN_INFO = TokenInfo(
     near_intents_asset_id="nep141:zec.omft.near",
 )
 
+ADA_TOKEN_INFO = TokenInfo(
+    coin=Chain.CARDANO.coin,
+    chain_id=Chain.CARDANO.chain_id,
+    address=None,  # Native ADA
+    name="Cardano",
+    symbol="ADA",
+    decimals=6,
+    logo=None,
+    sources=[TokenSource.NEAR_INTENTS],
+    token_type=TokenType.UNKNOWN,
+    near_intents_asset_id="nep141:ada.omft.near",
+)
+
+FIL_TOKEN_INFO = TokenInfo(
+    coin=Chain.FILECOIN.coin,
+    chain_id=Chain.FILECOIN.chain_id,
+    address=None,  # Native FIL
+    name="Filecoin",
+    symbol="FIL",
+    decimals=18,
+    logo=None,
+    sources=[TokenSource.NEAR_INTENTS],
+    token_type=TokenType.UNKNOWN,
+    near_intents_asset_id=None,  # Filecoin is not supported by Near Intents
+)
+
 # Mock quote request/response data
 MOCK_QUOTE_REQUEST = {
     "dry": True,

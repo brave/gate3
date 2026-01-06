@@ -5,6 +5,7 @@ from app.api.common.models import Chain, Coin, TokenInfo, TokenSource, TokenType
 
 from ...models import (
     BitcoinTransactionParams,
+    CardanoTransactionParams,
     EvmTransactionParams,
     SolanaTransactionParams,
     SwapDetails,
@@ -18,6 +19,7 @@ from ...models import (
     SwapTransactionDetails,
     SwapType,
     TransactionParams,
+    ZcashTransactionParams,
 )
 from .constants import NEAR_INTENTS_TOOL
 from .models import (
@@ -98,8 +100,8 @@ def _build_transaction_params(
     """Build transaction parameters for a firm quote.
 
     This function constructs the appropriate transaction params based on the
-    source chain type (EVM, Solana, or Bitcoin) and whether it's a native
-    or token transfer.
+    source chain type (EVM, Solana, Bitcoin, Cardano, or Zcash) and whether
+    it's a native or token transfer.
 
     For EXACT_OUTPUT swaps, uses max_amount_in as the deposit amount:
     - If input > max_amount_in: swap proceeds, excess refunded to refundTo
@@ -139,6 +141,26 @@ def _build_transaction_params(
         # Bitcoin transaction
         return TransactionParams(
             bitcoin=BitcoinTransactionParams(
+                chain=chain_spec,
+                to=deposit_address,
+                value=source_amount,
+                refund_to=refund_to,
+            ),
+        )
+    if source_chain == Chain.CARDANO:
+        # Cardano transaction
+        return TransactionParams(
+            cardano=CardanoTransactionParams(
+                chain=chain_spec,
+                to=deposit_address,
+                value=source_amount,
+                refund_to=refund_to,
+            ),
+        )
+    if source_chain == Chain.ZCASH:
+        # Zcash transaction
+        return TransactionParams(
+            zcash=ZcashTransactionParams(
                 chain=chain_spec,
                 to=deposit_address,
                 value=source_amount,
