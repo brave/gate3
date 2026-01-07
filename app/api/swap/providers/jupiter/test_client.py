@@ -270,14 +270,10 @@ async def test_get_order_with_error_in_response(
     client,
     mock_httpx_client,
 ):
-    # Mock API response with error
+    # Mock API response with error (no inAmount to trigger error check)
     mock_response = MagicMock()
     mock_response.status_code = 200
-    mock_response.json.return_value = {
-        **MOCK_JUPITER_ORDER_RESPONSE,
-        "error": "Insufficient liquidity",
-        "errorCode": 1,
-    }
+    mock_response.json.return_value = {"error": "Insufficient liquidity"}
     mock_httpx_client.get.return_value = mock_response
 
     request = SwapQuoteRequest(
@@ -298,8 +294,8 @@ async def test_get_order_with_error_in_response(
     with pytest.raises(SwapError) as exc_info:
         await client.get_indicative_routes(request)
 
-        assert exc_info.value.kind == SwapErrorKind.INSUFFICIENT_LIQUIDITY
-        assert "Insufficient liquidity" in exc_info.value.message
+    assert exc_info.value.kind == SwapErrorKind.INSUFFICIENT_LIQUIDITY
+    assert "Insufficient liquidity" in exc_info.value.message
 
 
 @pytest.mark.asyncio

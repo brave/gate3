@@ -49,9 +49,6 @@ def _build_transaction_params(
     if not jupiter_response.transaction:
         return None
 
-    if request.source_chain != Chain.SOLANA:
-        return None
-
     return TransactionParams(
         solana=SolanaTransactionParams(
             chain=Chain.SOLANA.to_spec(),

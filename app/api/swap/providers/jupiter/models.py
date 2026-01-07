@@ -51,7 +51,7 @@ class JupiterOrderResponse(BaseModel):
     other_amount_threshold: str
     swap_mode: JupiterSwapMode
     slippage_bps: int
-    price_impact: str
+    price_impact: float | None
     route_plan: list[JupiterRoutePlan]
     fee_mint: str
     fee_bps: int
@@ -69,9 +69,8 @@ class JupiterOrderResponse(BaseModel):
     router: str
     request_id: str
     mode: str  # For example: "ultra"
-    error: str | None = None
     total_time: int | None = None
-    expire_at: str  # Unix timestamp
+    expire_at: str | None = None  # Unix timestamp
     request_id: str  # Required for Jupiter Ultra V3 POST /execute endpoint
 
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)

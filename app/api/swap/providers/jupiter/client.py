@@ -145,13 +145,11 @@ class JupiterClient(BaseSwapProvider):
             if 200 <= response.status_code < 300:
                 data = response.json()
 
-                # Check for errors in response (Jupiter returns errors with 200 status)
-                if data.get("error") or data.get("errorCode"):
-                    error_message = (
-                        data.get("error")
-                        or data.get("errorMessage")
-                        or "Unknown Jupiter API error"
-                    )
+                # Raise error if the response is explicitly an error
+                # Responses with a valid quote but with an "error" key are
+                # considered warnings which should be handled by the clients.
+                if data.get("error") and not data.get("inAmount"):
+                    error_message = data.get("error") or "Unknown Jupiter API error"
                     kind = categorize_error(error_message)
                     raise SwapError(message=error_message, kind=kind)
 
