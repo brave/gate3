@@ -35,7 +35,7 @@ async def auth(environment: Environment, request: Request) -> RedirectResponse:
     params["client_id"] = [env_config.client_id]
     params["redirect_uri"] = ["rewards://zebpay/authorization"]
 
-    # Update the return_url with the query params
+    # Reconstruct the return_url with updated query parameters
     return_url = f"/connect/authorize/callback?{urlencode(params, doseq=True)}"
 
     # Build the upstream auth redirect URL with modified returnUrl
