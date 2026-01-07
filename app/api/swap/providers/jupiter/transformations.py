@@ -14,7 +14,7 @@ from ...models import (
     SwapType,
     TransactionParams,
 )
-from .constants import JUPITER_TOOL
+from .constants import JUPITER_TOOL, SOL_MINT
 from .models import JupiterOrderResponse
 from .utils import (
     generate_route_id,
@@ -77,10 +77,6 @@ async def from_jupiter_order_to_route(
     Returns:
         SwapRoute with all steps and details
     """
-    # Get source and destination token info
-    from .constants import SOL_MINT
-
-    # Handle native SOL (SOL_MINT) - pass None to token_manager for native tokens
     input_address = (
         None if jupiter_response.input_mint == SOL_MINT else jupiter_response.input_mint
     )
@@ -116,8 +112,6 @@ async def from_jupiter_order_to_route(
 
         # Check if input mint matches source or destination token
         # Handle None addresses (native SOL) by comparing with SOL_MINT
-        from .constants import SOL_MINT
-
         if swap_info.input_mint == (source_token.address or SOL_MINT):
             hop_input_token = source_token
         elif swap_info.input_mint == (destination_token.address or SOL_MINT):
