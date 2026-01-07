@@ -72,7 +72,7 @@ async def from_jupiter_order_to_route(
     Args:
         jupiter_response: The Jupiter order response
         request: The original swap quote request
-        supported_tokens: List of supported tokens for lookup
+        token_manager: TokenManager instance used for token lookup
 
     Returns:
         SwapRoute with all steps and details

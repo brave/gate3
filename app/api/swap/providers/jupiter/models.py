@@ -67,11 +67,10 @@ class JupiterOrderResponse(BaseModel):
     input_mint: str
     output_mint: str
     router: str
-    request_id: str
+    request_id: str  # Required for Jupiter Ultra V3 POST /execute endpoint
     mode: str  # For example: "ultra"
     total_time: int | None = None
     expire_at: str | None = None  # Unix timestamp
-    request_id: str  # Required for Jupiter Ultra V3 POST /execute endpoint
 
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 

@@ -156,6 +156,9 @@ class JupiterClient(BaseSwapProvider):
                 return JupiterOrderResponse.model_validate(data)
 
             self._handle_error_response(response)
+            # _handle_error_response is expected to always raise SwapError,
+            # but add an explicit raise to make the control flow clear.
+            raise SwapError(message="Unhandled Jupiter API error", kind=SwapErrorKind.UNKNOWN)
 
     async def get_indicative_routes(
         self,
