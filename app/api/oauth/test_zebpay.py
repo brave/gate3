@@ -34,6 +34,25 @@ def _parse_zebpay_redirect(response) -> tuple[str, dict]:
 
 
 @pytest.mark.parametrize(
+    "params",
+    [
+        {},  # Missing returnUrl
+        {"returnUrl": "/connect/authorize/callback"},  # No query string
+    ],
+)
+def test_zebpay_auth_invalid_return_url(params):
+    """Test auth fails with 400 when returnUrl is missing or has no query string."""
+    response = client.get(
+        "/api/oauth/zebpay/sandbox/auth",
+        params=params,
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Missing returnUrl parameter"
+
+
+@pytest.mark.parametrize(
     "return_url_base,redirect_uri",
     [
         ("https://example.com/login", "rewards://zebpay/authorization"),
