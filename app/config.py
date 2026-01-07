@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     COINGECKO_API_KEY: str | None = None
     ALCHEMY_API_KEY: str | None = None
     NEAR_INTENTS_JWT: str | None = None
+    JUPITER_API_KEY: str | None = None
 
     # OAuth Provider credentials (nested)
     # Automatically uses OAUTH_ prefix from OAuthConfig

@@ -12,6 +12,7 @@ from .models import (
     SwapType,
 )
 from .providers.base import BaseSwapProvider
+from .providers.jupiter.client import JupiterClient
 from .providers.near_intents.client import NearIntentsClient
 
 logger = logging.getLogger(__name__)
@@ -44,7 +45,7 @@ async def _get_provider_client(
     if provider == SwapProviderEnum.ZERO_EX:
         raise NotImplementedError("0x provider not yet implemented")
     if provider == SwapProviderEnum.JUPITER:
-        raise NotImplementedError("Jupiter provider not yet implemented")
+        return JupiterClient(token_manager=token_manager)
     if provider == SwapProviderEnum.LIFI:
         raise NotImplementedError("LiFi provider not yet implemented")
     raise ValueError(f"Unknown provider: {provider}")
