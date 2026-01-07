@@ -105,6 +105,7 @@ def create_mock_route(
         has_post_submit_hook=True,
         requires_token_allowance=False,
         requires_firm_route=True,
+        slippage_percentage="0.5",
     )
 
 
@@ -237,6 +238,7 @@ def test_indicative_quote_response(mock_get_all_indicative_routes):
                 "hasPostSubmitHook": True,
                 "requiresTokenAllowance": False,
                 "requiresFirmRoute": True,
+                "slippagePercentage": "0.5",
             }
         ]
     }

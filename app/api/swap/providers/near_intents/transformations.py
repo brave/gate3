@@ -5,6 +5,7 @@ from app.api.common.models import Chain, Coin, TokenInfo, TokenSource, TokenType
 
 from ...models import (
     BitcoinTransactionParams,
+    CardanoTransactionParams,
     EvmTransactionParams,
     SolanaTransactionParams,
     SwapDetails,
@@ -18,6 +19,7 @@ from ...models import (
     SwapTransactionDetails,
     SwapType,
     TransactionParams,
+    ZcashTransactionParams,
 )
 from .constants import NEAR_INTENTS_TOOL
 from .models import (
@@ -70,8 +72,12 @@ def to_near_intents_request(
     request.set_source_token(supported_tokens)
     request.set_destination_token(supported_tokens)
 
-    # Convert percentage string to basis points (bps) for near intents
+    # Convert percentage string to basis points (bps) for Near Intents
     # e.g., "0.5" -> 50 bps, "1.0" -> 100 bps
+    # Near Intents requires a slippage tolerance to be specified, so None is not allowed.
+    if request.slippage_percentage is None:
+        raise ValueError("Slippage percentage is required")
+
     slippage_percentage = float(request.slippage_percentage)
     slippage_bps = int(slippage_percentage * 100)
 
@@ -98,8 +104,8 @@ def _build_transaction_params(
     """Build transaction parameters for a firm quote.
 
     This function constructs the appropriate transaction params based on the
-    source chain type (EVM, Solana, or Bitcoin) and whether it's a native
-    or token transfer.
+    source chain type (EVM, Solana, Bitcoin, Cardano, or Zcash) and whether
+    it's a native or token transfer.
 
     For EXACT_OUTPUT swaps, uses max_amount_in as the deposit amount:
     - If input > max_amount_in: swap proceeds, excess refunded to refundTo
@@ -139,6 +145,26 @@ def _build_transaction_params(
         # Bitcoin transaction
         return TransactionParams(
             bitcoin=BitcoinTransactionParams(
+                chain=chain_spec,
+                to=deposit_address,
+                value=source_amount,
+                refund_to=refund_to,
+            ),
+        )
+    if source_chain == Chain.CARDANO:
+        # Cardano transaction
+        return TransactionParams(
+            cardano=CardanoTransactionParams(
+                chain=chain_spec,
+                to=deposit_address,
+                value=source_amount,
+                refund_to=refund_to,
+            ),
+        )
+    if source_chain == Chain.ZCASH:
+        # Zcash transaction
+        return TransactionParams(
+            zcash=ZcashTransactionParams(
                 chain=chain_spec,
                 to=deposit_address,
                 value=source_amount,
@@ -239,6 +265,10 @@ async def from_near_intents_quote_to_route(
     if not source_token or not destination_token:
         raise ValueError("Source and destination tokens must be set")
 
+    # Ensure slippage_percentage is set (should be validated earlier, but double-check for type safety)
+    if request.slippage_percentage is None:
+        raise ValueError("Slippage percentage is required")
+
     # Create single step for NEAR Intents (it handles the route internally)
     step = SwapRouteStep(
         source_token=_token_info_to_step_token(source_token),
@@ -256,6 +286,12 @@ async def from_near_intents_quote_to_route(
     if request.swap_type == SwapType.EXACT_OUTPUT:
         source_amount_min = quote_data.min_amount_in
 
+    # Convert deadline datetime to Unix timestamp string
+    expires_at = None
+    if quote_data.deadline:
+        # Convert datetime to Unix timestamp (seconds since epoch)
+        expires_at = str(int(quote_data.deadline.timestamp()))
+
     return SwapRoute(
         id=route_id,
         provider=SwapProviderEnum.NEAR_INTENTS,
@@ -268,11 +304,12 @@ async def from_near_intents_quote_to_route(
         network_fee=network_fee,
         deposit_address=quote_data.deposit_address,
         deposit_memo=quote_data.deposit_memo,
-        expires_at=quote_data.deadline,
+        expires_at=expires_at,
         transaction_params=transaction_params,
         has_post_submit_hook=has_post_submit_hook,
         requires_token_allowance=requires_token_allowance,
         requires_firm_route=requires_firm_route,
+        slippage_percentage=request.slippage_percentage,
     )
 
 

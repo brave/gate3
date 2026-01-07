@@ -1,4 +1,3 @@
-from datetime import datetime
 from enum import Enum
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -201,9 +200,9 @@ class SwapQuoteRequest(SwapSupportRequest):
     )
 
     # Swap parameters
-    slippage_percentage: str = Field(
-        default="0.5",
-        description="Slippage tolerance as a percentage string (e.g., '0.5' = 0.5%)",
+    slippage_percentage: str | None = Field(
+        default=None,
+        description="Slippage tolerance as a percentage string (e.g., '0.5' = 0.5%). If not specified, the provider will automatically determine the slippage tolerance.",
     )
     swap_type: SwapType = Field(
         default=SwapType.EXACT_INPUT,
@@ -302,17 +301,31 @@ class SolanaTransactionParams(SwapBaseModel):
     )
 
 
-class BitcoinTransactionParams(SwapBaseModel):
+class UtxoChainTransactionParams(SwapBaseModel):
     chain: ChainSpec
     to: str
     value: str
     refund_to: str
 
 
+class BitcoinTransactionParams(UtxoChainTransactionParams):
+    pass
+
+
+class CardanoTransactionParams(UtxoChainTransactionParams):
+    pass
+
+
+class ZcashTransactionParams(UtxoChainTransactionParams):
+    pass
+
+
 class TransactionParams(SwapBaseModel):
     evm: EvmTransactionParams | None = Field(default=None)
     solana: SolanaTransactionParams | None = Field(default=None)
     bitcoin: BitcoinTransactionParams | None = Field(default=None)
+    cardano: CardanoTransactionParams | None = Field(default=None)
+    zcash: ZcashTransactionParams | None = Field(default=None)
 
     @model_validator(mode="after")
     def only_one_field_not_none(self):
@@ -414,9 +427,9 @@ class SwapRoute(SwapBaseModel):
         default=None,
         description="Memo required for deposit (if applicable, e.g., for Stellar)",
     )
-    expires_at: datetime | None = Field(
+    expires_at: str | None = Field(
         default=None,
-        description="Expiration time for the quote/deposit address",
+        description="Expiration time for the quote/deposit address as Unix timestamp",
     )
     transaction_params: TransactionParams | None = Field(
         default=None,
@@ -432,6 +445,9 @@ class SwapRoute(SwapBaseModel):
     )
     requires_firm_route: bool = Field(
         description="Whether client must fetch a firm route before executing the swap",
+    )
+    slippage_percentage: str = Field(
+        description="Slippage tolerance as a percentage string (e.g., '0.5' = 0.5%) used for this route",
     )
 
 

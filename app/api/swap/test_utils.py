@@ -63,6 +63,7 @@ def create_mock_route(
         has_post_submit_hook=True,
         requires_token_allowance=False,
         requires_firm_route=True,
+        slippage_percentage="0.5",
     )
 
 

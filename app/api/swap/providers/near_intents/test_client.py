@@ -1,3 +1,4 @@
+from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
@@ -17,9 +18,11 @@ from app.api.swap.models import (
 
 from .client import NearIntentsClient
 from .mocks import (
+    ADA_TOKEN_INFO,
     BTC_TOKEN_DATA,
     BTC_TOKEN_INFO,
     ETH_TOKEN_INFO,
+    FIL_TOKEN_INFO,
     MOCK_EXACT_OUTPUT_FIRM_QUOTE,
     MOCK_EXACT_OUTPUT_INDICATIVE_QUOTE,
     MOCK_EXACT_OUTPUT_QUOTE_REQUEST,
@@ -301,6 +304,8 @@ async def test_get_indicative_route_success(
     assert result.source_amount == "2037265"
     assert result.destination_amount == "711"
     assert result.deposit_address is None  # Indicative quote has no deposit address
+    # Deadline not set, so expires_at should be None
+    assert result.expires_at is None
 
     # Verify route has steps
     assert len(result.steps) == 1
@@ -452,7 +457,21 @@ async def test_get_firm_route_solana_spl_token(
     assert result.source_amount == "2037265"
     assert result.destination_amount == "711"
     assert result.deposit_address == "9RdSjLtfFJLvj6CAR4w7H7tUbv2kvwkkrYZuoojKDBkE"
+    # Verify expires_at is a Unix timestamp string (not datetime)
     assert result.expires_at is not None
+    assert isinstance(result.expires_at, str)
+    # Verify it's a valid Unix timestamp (numeric string)
+    assert result.expires_at.isdigit()
+    # Verify it matches the expected timestamp from the mock deadline
+    # Mock deadline: "2025-12-11T13:48:50.883000Z"
+    expected_timestamp = str(
+        int(
+            datetime.fromisoformat(
+                MOCK_FIRM_QUOTE["deadline"].replace("Z", "+00:00")
+            ).timestamp()
+        )
+    )
+    assert result.expires_at == expected_timestamp
 
     # Verify price impact calculation
     # amountInUsd: 2.0373, amountOutUsd: 0.6546
@@ -741,12 +760,12 @@ async def test_get_firm_route_bitcoin(
 
 
 @pytest.mark.asyncio
-async def test_get_firm_route_unsupported_chain_raises_not_implemented(
+async def test_get_firm_route_zcash(
     client,
     mock_httpx_client,
     mock_supported_tokens_cache,
 ):
-    # Mock supported tokens - ZEC (unsupported chain) and BTC
+    # Mock supported tokens - ZEC and BTC
     supported_tokens = [
         ZEC_TOKEN_INFO,
         BTC_TOKEN_INFO,
@@ -788,11 +807,135 @@ async def test_get_firm_route_unsupported_chain_raises_not_implemented(
     request.set_source_token(supported_tokens)
     request.set_destination_token(supported_tokens)
 
-    with pytest.raises(NotImplementedError) as exc_info:
+    result = await client.get_firm_route(request)
+
+    # Verify transaction params for Zcash
+    assert result.transaction_params is not None
+
+    # Verify that only one field under TransactionParams is not None
+    assert result.transaction_params.zcash is not None
+    not_none_fields = [
+        name
+        for name in TransactionParams.model_fields
+        if getattr(result.transaction_params, name) is not None
+    ]
+    assert len(not_none_fields) == 1
+
+    assert result.transaction_params.zcash.to == deposit_address
+    assert result.transaction_params.zcash.value == "100000000"
+    assert result.transaction_params.zcash.refund_to == "t1ZCashRefundAddress123456789"
+
+
+@pytest.mark.asyncio
+async def test_get_firm_route_cardano(
+    client,
+    mock_httpx_client,
+    mock_supported_tokens_cache,
+):
+    # Mock supported tokens - ADA and BTC
+    supported_tokens = [
+        ADA_TOKEN_INFO,
+        BTC_TOKEN_INFO,
+    ]
+    mock_supported_tokens_cache.get.return_value = supported_tokens
+
+    # Mock API response
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    deposit_address = "addr1qyCardanoDepositAddress123456789"
+    mock_response.json.return_value = {
+        "quoteRequest": {
+            **MOCK_QUOTE_REQUEST,
+            "dry": False,
+            "originAsset": "nep141:ada.omft.near",
+        },
+        "quote": {
+            **MOCK_FIRM_QUOTE,
+            "amountIn": "1000000",  # 1 ADA (6 decimals)
+            "depositAddress": deposit_address,
+        },
+    }
+    mock_httpx_client.post.return_value = mock_response
+
+    request = SwapQuoteRequest(
+        source_coin=Chain.CARDANO.coin,
+        source_chain_id=Chain.CARDANO.chain_id,
+        source_token_address=None,  # Native ADA
+        destination_coin=Chain.BITCOIN.coin,
+        destination_chain_id=Chain.BITCOIN.chain_id,
+        destination_token_address=None,
+        recipient="bc1qpjqsdj3qvfl4hzfa49p28ns9xkpl73cyg9exzn",
+        amount="1000000",
+        slippage_percentage="0.5",
+        swap_type=SwapType.EXACT_INPUT,
+        refund_to="addr1qyCardanoRefundAddress123456789",
+        provider=SwapProviderEnum.NEAR_INTENTS,
+    )
+    request.set_source_token(supported_tokens)
+    request.set_destination_token(supported_tokens)
+
+    result = await client.get_firm_route(request)
+
+    # Verify transaction params for Cardano
+    assert result.transaction_params is not None
+
+    # Verify that only one field under TransactionParams is not None
+    assert result.transaction_params.cardano is not None
+    not_none_fields = [
+        name
+        for name in TransactionParams.model_fields
+        if getattr(result.transaction_params, name) is not None
+    ]
+    assert len(not_none_fields) == 1
+
+    assert result.transaction_params.cardano.to == deposit_address
+    assert result.transaction_params.cardano.value == "1000000"
+    assert (
+        result.transaction_params.cardano.refund_to
+        == "addr1qyCardanoRefundAddress123456789"
+    )
+
+
+@pytest.mark.asyncio
+async def test_get_firm_route_unsupported_chain_raises_not_implemented(
+    client,
+    mock_httpx_client,
+    mock_supported_tokens_cache,
+):
+    # Mock supported tokens - FIL (unsupported chain) and BTC
+    # Filecoin has near_intents_id=None, so it's not supported by Near Intents
+    supported_tokens = [
+        FIL_TOKEN_INFO,
+        BTC_TOKEN_INFO,
+    ]
+    mock_supported_tokens_cache.get.return_value = supported_tokens
+
+    # Note: We don't need to mock the API response because the error
+    # will be raised in to_near_intents_request before the API is called
+
+    request = SwapQuoteRequest(
+        source_coin=Chain.FILECOIN.coin,
+        source_chain_id=Chain.FILECOIN.chain_id,
+        source_token_address=None,  # Native FIL
+        destination_coin=Chain.BITCOIN.coin,
+        destination_chain_id=Chain.BITCOIN.chain_id,
+        destination_token_address=None,
+        recipient="bc1qpjqsdj3qvfl4hzfa49p28ns9xkpl73cyg9exzn",
+        amount="1000000000000000000",
+        slippage_percentage="0.5",
+        swap_type=SwapType.EXACT_INPUT,
+        refund_to="f1FilecoinRefundAddress123456789",
+        provider=SwapProviderEnum.NEAR_INTENTS,
+    )
+    request.set_source_token(supported_tokens)
+    request.set_destination_token(supported_tokens)
+
+    # The error should be raised in to_near_intents_request because
+    # Filecoin doesn't have near_intents_id support (it's None)
+    with pytest.raises(ValueError) as exc_info:
         await client.get_firm_route(request)
 
-    assert "Unsupported chain" in str(exc_info.value)
-    assert "ZEC" in str(exc_info.value)
+    assert "Invalid source or destination chain" in str(exc_info.value)
 
 
 @pytest.mark.asyncio
@@ -1289,3 +1432,79 @@ async def test_exact_input_route_uses_amount_in(
 
     # For EXACT_INPUT, source_amount is the amount_in from the quote
     assert result.source_amount == "2037265"
+
+
+@pytest.mark.asyncio
+async def test_near_intents_requires_slippage_percentage(
+    client,
+    mock_httpx_client,
+    mock_supported_tokens_cache,
+):
+    """Test that NEAR Intents raises ValueError when slippage_percentage is None."""
+    supported_tokens = [USDC_ON_SOLANA_TOKEN_INFO, BTC_TOKEN_INFO]
+    mock_supported_tokens_cache.get.return_value = supported_tokens
+
+    request = SwapQuoteRequest(
+        source_coin=Chain.SOLANA.coin,
+        source_chain_id=Chain.SOLANA.chain_id,
+        source_token_address="EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+        destination_coin=Chain.BITCOIN.coin,
+        destination_chain_id=Chain.BITCOIN.chain_id,
+        destination_token_address=None,
+        recipient="bc1qpjqsdj3qvfl4hzfa49p28ns9xkpl73cyg9exzn",
+        amount="2037265",
+        slippage_percentage=None,  # None should raise ValueError
+        swap_type=SwapType.EXACT_INPUT,
+        refund_to="8eekKfUAGSJbq3CdA2TmHb8tKuyzd5gtEas3MYAtXzrT",
+        provider=SwapProviderEnum.NEAR_INTENTS,
+    )
+    request.set_source_token(supported_tokens)
+    request.set_destination_token(supported_tokens)
+
+    with pytest.raises(ValueError) as exc_info:
+        await client.get_indicative_routes(request)
+
+    assert "Slippage percentage is required" in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+async def test_near_intents_includes_slippage_percentage_in_route(
+    client,
+    mock_httpx_client,
+    mock_supported_tokens_cache,
+):
+    """Test that NEAR Intents includes slippage_percentage in the route response."""
+    supported_tokens = [USDC_ON_SOLANA_TOKEN_INFO, BTC_TOKEN_INFO]
+    mock_supported_tokens_cache.get.return_value = supported_tokens
+
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = {
+        "quoteRequest": MOCK_QUOTE_REQUEST,
+        "quote": MOCK_INDICATIVE_QUOTE,
+    }
+    mock_httpx_client.post.return_value = mock_response
+
+    request = SwapQuoteRequest(
+        source_coin=Chain.SOLANA.coin,
+        source_chain_id=Chain.SOLANA.chain_id,
+        source_token_address="EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+        destination_coin=Chain.BITCOIN.coin,
+        destination_chain_id=Chain.BITCOIN.chain_id,
+        destination_token_address=None,
+        recipient="bc1qpjqsdj3qvfl4hzfa49p28ns9xkpl73cyg9exzn",
+        amount="2037265",
+        slippage_percentage="1.5",  # Test with a specific value
+        swap_type=SwapType.EXACT_INPUT,
+        refund_to="8eekKfUAGSJbq3CdA2TmHb8tKuyzd5gtEas3MYAtXzrT",
+        provider=SwapProviderEnum.NEAR_INTENTS,
+    )
+    request.set_source_token(supported_tokens)
+    request.set_destination_token(supported_tokens)
+
+    routes = await client.get_indicative_routes(request)
+
+    assert len(routes) == 1
+    result = routes[0]
+    # Verify slippage_percentage is included in the route response
+    assert result.slippage_percentage == "1.5"
