@@ -2,6 +2,7 @@ import httpx
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 from starlette.datastructures import URL
+from urllib.parse import parse_qs, urlencode
 
 from app.api.common.models import Tags
 from app.api.oauth.models import Environment
@@ -26,16 +27,16 @@ async def auth(environment: Environment, request: Request) -> RedirectResponse:
     query_params = dict(request.query_params)
 
     # Extract the returnUrl parameter which contains another URL
-    req_return_url = query_params.get("returnUrl")
-    if not req_return_url:
+    req_return_url = URL(query_params.get("returnUrl"))
+    if not req_return_url.query:
         raise HTTPException(status_code=400, detail="Missing returnUrl parameter")
 
-    # Parse the returnUrl as a URL object
-    return_url = set_query_params(
-        URL(req_return_url),
-        client_id=env_config.client_id,
-        redirect_uri="rewards://zebpay/authorization",
-    )
+    params = parse_qs(req_return_url.query)
+    params["client_id"] = [env_config.client_id]
+    params["redirect_uri"] = ["rewards://zebpay/authorization"]
+
+    # Reconstruct the return_url with updated query parameters
+    return_url = f"/connect/authorize/callback?{urlencode(params, doseq=True)}"
 
     # Build the upstream auth redirect URL with modified returnUrl
     base_url = f"{str(env_config.oauth_url).rstrip('/')}/account/login"
