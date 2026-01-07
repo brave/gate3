@@ -278,6 +278,12 @@ async def from_near_intents_quote_to_route(
     if request.swap_type == SwapType.EXACT_OUTPUT:
         source_amount_min = quote_data.min_amount_in
 
+    # Convert deadline datetime to Unix timestamp string
+    expires_at = None
+    if quote_data.deadline:
+        # Convert datetime to Unix timestamp (seconds since epoch)
+        expires_at = str(int(quote_data.deadline.timestamp()))
+
     return SwapRoute(
         id=route_id,
         provider=SwapProviderEnum.NEAR_INTENTS,
@@ -290,7 +296,7 @@ async def from_near_intents_quote_to_route(
         network_fee=network_fee,
         deposit_address=quote_data.deposit_address,
         deposit_memo=quote_data.deposit_memo,
-        expires_at=quote_data.deadline,
+        expires_at=expires_at,
         transaction_params=transaction_params,
         has_post_submit_hook=has_post_submit_hook,
         requires_token_allowance=requires_token_allowance,

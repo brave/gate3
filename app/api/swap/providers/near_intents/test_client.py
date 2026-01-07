@@ -1,3 +1,4 @@
+from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
@@ -303,6 +304,8 @@ async def test_get_indicative_route_success(
     assert result.source_amount == "2037265"
     assert result.destination_amount == "711"
     assert result.deposit_address is None  # Indicative quote has no deposit address
+    # Deadline not set, so expires_at should be None
+    assert result.expires_at is None
 
     # Verify route has steps
     assert len(result.steps) == 1
@@ -454,7 +457,21 @@ async def test_get_firm_route_solana_spl_token(
     assert result.source_amount == "2037265"
     assert result.destination_amount == "711"
     assert result.deposit_address == "9RdSjLtfFJLvj6CAR4w7H7tUbv2kvwkkrYZuoojKDBkE"
+    # Verify expires_at is a Unix timestamp string (not datetime)
     assert result.expires_at is not None
+    assert isinstance(result.expires_at, str)
+    # Verify it's a valid Unix timestamp (numeric string)
+    assert result.expires_at.isdigit()
+    # Verify it matches the expected timestamp from the mock deadline
+    # Mock deadline: "2025-12-11T13:48:50.883000Z"
+    expected_timestamp = str(
+        int(
+            datetime.fromisoformat(
+                MOCK_FIRM_QUOTE["deadline"].replace("Z", "+00:00")
+            ).timestamp()
+        )
+    )
+    assert result.expires_at == expected_timestamp
 
     # Verify price impact calculation
     # amountInUsd: 2.0373, amountOutUsd: 0.6546

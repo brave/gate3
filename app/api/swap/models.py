@@ -1,4 +1,3 @@
-from datetime import datetime
 from enum import Enum
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -428,9 +427,9 @@ class SwapRoute(SwapBaseModel):
         default=None,
         description="Memo required for deposit (if applicable, e.g., for Stellar)",
     )
-    expires_at: datetime | None = Field(
+    expires_at: str | None = Field(
         default=None,
-        description="Expiration time for the quote/deposit address",
+        description="Expiration time for the quote/deposit address as Unix timestamp",
     )
     transaction_params: TransactionParams | None = Field(
         default=None,
