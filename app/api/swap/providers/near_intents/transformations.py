@@ -72,8 +72,12 @@ def to_near_intents_request(
     request.set_source_token(supported_tokens)
     request.set_destination_token(supported_tokens)
 
-    # Convert percentage string to basis points (bps) for near intents
+    # Convert percentage string to basis points (bps) for Near Intents
     # e.g., "0.5" -> 50 bps, "1.0" -> 100 bps
+    # Near Intents requires a slippage tolerance to be specified, so None is not allowed.
+    if request.slippage_percentage is None:
+        raise ValueError("Slippage percentage is required")
+
     slippage_percentage = float(request.slippage_percentage)
     slippage_bps = int(slippage_percentage * 100)
 
@@ -261,6 +265,10 @@ async def from_near_intents_quote_to_route(
     if not source_token or not destination_token:
         raise ValueError("Source and destination tokens must be set")
 
+    # Ensure slippage_percentage is set (should be validated earlier, but double-check for type safety)
+    if request.slippage_percentage is None:
+        raise ValueError("Slippage percentage is required")
+
     # Create single step for NEAR Intents (it handles the route internally)
     step = SwapRouteStep(
         source_token=_token_info_to_step_token(source_token),
@@ -301,6 +309,7 @@ async def from_near_intents_quote_to_route(
         has_post_submit_hook=has_post_submit_hook,
         requires_token_allowance=requires_token_allowance,
         requires_firm_route=requires_firm_route,
+        slippage_percentage=request.slippage_percentage,
     )
 
 

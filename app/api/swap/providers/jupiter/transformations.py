@@ -169,6 +169,11 @@ async def from_jupiter_order_to_route(
         + jupiter_response.prioritization_fee_lamports
     )
 
+    # Convert slippage bps to percentage
+    #
+    # We ignore the slippage percentage from the request since Jupiter Ultra V3 can automatically determine it.
+    slippage_percentage = int(jupiter_response.slippage_bps) / 100
+
     network_fee = None
     if total_fee_lamports > 0:
         network_fee = NetworkFee(
@@ -212,4 +217,5 @@ async def from_jupiter_order_to_route(
         requires_token_allowance=False,  # Jupiter handles this internally
         requires_firm_route=False,  # Jupiter provides transaction in order response
         gasless=jupiter_response.gasless,
+        slippage_percentage=str(slippage_percentage),
     )

@@ -300,3 +300,128 @@ async def test_get_order_with_error_in_response(
 
         assert exc_info.value.kind == SwapErrorKind.INSUFFICIENT_LIQUIDITY
         assert "Insufficient liquidity" in exc_info.value.message
+
+
+@pytest.mark.asyncio
+async def test_jupiter_works_with_none_slippage_percentage(
+    client,
+    mock_httpx_client,
+    mock_token_manager,
+):
+    """Test that Jupiter works correctly when slippage_percentage is None in request."""
+
+    # Mock token manager to return tokens
+    def token_get_side_effect(coin, chain_id, address):
+        if address == "So11111111111111111111111111111111111111112" or address is None:
+            return SOL_TOKEN_INFO
+        elif address == "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v":
+            return USDC_ON_SOLANA_TOKEN_INFO
+        elif address == "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB":
+            # Intermediate token in the route
+            return TokenInfo(
+                coin=Chain.SOLANA.coin,
+                chain_id=Chain.SOLANA.chain_id,
+                address="Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
+                name="USDT",
+                symbol="USDT",
+                decimals=6,
+                logo=None,
+                sources=[TokenSource.UNKNOWN],
+                token_type=TokenType.SPL_TOKEN,
+            )
+        return None
+
+    mock_token_manager.get = AsyncMock(side_effect=token_get_side_effect)
+
+    # Mock API response
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = MOCK_JUPITER_ORDER_RESPONSE
+    mock_httpx_client.get.return_value = mock_response
+
+    request = SwapQuoteRequest(
+        source_coin=Chain.SOLANA.coin,
+        source_chain_id=Chain.SOLANA.chain_id,
+        source_token_address=None,
+        destination_coin=Chain.SOLANA.coin,
+        destination_chain_id=Chain.SOLANA.chain_id,
+        destination_token_address="EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+        recipient="11111111111111111111111111111111",
+        amount="100000000",
+        slippage_percentage=None,  # None should work for Jupiter
+        swap_type=SwapType.EXACT_INPUT,
+        refund_to="11111111111111111111111111111111",
+        provider=SwapProviderEnum.JUPITER,
+    )
+
+    routes = await client.get_indicative_routes(request)
+
+    assert len(routes) == 1
+    result = routes[0]
+    # Verify route was created successfully and slippage_percentage is from response
+    assert result.provider == SwapProviderEnum.JUPITER
+    # slippage_bps in MOCK_JUPITER_ORDER_RESPONSE is 51, so slippage_percentage should be "0.51"
+    assert result.slippage_percentage == "0.51"
+
+
+@pytest.mark.asyncio
+async def test_jupiter_ignores_request_slippage_percentage(
+    client,
+    mock_httpx_client,
+    mock_token_manager,
+):
+    """Test that Jupiter ignores slippage_percentage from request and uses response value."""
+
+    # Mock token manager to return tokens
+    def token_get_side_effect(coin, chain_id, address):
+        if address == "So11111111111111111111111111111111111111112" or address is None:
+            return SOL_TOKEN_INFO
+        elif address == "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v":
+            return USDC_ON_SOLANA_TOKEN_INFO
+        elif address == "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB":
+            # Intermediate token in the route
+            return TokenInfo(
+                coin=Chain.SOLANA.coin,
+                chain_id=Chain.SOLANA.chain_id,
+                address="Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
+                name="USDT",
+                symbol="USDT",
+                decimals=6,
+                logo=None,
+                sources=[TokenSource.UNKNOWN],
+                token_type=TokenType.SPL_TOKEN,
+            )
+        return None
+
+    mock_token_manager.get = AsyncMock(side_effect=token_get_side_effect)
+
+    # Mock API response with different slippage_bps than request
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = {
+        **MOCK_JUPITER_ORDER_RESPONSE,
+        "slippageBps": 100,  # 1.0% - different from request
+    }
+    mock_httpx_client.get.return_value = mock_response
+
+    request = SwapQuoteRequest(
+        source_coin=Chain.SOLANA.coin,
+        source_chain_id=Chain.SOLANA.chain_id,
+        source_token_address=None,
+        destination_coin=Chain.SOLANA.coin,
+        destination_chain_id=Chain.SOLANA.chain_id,
+        destination_token_address="EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+        recipient="11111111111111111111111111111111",
+        amount="100000000",
+        slippage_percentage="0.5",  # Request has 0.5%
+        swap_type=SwapType.EXACT_INPUT,
+        refund_to="11111111111111111111111111111111",
+        provider=SwapProviderEnum.JUPITER,
+    )
+
+    routes = await client.get_indicative_routes(request)
+
+    assert len(routes) == 1
+    result = routes[0]
+    # Verify slippage_percentage comes from response (1.0%), not request (0.5%)
+    assert result.slippage_percentage == "1.0"

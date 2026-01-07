@@ -200,9 +200,9 @@ class SwapQuoteRequest(SwapSupportRequest):
     )
 
     # Swap parameters
-    slippage_percentage: str = Field(
-        default="0.5",
-        description="Slippage tolerance as a percentage string (e.g., '0.5' = 0.5%)",
+    slippage_percentage: str | None = Field(
+        default=None,
+        description="Slippage tolerance as a percentage string (e.g., '0.5' = 0.5%). If not specified, the provider will automatically determine the slippage tolerance.",
     )
     swap_type: SwapType = Field(
         default=SwapType.EXACT_INPUT,
@@ -445,6 +445,9 @@ class SwapRoute(SwapBaseModel):
     )
     requires_firm_route: bool = Field(
         description="Whether client must fetch a firm route before executing the swap",
+    )
+    slippage_percentage: str = Field(
+        description="Slippage tolerance as a percentage string (e.g., '0.5' = 0.5%) used for this route",
     )
 
 

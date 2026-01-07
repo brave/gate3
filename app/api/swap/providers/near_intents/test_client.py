@@ -1432,3 +1432,79 @@ async def test_exact_input_route_uses_amount_in(
 
     # For EXACT_INPUT, source_amount is the amount_in from the quote
     assert result.source_amount == "2037265"
+
+
+@pytest.mark.asyncio
+async def test_near_intents_requires_slippage_percentage(
+    client,
+    mock_httpx_client,
+    mock_supported_tokens_cache,
+):
+    """Test that NEAR Intents raises ValueError when slippage_percentage is None."""
+    supported_tokens = [USDC_ON_SOLANA_TOKEN_INFO, BTC_TOKEN_INFO]
+    mock_supported_tokens_cache.get.return_value = supported_tokens
+
+    request = SwapQuoteRequest(
+        source_coin=Chain.SOLANA.coin,
+        source_chain_id=Chain.SOLANA.chain_id,
+        source_token_address="EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+        destination_coin=Chain.BITCOIN.coin,
+        destination_chain_id=Chain.BITCOIN.chain_id,
+        destination_token_address=None,
+        recipient="bc1qpjqsdj3qvfl4hzfa49p28ns9xkpl73cyg9exzn",
+        amount="2037265",
+        slippage_percentage=None,  # None should raise ValueError
+        swap_type=SwapType.EXACT_INPUT,
+        refund_to="8eekKfUAGSJbq3CdA2TmHb8tKuyzd5gtEas3MYAtXzrT",
+        provider=SwapProviderEnum.NEAR_INTENTS,
+    )
+    request.set_source_token(supported_tokens)
+    request.set_destination_token(supported_tokens)
+
+    with pytest.raises(ValueError) as exc_info:
+        await client.get_indicative_routes(request)
+
+    assert "Slippage percentage is required" in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+async def test_near_intents_includes_slippage_percentage_in_route(
+    client,
+    mock_httpx_client,
+    mock_supported_tokens_cache,
+):
+    """Test that NEAR Intents includes slippage_percentage in the route response."""
+    supported_tokens = [USDC_ON_SOLANA_TOKEN_INFO, BTC_TOKEN_INFO]
+    mock_supported_tokens_cache.get.return_value = supported_tokens
+
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = {
+        "quoteRequest": MOCK_QUOTE_REQUEST,
+        "quote": MOCK_INDICATIVE_QUOTE,
+    }
+    mock_httpx_client.post.return_value = mock_response
+
+    request = SwapQuoteRequest(
+        source_coin=Chain.SOLANA.coin,
+        source_chain_id=Chain.SOLANA.chain_id,
+        source_token_address="EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+        destination_coin=Chain.BITCOIN.coin,
+        destination_chain_id=Chain.BITCOIN.chain_id,
+        destination_token_address=None,
+        recipient="bc1qpjqsdj3qvfl4hzfa49p28ns9xkpl73cyg9exzn",
+        amount="2037265",
+        slippage_percentage="1.5",  # Test with a specific value
+        swap_type=SwapType.EXACT_INPUT,
+        refund_to="8eekKfUAGSJbq3CdA2TmHb8tKuyzd5gtEas3MYAtXzrT",
+        provider=SwapProviderEnum.NEAR_INTENTS,
+    )
+    request.set_source_token(supported_tokens)
+    request.set_destination_token(supported_tokens)
+
+    routes = await client.get_indicative_routes(request)
+
+    assert len(routes) == 1
+    result = routes[0]
+    # Verify slippage_percentage is included in the route response
+    assert result.slippage_percentage == "1.5"
