@@ -23,10 +23,6 @@ jobs:
         role-to-assume: ${{ secrets.GDBP_AWS_IAM_ROLE_ARN }}
         aws-region: us-west-2
 
-    - name: Deploy Tag Version
-      if: startsWith(github.ref, 'refs/tags/')
-      uses: brave-intl/general-docker-build-pipeline-action@50a99c1f051b1d8e20ed79ded2e69ab3153b66e4 # v1.0.25
-
     - name: Deploy to Production
       if: startsWith(github.ref, 'refs/tags/')
       uses: brave-intl/general-docker-build-pipeline-action@50a99c1f051b1d8e20ed79ded2e69ab3153b66e4 # v1.0.25
