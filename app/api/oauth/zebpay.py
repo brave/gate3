@@ -1,8 +1,9 @@
+from urllib.parse import parse_qs, urlencode
+
 import httpx
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 from starlette.datastructures import URL
-from urllib.parse import parse_qs, urlencode
 
 from app.api.common.models import Tags
 from app.api.oauth.models import Environment
