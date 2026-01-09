@@ -223,7 +223,11 @@ class Chain(Enum):
     def to_spec(self) -> ChainSpec:
         return ChainSpec(coin=self.coin, chain_id=self.chain_id)
 
-    def __eq__(self, other: Chain) -> bool:
+    def __eq__(self, other) -> bool:
+        if other is None:
+            return False
+        if not isinstance(other, Chain):
+            return False
         return self.coin == other.coin and self.chain_id == other.chain_id
 
     def __str__(self):
