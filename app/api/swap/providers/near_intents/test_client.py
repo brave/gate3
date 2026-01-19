@@ -10,6 +10,7 @@ from app.api.swap.models import (
     SwapErrorKind,
     SwapProviderEnum,
     SwapQuoteRequest,
+    SwapStatus,
     SwapStatusRequest,
     SwapSupportRequest,
     SwapType,
@@ -998,6 +999,10 @@ async def test_post_submit_hook_success(client, mock_httpx_client):
 
     request = SwapStatusRequest(
         tx_hash="4jLC9UPQJUyEK9dbgTywQQHeJTngX54FjJ6ZLPb1BUspGX4ZZGrg3u4P5tjHGqzpuq1c73rD2QwhyFQETvPgWdm5",
+        source_coin=Chain.SOLANA.coin,
+        source_chain_id=Chain.SOLANA.chain_id,
+        destination_coin=Chain.BITCOIN.coin,
+        destination_chain_id=Chain.BITCOIN.chain_id,
         deposit_address="4Rqnz7SPU4EqSUravxbKTSBti4RNf1XGaqvBmnLfvH83",
         deposit_memo=None,
         provider=SwapProviderEnum.NEAR_INTENTS,
@@ -1032,6 +1037,10 @@ async def test_post_submit_hook_with_memo(client, mock_httpx_client):
 
     request = SwapStatusRequest(
         tx_hash="test_hash",
+        source_coin=Chain.SOLANA.coin,
+        source_chain_id=Chain.SOLANA.chain_id,
+        destination_coin=Chain.BITCOIN.coin,
+        destination_chain_id=Chain.BITCOIN.chain_id,
         deposit_address="test_address",
         deposit_memo="test_memo",
         provider=SwapProviderEnum.NEAR_INTENTS,
@@ -1054,6 +1063,10 @@ async def test_post_submit_hook_error(client, mock_httpx_client):
 
     request = SwapStatusRequest(
         tx_hash="invalid_hash",
+        source_coin=Chain.SOLANA.coin,
+        source_chain_id=Chain.SOLANA.chain_id,
+        destination_coin=Chain.BITCOIN.coin,
+        destination_chain_id=Chain.BITCOIN.chain_id,
         deposit_address="test_address",
         deposit_memo=None,
         provider=SwapProviderEnum.NEAR_INTENTS,
@@ -1085,7 +1098,10 @@ async def test_get_status_success(
     mock_response.json.return_value = {
         "quoteResponse": {
             "quoteRequest": MOCK_QUOTE_REQUEST,
-            "quote": MOCK_FIRM_QUOTE,
+            "quote": {
+                **MOCK_FIRM_QUOTE,
+                "depositAddress": "4Rqnz7SPU4EqSUravxbKTSBti4RNf1XGaqvBmnLfvH83",
+            },
         },
         "status": "SUCCESS",
         "updatedAt": "2025-12-11T13:48:50.883000Z",
@@ -1110,6 +1126,10 @@ async def test_get_status_success(
 
     request = SwapStatusRequest(
         tx_hash="4jLC9UPQJUyEK9dbgTywQQHeJTngX54FjJ6ZLPb1BUspGX4ZZGrg3u4P5tjHGqzpuq1c73rD2QwhyFQETvPgWdm5",
+        source_coin=Chain.SOLANA.coin,
+        source_chain_id=Chain.SOLANA.chain_id,
+        destination_coin=Chain.BITCOIN.coin,
+        destination_chain_id=Chain.BITCOIN.chain_id,
         deposit_address="4Rqnz7SPU4EqSUravxbKTSBti4RNf1XGaqvBmnLfvH83",
         deposit_memo=None,
         provider=SwapProviderEnum.NEAR_INTENTS,
@@ -1124,11 +1144,12 @@ async def test_get_status_success(
     assert call_args[1]["params"]["depositAddress"] == request.deposit_address
 
     # Verify response
-    assert result.status.value == "SUCCESS"
-    assert result.provider == SwapProviderEnum.NEAR_INTENTS
-    assert result.swap_details is not None
-    assert result.swap_details.amount_in == "2005138"
-    assert result.swap_details.amount_out == "711"
+    assert result.status == SwapStatus.SUCCESS
+    assert result.internal_status == "SUCCESS"
+    assert (
+        result.explorer_url
+        == "https://explorer.near-intents.org/transactions/4Rqnz7SPU4EqSUravxbKTSBti4RNf1XGaqvBmnLfvH83"
+    )
 
 
 @pytest.mark.asyncio
@@ -1152,7 +1173,7 @@ async def test_get_status_with_memo(
             "quoteRequest": MOCK_QUOTE_REQUEST,
             "quote": MOCK_INDICATIVE_QUOTE,
         },
-        "status": "PENDING",
+        "status": "PENDING_DEPOSIT",
         "updatedAt": "2025-12-11T13:48:50.883000Z",
         "swapDetails": {},
     }
@@ -1160,16 +1181,24 @@ async def test_get_status_with_memo(
 
     request = SwapStatusRequest(
         tx_hash="test_hash",
+        source_coin=Chain.SOLANA.coin,
+        source_chain_id=Chain.SOLANA.chain_id,
+        destination_coin=Chain.BITCOIN.coin,
+        destination_chain_id=Chain.BITCOIN.chain_id,
         deposit_address="test_address",
         deposit_memo="test_memo",
         provider=SwapProviderEnum.NEAR_INTENTS,
     )
 
-    await client.get_status(request)
+    result = await client.get_status(request)
 
     # Verify memo was included in params
     call_args = mock_httpx_client.get.call_args
     assert call_args[1]["params"]["depositMemo"] == "test_memo"
+
+    # Verify status and internal_status
+    assert result.status == SwapStatus.PENDING
+    assert result.internal_status == "PENDING_DEPOSIT"
 
 
 @pytest.mark.asyncio
@@ -1236,6 +1265,10 @@ async def test_get_status_error(client, mock_httpx_client, mock_supported_tokens
 
     request = SwapStatusRequest(
         tx_hash="invalid_hash",
+        source_coin=Chain.SOLANA.coin,
+        source_chain_id=Chain.SOLANA.chain_id,
+        destination_coin=Chain.BITCOIN.coin,
+        destination_chain_id=Chain.BITCOIN.chain_id,
         deposit_address="invalid_address",
         deposit_memo=None,
         provider=SwapProviderEnum.NEAR_INTENTS,

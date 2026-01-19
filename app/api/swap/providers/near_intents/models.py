@@ -75,43 +75,8 @@ class NearIntentsQuoteResponse(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
 
-class NearIntentsTransactionDetails(BaseModel):
-    hash: str
-    explorer_url: str | None = Field(default=None)
-
-    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
-
-
-class NearIntentsSwapDetails(BaseModel):
-    intent_hashes: list[str] = Field(default_factory=list)
-    near_tx_hashes: list[str] = Field(default_factory=list)
-
-    amount_in: str | None = Field(default=None)
-    amount_in_formatted: str | None = Field(default=None)
-    amount_in_usd: str | None = Field(default=None)
-
-    amount_out: str | None = Field(default=None)
-    amount_out_formatted: str | None = Field(default=None)
-    amount_out_usd: str | None = Field(default=None)
-
-    refunded_amount: str | None = Field(default=None)
-    refunded_amount_formatted: str | None = Field(default=None)
-
-    origin_chain_tx_hashes: list[NearIntentsTransactionDetails] = Field(
-        default_factory=list
-    )
-    destination_chain_tx_hashes: list[NearIntentsTransactionDetails] = Field(
-        default_factory=list
-    )
-
-    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
-
-
 class NearIntentsStatusResponse(BaseModel):
-    quote_response: NearIntentsQuoteResponse
     status: str
-    updated_at: datetime
-    swap_details: NearIntentsSwapDetails
 
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
