@@ -8,15 +8,14 @@ from ...models import (
     CardanoTransactionParams,
     EvmTransactionParams,
     SolanaTransactionParams,
-    SwapDetails,
     SwapProviderEnum,
     SwapQuoteRequest,
     SwapRoute,
     SwapRouteStep,
     SwapStatus,
+    SwapStatusRequest,
     SwapStatusResponse,
     SwapStepToken,
-    SwapTransactionDetails,
     SwapType,
     TransactionParams,
     ZcashTransactionParams,
@@ -326,91 +325,20 @@ def normalize_near_intents_status(status: str) -> SwapStatus:
     return status_mapping.get(status, SwapStatus.PENDING)
 
 
-def _find_token_by_asset_id(
-    asset_id: str,
-    supported_tokens: list[TokenInfo],
-) -> TokenInfo | None:
-    """Find a token by its NEAR Intents asset ID."""
-    return next(
-        (t for t in supported_tokens if t.near_intents_asset_id == asset_id),
-        None,
-    )
-
-
 def from_near_intents_status(
     response: NearIntentsStatusResponse,
-    supported_tokens: list[TokenInfo],
+    request: SwapStatusRequest,
 ) -> SwapStatusResponse:
-    origin_asset = _find_token_by_asset_id(
-        response.quote_response.quote_request.origin_asset_id,
-        supported_tokens,
-    )
-    destination_asset = _find_token_by_asset_id(
-        response.quote_response.quote_request.destination_asset_id,
-        supported_tokens,
-    )
-
-    if not origin_asset or not destination_asset:
-        raise ValueError("Invalid origin or destination asset")
-
-    swap_details_data = response.swap_details
-
-    # Collect all transactions
-    transactions = []
-
-    # Add origin chain transactions
-    for tx in swap_details_data.origin_chain_tx_hashes:
-        transactions.append(
-            SwapTransactionDetails(
-                coin=origin_asset.coin,
-                chain_id=origin_asset.chain_id,
-                hash=tx.hash,
-                explorer_url=tx.explorer_url,
-            ),
-        )
-
-    # Add destination chain transactions
-    for tx in swap_details_data.destination_chain_tx_hashes:
-        transactions.append(
-            SwapTransactionDetails(
-                coin=destination_asset.coin,
-                chain_id=destination_asset.chain_id,
-                hash=tx.hash,
-                explorer_url=tx.explorer_url,
-            ),
-        )
-
-    swap_details = SwapDetails(
-        amount_in=swap_details_data.amount_in,
-        amount_in_formatted=swap_details_data.amount_in_formatted,
-        amount_out=swap_details_data.amount_out,
-        amount_out_formatted=swap_details_data.amount_out_formatted,
-        refunded_amount=swap_details_data.refunded_amount,
-        refunded_amount_formatted=swap_details_data.refunded_amount_formatted,
-        transactions=transactions,
-    )
-
     # Generate explorer URL for NEAR Intents using deposit address
     explorer_url = None
-    deposit_address = response.quote_response.quote.deposit_address
+    deposit_address = request.deposit_address
     if deposit_address:
         explorer_url = (
             f"https://explorer.near-intents.org/transactions/{deposit_address}"
         )
 
     return SwapStatusResponse(
-        # source
-        source_coin=origin_asset.coin,
-        source_chain_id=origin_asset.chain_id,
-        source_token_address=origin_asset.address,
-        # destination
-        destination_coin=destination_asset.coin,
-        destination_chain_id=destination_asset.chain_id,
-        destination_token_address=destination_asset.address,
-        recipient=response.quote_response.quote_request.recipient,
-        # status fields
         status=normalize_near_intents_status(response.status),
-        swap_details=swap_details,
-        provider=SwapProviderEnum.NEAR_INTENTS,
+        internal_status=response.status,
         explorer_url=explorer_url,
     )

@@ -231,6 +231,11 @@ class SwapQuoteRequest(SwapSupportRequest):
 
 class SwapStatusRequest(SwapBaseModel):
     tx_hash: str = Field(description="Transaction hash of the swap")
+    source_coin: Coin = Field(description="Source coin of the swap")
+    source_chain_id: str = Field(description="Source chain ID of the swap")
+    destination_coin: Coin = Field(description="Destination coin of the swap")
+    destination_chain_id: str = Field(description="Destination chain ID of the swap")
+
     deposit_address: str = Field(description="Deposit address of the swap")
     deposit_memo: str | None = Field(
         default=None,
@@ -457,61 +462,12 @@ class SwapQuote(SwapBaseModel):
     routes: list[SwapRoute] = Field(description="Available swap routes")
 
 
-class SwapTransactionDetails(SwapBaseModel):
-    coin: Coin = Field(description="Coin identifier")
-    chain_id: str = Field(description="Chain identifier")
-    hash: str = Field(description="Transaction hash")
-    explorer_url: str | None = Field(
-        default=None,
-        description="Block explorer URL for this transaction",
-    )
-
-    @property
-    def chain(self) -> Chain | None:
-        return Chain.get(self.coin, self.chain_id)
-
-
-class SwapDetails(SwapBaseModel):
-    amount_in: str | None = Field(
-        default=None,
-        description="Actual input amount in smallest unit",
-    )
-    amount_in_formatted: str | None = Field(
-        default=None,
-        description="Actual input amount in readable format",
-    )
-
-    amount_out: str | None = Field(
-        default=None,
-        description="Actual output amount in smallest unit",
-    )
-    amount_out_formatted: str | None = Field(
-        default=None,
-        description="Actual output amount in readable format",
-    )
-
-    refunded_amount: str | None = Field(
-        default=None,
-        description="Refunded amount in smallest unit (if any)",
-    )
-    refunded_amount_formatted: str | None = Field(
-        default=None,
-        description="Refunded amount in readable format",
-    )
-
-    transactions: list[SwapTransactionDetails] = Field(
-        default_factory=list,
-        description="All transactions involved in the swap",
-    )
-
-
-class SwapStatusResponse(SwapSupportRequest):
+class SwapStatusResponse(SwapBaseModel):
     status: SwapStatus = Field(description="Current status of the swap")
-    swap_details: SwapDetails | None = Field(
+    internal_status: str | None = Field(
         default=None,
-        description="Detailed swap information",
+        description="Provider-specific status of the swap",
     )
-    provider: SwapProviderEnum = Field(description="Provider handling this swap")
     explorer_url: str | None = Field(
         default=None,
         description="Block explorer URL for the swap transaction",

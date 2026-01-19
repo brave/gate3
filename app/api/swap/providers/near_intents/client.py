@@ -222,7 +222,6 @@ class NearIntentsClient(BaseSwapProvider):
                 data = response.json()
                 near_response = NearIntentsStatusResponse.model_validate(data)
 
-                supported_tokens = await self.get_supported_tokens()
-                return from_near_intents_status(near_response, supported_tokens)
+                return from_near_intents_status(near_response, request)
 
             self._handle_error_response(response)
