@@ -56,6 +56,7 @@ class SwapProviderEnum(str, Enum):
     ZERO_EX = "ZERO_EX"
     JUPITER = "JUPITER"
     LIFI = "LIFI"
+    SQUID = "SQUID"
 
     def to_info(self) -> SwapProviderInfo:
         mapping = {
@@ -83,6 +84,11 @@ class SwapProviderEnum(str, Enum):
                 id=SwapProviderEnum.LIFI,
                 name="LI.FI",
                 logo="https://static1.tokenterminal.com/lifi/logo.png",
+            ),
+            SwapProviderEnum.SQUID: SwapProviderInfo(
+                id=SwapProviderEnum.SQUID,
+                name="Squid",
+                logo="https://static1.tokenterminal.com//squid/logo.png",
             ),
         }
 

@@ -15,6 +15,7 @@ from .models import (
 from .providers.base import BaseSwapProvider
 from .providers.jupiter.client import JupiterClient
 from .providers.near_intents.client import NearIntentsClient
+from .providers.squid.client import SquidClient
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +50,8 @@ async def _get_provider_client(
         return JupiterClient(token_manager=token_manager)
     if provider == SwapProviderEnum.LIFI:
         raise NotImplementedError("LiFi provider not yet implemented")
+    if provider == SwapProviderEnum.SQUID:
+        return SquidClient(token_manager=token_manager)
     raise ValueError(f"Unknown provider: {provider}")
 
 
