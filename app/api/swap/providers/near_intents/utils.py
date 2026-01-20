@@ -1,3 +1,5 @@
+import uuid
+
 from app.api.common.evm.gas import get_evm_gas_price
 from app.api.common.models import Chain, Coin
 
@@ -10,6 +12,11 @@ from .constants import (
     SOLANA_COMPUTE_UNIT_PRICE_LAMPORTS,
 )
 from .models import NearIntentsQuoteData
+
+
+def generate_route_id() -> str:
+    """Generate a unique route ID for NEAR Intents routes."""
+    return f"ni_{uuid.uuid4().hex[:12]}"
 
 
 def encode_erc20_transfer(to_address: str, amount: str) -> str:

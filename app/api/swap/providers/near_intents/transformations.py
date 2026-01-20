@@ -1,4 +1,3 @@
-import uuid
 from datetime import UTC, datetime, timedelta
 
 from app.api.common.models import Chain, Coin, TokenInfo, TokenSource, TokenType
@@ -29,7 +28,12 @@ from .models import (
     NearIntentsStatusResponse,
     NearIntentsToken,
 )
-from .utils import calculate_price_impact, compute_network_fee, encode_erc20_transfer
+from .utils import (
+    calculate_price_impact,
+    compute_network_fee,
+    encode_erc20_transfer,
+    generate_route_id,
+)
 
 
 def from_near_intents_token(token: NearIntentsToken) -> TokenInfo | None:
@@ -280,7 +284,7 @@ async def from_near_intents_quote_to_route(
     )
 
     # Generate route ID
-    route_id = f"near-intents-{uuid.uuid4().hex[:12]}"
+    route_id = generate_route_id()
 
     # For EXACT_OUTPUT, set the minimum input amount
     source_amount_min = None
