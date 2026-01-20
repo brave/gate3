@@ -56,6 +56,10 @@ class NearIntentsClient(BaseSwapProvider):
         """NEAR Intents requires firm route to get deposit address."""
         return True
 
+    @property
+    def has_auto_slippage_support(self) -> bool:
+        return False
+
     def __init__(self, token_manager=None):
         self.base_url = settings.NEAR_INTENTS_BASE_URL
         self.jwt_token = settings.NEAR_INTENTS_JWT

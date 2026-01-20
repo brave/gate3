@@ -16,6 +16,7 @@ from .models import (
     SwapSupportRequest,
 )
 from .utils import (
+    apply_default_slippage,
     get_all_indicative_routes,
     get_provider_client_for_request,
     get_supported_provider_clients,
@@ -125,6 +126,8 @@ async def get_indicative_quote(
 
         # For specific provider, get routes from that provider only
         provider = await get_provider_client_for_request(request, token_manager)
+        apply_default_slippage(provider, request)
+
         routes = await provider.get_indicative_routes(request)
         return SwapQuote(routes=routes)
     except SwapError:
@@ -162,6 +165,8 @@ async def get_firm_quote(
     """
     try:
         provider = await get_provider_client_for_request(request, token_manager)
+        apply_default_slippage(provider, request)
+
         route = await provider.get_firm_route(request)
         return SwapQuote(routes=[route])
     except SwapError:

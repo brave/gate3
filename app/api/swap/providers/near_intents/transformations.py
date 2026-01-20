@@ -73,12 +73,10 @@ def to_near_intents_request(
 
     # Convert percentage string to basis points (bps) for Near Intents
     # e.g., "0.5" -> 50 bps, "1.0" -> 100 bps
-    # Near Intents requires a slippage tolerance to be specified, so None is not allowed.
-    if request.slippage_percentage is None:
-        raise ValueError("Slippage percentage is required")
-
-    slippage_percentage = float(request.slippage_percentage)
-    slippage_bps = int(slippage_percentage * 100)
+    # Near Intents requires a slippage tolerance to be specified.
+    # At this point, slippage_percentage should already be defaulted to a
+    # valid value by the route builder.
+    slippage_bps = int(float(request.slippage_percentage) * 100)
 
     return NearIntentsQuoteRequestBody(
         dry=dry,
@@ -264,7 +262,7 @@ async def from_near_intents_quote_to_route(
     if not source_token or not destination_token:
         raise ValueError("Source and destination tokens must be set")
 
-    # Ensure slippage_percentage is set (should be validated earlier, but double-check for type safety)
+    # Ensure slippage_percentage is set
     if request.slippage_percentage is None:
         raise ValueError("Slippage percentage is required")
 
@@ -278,7 +276,7 @@ async def from_near_intents_quote_to_route(
     )
 
     # Generate route ID
-    route_id = f"ni_{uuid.uuid4().hex[:12]}"
+    route_id = f"near-intents-{uuid.uuid4().hex[:12]}"
 
     # For EXACT_OUTPUT, set the minimum input amount
     source_amount_min = None
