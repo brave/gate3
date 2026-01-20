@@ -88,7 +88,7 @@ class SwapProviderEnum(str, Enum):
             SwapProviderEnum.SQUID: SwapProviderInfo(
                 id=SwapProviderEnum.SQUID,
                 name="Squid",
-                logo="https://static1.tokenterminal.com//squid/logo.png",
+                logo="https://static1.tokenterminal.com/squid/logo.png",
             ),
         }
 
