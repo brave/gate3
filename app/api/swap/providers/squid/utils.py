@@ -47,13 +47,13 @@ def get_chain_from_squid_chain_id(squid_chain_id: str) -> Chain | None:
 
 
 def get_squid_token_address(chain: Chain, token_address: str | None) -> str:
-    if chain.coin == Coin.ETH and token_address is None:
+    if chain.coin == Coin.ETH and not token_address:
         return SQUID_NATIVE_TOKEN_ADDRESS
 
     if chain == Chain.BITCOIN:
         return "satoshi"
 
-    if chain == Chain.SOLANA and token_address is None:
+    if chain == Chain.SOLANA and not token_address:
         return SQUID_NATIVE_TOKEN_ADDRESS
 
     # For non-native tokens, return the address as-is
