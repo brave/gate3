@@ -48,6 +48,10 @@ class JupiterClient(BaseSwapProvider):
         """Jupiter provides transaction in order response, so firm route is not required."""
         return False
 
+    @property
+    def has_auto_slippage_support(self) -> bool:
+        return True
+
     def __init__(self, token_manager: TokenManager):
         self.base_url = "https://api.jup.ag"
         self.api_key = settings.JUPITER_API_KEY

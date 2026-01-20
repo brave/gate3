@@ -242,3 +242,100 @@ def test_indicative_quote_response(mock_get_all_indicative_routes):
             }
         ]
     }
+
+
+def test_indicative_quote_defaults_slippage_for_non_auto_slippage_providers(
+    mock_get_provider_client_for_request,
+    mock_provider_client,
+    mock_token_manager,
+):
+    """Test that slippage defaults to 0.5% for providers without auto slippage support."""
+    # Setup mock provider with no auto slippage support
+    mock_provider_client.has_auto_slippage_support = False
+    mock_provider_client.get_indicative_routes = AsyncMock(
+        return_value=[create_mock_route()]
+    )
+    mock_get_provider_client_for_request.return_value = mock_provider_client
+
+    # Make request without slippage_percentage, but with a specific provider
+    request_data = MOCK_REQUEST_DATA.copy()
+    request_data.pop("slippagePercentage", None)
+    request_data["provider"] = "NEAR_INTENTS"
+
+    response = client.post("/api/swap/v1/quote/indicative", json=request_data)
+
+    assert response.status_code == 200
+
+    # Verify that provider's get_indicative_routes was called
+    mock_provider_client.get_indicative_routes.assert_called_once()
+
+    # Get the request that was passed to the provider
+    call_args = mock_provider_client.get_indicative_routes.call_args
+    request_arg = call_args[0][0]
+
+    # Verify slippage was defaulted to 0.5%
+    assert request_arg.slippage_percentage == "0.5"
+
+
+def test_firm_quote_defaults_slippage_for_non_auto_slippage_providers(
+    mock_get_provider_client_for_request,
+    mock_provider_client,
+    mock_token_manager,
+):
+    """Test that slippage defaults to 0.5% for providers without auto slippage support."""
+    # Setup mock provider with no auto slippage support
+    mock_provider_client.has_auto_slippage_support = False
+    mock_provider_client.get_firm_route = AsyncMock(return_value=create_mock_route())
+    mock_get_provider_client_for_request.return_value = mock_provider_client
+
+    # Make request without slippage_percentage, but with a specific provider
+    request_data = MOCK_REQUEST_DATA.copy()
+    request_data.pop("slippagePercentage", None)
+    request_data["provider"] = "NEAR_INTENTS"
+
+    response = client.post("/api/swap/v1/quote/firm", json=request_data)
+
+    assert response.status_code == 200
+
+    # Verify that provider's get_firm_route was called
+    mock_provider_client.get_firm_route.assert_called_once()
+
+    # Get the request that was passed to the provider
+    call_args = mock_provider_client.get_firm_route.call_args
+    request_arg = call_args[0][0]
+
+    # Verify slippage was defaulted to 0.5%
+    assert request_arg.slippage_percentage == "0.5"
+
+
+def test_indicative_quote_does_not_default_slippage_for_auto_slippage_providers(
+    mock_get_provider_client_for_request,
+    mock_provider_client,
+    mock_token_manager,
+):
+    """Test that slippage is not defaulted for providers with auto slippage support."""
+    # Setup mock provider with auto slippage support
+    mock_provider_client.has_auto_slippage_support = True
+    mock_provider_client.get_indicative_routes = AsyncMock(
+        return_value=[create_mock_route()]
+    )
+    mock_get_provider_client_for_request.return_value = mock_provider_client
+
+    # Make request without slippage_percentage, but with a specific provider
+    request_data = MOCK_REQUEST_DATA.copy()
+    request_data.pop("slippagePercentage", None)
+    request_data["provider"] = "JUPITER"  # Jupiter supports auto slippage
+
+    response = client.post("/api/swap/v1/quote/indicative", json=request_data)
+
+    assert response.status_code == 200
+
+    # Verify that provider's get_indicative_routes was called
+    mock_provider_client.get_indicative_routes.assert_called_once()
+
+    # Get the request that was passed to the provider
+    call_args = mock_provider_client.get_indicative_routes.call_args
+    request_arg = call_args[0][0]
+
+    # Verify slippage was NOT defaulted (remains None)
+    assert request_arg.slippage_percentage is None

@@ -3,6 +3,7 @@ import logging
 
 from app.api.tokens.manager import TokenManager
 
+from .constants import DEFAULT_SLIPPAGE_PERCENTAGE
 from .models import (
     RoutePriority,
     SwapProviderEnum,
@@ -84,6 +85,23 @@ async def get_provider_client_for_request(
     return client
 
 
+def apply_default_slippage(
+    provider: BaseSwapProvider,
+    request: SwapQuoteRequest,
+) -> None:
+    """Apply default slippage to request if provider doesn't support auto slippage.
+
+    Modifies the request in-place if slippage_percentage is None and the provider
+    doesn't support automatic slippage computation.
+
+    Args:
+        provider: The swap provider client
+        request: The swap quote request to potentially modify
+    """
+    if not provider.has_auto_slippage_support and request.slippage_percentage is None:
+        request.slippage_percentage = DEFAULT_SLIPPAGE_PERCENTAGE
+
+
 async def get_supported_provider_clients(
     request: SwapSupportRequest,
     token_manager: TokenManager,
@@ -157,6 +175,9 @@ async def get_all_indicative_routes(
     async def fetch_routes(client: BaseSwapProvider) -> list[SwapRoute]:
         """Fetch routes from a client, returning empty list and tracking exceptions."""
         try:
+            # Default slippage for providers that don't support auto slippage
+            apply_default_slippage(client, request)
+
             return await client.get_indicative_routes(request)
         except Exception as e:
             logger.warning(

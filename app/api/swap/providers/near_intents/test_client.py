@@ -1006,6 +1006,7 @@ async def test_post_submit_hook_success(client, mock_httpx_client):
         deposit_address="4Rqnz7SPU4EqSUravxbKTSBti4RNf1XGaqvBmnLfvH83",
         deposit_memo=None,
         provider=SwapProviderEnum.NEAR_INTENTS,
+        id="test-route-id",
     )
 
     await client.post_submit_hook(request)
@@ -1044,6 +1045,7 @@ async def test_post_submit_hook_with_memo(client, mock_httpx_client):
         deposit_address="test_address",
         deposit_memo="test_memo",
         provider=SwapProviderEnum.NEAR_INTENTS,
+        id="test-route-id",
     )
 
     await client.post_submit_hook(request)
@@ -1070,6 +1072,7 @@ async def test_post_submit_hook_error(client, mock_httpx_client):
         deposit_address="test_address",
         deposit_memo=None,
         provider=SwapProviderEnum.NEAR_INTENTS,
+        id="test-route-id",
     )
 
     with pytest.raises(SwapError) as exc_info:
@@ -1133,6 +1136,7 @@ async def test_get_status_success(
         deposit_address="4Rqnz7SPU4EqSUravxbKTSBti4RNf1XGaqvBmnLfvH83",
         deposit_memo=None,
         provider=SwapProviderEnum.NEAR_INTENTS,
+        id="test-route-id",
     )
 
     result = await client.get_status(request)
@@ -1188,6 +1192,7 @@ async def test_get_status_with_memo(
         deposit_address="test_address",
         deposit_memo="test_memo",
         provider=SwapProviderEnum.NEAR_INTENTS,
+        id="test-route-id",
     )
 
     result = await client.get_status(request)
@@ -1272,6 +1277,7 @@ async def test_get_status_error(client, mock_httpx_client, mock_supported_tokens
         deposit_address="invalid_address",
         deposit_memo=None,
         provider=SwapProviderEnum.NEAR_INTENTS,
+        id="test-route-id",
     )
 
     with pytest.raises(SwapError) as exc_info:
@@ -1465,39 +1471,6 @@ async def test_exact_input_route_uses_amount_in(
 
     # For EXACT_INPUT, source_amount is the amount_in from the quote
     assert result.source_amount == "2037265"
-
-
-@pytest.mark.asyncio
-async def test_near_intents_requires_slippage_percentage(
-    client,
-    mock_httpx_client,
-    mock_supported_tokens_cache,
-):
-    """Test that NEAR Intents raises ValueError when slippage_percentage is None."""
-    supported_tokens = [USDC_ON_SOLANA_TOKEN_INFO, BTC_TOKEN_INFO]
-    mock_supported_tokens_cache.get.return_value = supported_tokens
-
-    request = SwapQuoteRequest(
-        source_coin=Chain.SOLANA.coin,
-        source_chain_id=Chain.SOLANA.chain_id,
-        source_token_address="EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
-        destination_coin=Chain.BITCOIN.coin,
-        destination_chain_id=Chain.BITCOIN.chain_id,
-        destination_token_address=None,
-        recipient="bc1qpjqsdj3qvfl4hzfa49p28ns9xkpl73cyg9exzn",
-        amount="2037265",
-        slippage_percentage=None,  # None should raise ValueError
-        swap_type=SwapType.EXACT_INPUT,
-        refund_to="8eekKfUAGSJbq3CdA2TmHb8tKuyzd5gtEas3MYAtXzrT",
-        provider=SwapProviderEnum.NEAR_INTENTS,
-    )
-    request.set_source_token(supported_tokens)
-    request.set_destination_token(supported_tokens)
-
-    with pytest.raises(ValueError) as exc_info:
-        await client.get_indicative_routes(request)
-
-    assert "Slippage percentage is required" in str(exc_info.value)
 
 
 @pytest.mark.asyncio

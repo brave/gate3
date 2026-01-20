@@ -228,8 +228,34 @@ class SwapQuoteRequest(SwapSupportRequest):
         ),
     )
 
+    model_config = ConfigDict(
+        json_schema_extra={
+            "examples": [
+                {
+                    # SwapSupportRequest params
+                    "sourceCoin": Chain.ARBITRUM.coin,
+                    "sourceChainId": Chain.ARBITRUM.chain_id,
+                    "sourceTokenAddress": None,
+                    "destinationCoin": Chain.SOLANA.coin,
+                    "destinationChainId": Chain.SOLANA.chain_id,
+                    "destinationTokenAddress": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",  # USDC on SOLANA
+                    "recipient": "8eekKfUAGSJbq3CdA2TmHb8tKuyzd5gtEas3MYAtXzrT",
+                    # SwapQuoteRequest params
+                    "amount": "10000000000000000",  # 0.01 ETH on ARBITRUM
+                    "swapType": SwapType.EXACT_INPUT,
+                    "routePriority": RoutePriority.CHEAPEST,
+                    "provider": SwapProviderEnum.AUTO,
+                    "refundTo": "0xa92D461a9a988A7f11ec285d39783A637Fdd6ba4",
+                }
+            ]
+        }
+    )
+
 
 class SwapStatusRequest(SwapBaseModel):
+    id: str = Field(
+        description="Unique route identifier",
+    )
     tx_hash: str = Field(description="Transaction hash of the swap")
     source_coin: Coin = Field(description="Source coin of the swap")
     source_chain_id: str = Field(description="Source chain ID of the swap")
