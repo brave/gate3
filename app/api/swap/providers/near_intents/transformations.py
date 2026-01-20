@@ -76,6 +76,10 @@ def to_near_intents_request(
     # Near Intents requires a slippage tolerance to be specified.
     # At this point, slippage_percentage should already be defaulted to a
     # valid value by the route builder.
+    if request.slippage_percentage is None:
+        raise ValueError(
+            "slippage_percentage must be set before building a Near Intents quote request",
+        )
     slippage_bps = int(float(request.slippage_percentage) * 100)
 
     return NearIntentsQuoteRequestBody(
