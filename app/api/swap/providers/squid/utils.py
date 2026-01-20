@@ -62,6 +62,8 @@ def get_squid_token_address(chain: Chain, token_address: str | None) -> str:
 
 
 def convert_squid_token_address(chain: Chain, token_address: str | None) -> str | None:
+    if token_address is None:
+        return None
     if (
         chain.coin == Coin.ETH
         and token_address.lower() == SQUID_NATIVE_TOKEN_ADDRESS.lower()
