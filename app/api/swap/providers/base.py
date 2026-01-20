@@ -58,6 +58,7 @@ class BaseSwapProvider(ABC):
         return True
 
     @property
+    @abstractmethod
     def has_auto_slippage_support(self) -> bool:
         """Whether this provider supports automatic slippage computation.
 
@@ -67,7 +68,6 @@ class BaseSwapProvider(ABC):
         Returns:
             True if auto slippage computation is supported, False otherwise
         """
-        raise NotImplementedError
 
     @abstractmethod
     async def get_supported_tokens(self) -> list[TokenInfo]:
