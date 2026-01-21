@@ -259,7 +259,7 @@ class SwapQuoteRequest(SwapSupportRequest):
 
 
 class SwapStatusRequest(SwapBaseModel):
-    id: str = Field(
+    route_id: str = Field(
         description="Unique route identifier",
     )
     tx_hash: str = Field(description="Transaction hash of the swap")
