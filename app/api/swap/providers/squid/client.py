@@ -262,7 +262,7 @@ class SquidClient(BaseSwapProvider):
             transaction_id=request.tx_hash,
             from_chain_id=source_chain_id,
             to_chain_id=dest_chain_id,
-            request_id=request.id,
+            quote_id=request.route_id,
         )
 
         async with self._create_client() as client:

@@ -126,9 +126,7 @@ class SquidStatusRequest(BaseModel):
     transaction_id: str = Field(description="Transaction hash")
     from_chain_id: str = Field(description="Source chain ID (decimal)")
     to_chain_id: str = Field(description="Destination chain ID (decimal)")
-    request_id: str | None = Field(
-        default=None, description="Quote/request ID for tracking"
-    )
+    quote_id: str | None = Field(default=None, description="Quote ID for tracking")
 
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 

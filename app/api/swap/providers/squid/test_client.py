@@ -306,7 +306,7 @@ async def test_get_status_success(
         destination_chain_id=Chain.ARBITRUM.chain_id,
         deposit_address="0xce16F69375520ab01377ce7B88f5BA8C48F8D666",
         provider=SwapProviderEnum.SQUID,
-        id="squid-quote-12345abcde",
+        route_id="squid-quote-12345abcde",
     )
 
     status = await client.get_status(request)
@@ -333,7 +333,7 @@ async def test_get_status_ongoing(
         destination_chain_id=Chain.ARBITRUM.chain_id,
         deposit_address="0xce16F69375520ab01377ce7B88f5BA8C48F8D666",
         provider=SwapProviderEnum.SQUID,
-        id="test-route-id",
+        route_id="test-route-id",
     )
 
     status = await client.get_status(request)
@@ -353,7 +353,7 @@ async def test_post_submit_hook_is_noop(client):
         destination_chain_id=Chain.ARBITRUM.chain_id,
         deposit_address="0xce16F69375520ab01377ce7B88f5BA8C48F8D666",
         provider=SwapProviderEnum.SQUID,
-        id="test-route-id",
+        route_id="test-route-id",
     )
 
     # Should not raise any exception

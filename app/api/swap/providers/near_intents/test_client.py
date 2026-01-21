@@ -1006,7 +1006,7 @@ async def test_post_submit_hook_success(client, mock_httpx_client):
         deposit_address="4Rqnz7SPU4EqSUravxbKTSBti4RNf1XGaqvBmnLfvH83",
         deposit_memo=None,
         provider=SwapProviderEnum.NEAR_INTENTS,
-        id="test-route-id",
+        route_id="test-route-id",
     )
 
     await client.post_submit_hook(request)
@@ -1045,7 +1045,7 @@ async def test_post_submit_hook_with_memo(client, mock_httpx_client):
         deposit_address="test_address",
         deposit_memo="test_memo",
         provider=SwapProviderEnum.NEAR_INTENTS,
-        id="test-route-id",
+        route_id="test-route-id",
     )
 
     await client.post_submit_hook(request)
@@ -1072,7 +1072,7 @@ async def test_post_submit_hook_error(client, mock_httpx_client):
         deposit_address="test_address",
         deposit_memo=None,
         provider=SwapProviderEnum.NEAR_INTENTS,
-        id="test-route-id",
+        route_id="test-route-id",
     )
 
     with pytest.raises(SwapError) as exc_info:
@@ -1136,7 +1136,7 @@ async def test_get_status_success(
         deposit_address="4Rqnz7SPU4EqSUravxbKTSBti4RNf1XGaqvBmnLfvH83",
         deposit_memo=None,
         provider=SwapProviderEnum.NEAR_INTENTS,
-        id="test-route-id",
+        route_id="test-route-id",
     )
 
     result = await client.get_status(request)
@@ -1192,7 +1192,7 @@ async def test_get_status_with_memo(
         deposit_address="test_address",
         deposit_memo="test_memo",
         provider=SwapProviderEnum.NEAR_INTENTS,
-        id="test-route-id",
+        route_id="test-route-id",
     )
 
     result = await client.get_status(request)
@@ -1277,7 +1277,7 @@ async def test_get_status_error(client, mock_httpx_client, mock_supported_tokens
         deposit_address="invalid_address",
         deposit_memo=None,
         provider=SwapProviderEnum.NEAR_INTENTS,
-        id="test-route-id",
+        route_id="test-route-id",
     )
 
     with pytest.raises(SwapError) as exc_info:
