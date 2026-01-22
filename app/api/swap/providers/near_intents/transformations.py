@@ -1,6 +1,7 @@
 import uuid
 from datetime import UTC, datetime, timedelta
 
+from app.api.common.evm.gas import estimate_gas_limit
 from app.api.common.models import Chain, Coin, TokenInfo, TokenSource, TokenType
 
 from ...models import (
@@ -20,7 +21,11 @@ from ...models import (
     TransactionParams,
     ZcashTransactionParams,
 )
-from .constants import NEAR_INTENTS_TOOL
+from .constants import (
+    EVM_GAS_LIMIT_ERC20_TRANSFER,
+    EVM_GAS_LIMIT_NATIVE_TRANSFER,
+    NEAR_INTENTS_TOOL,
+)
 from .models import (
     NearIntentsDepositMode,
     NearIntentsQuoteData,
@@ -98,7 +103,7 @@ def to_near_intents_request(
     )
 
 
-def _build_transaction_params(
+async def _build_transaction_params(
     quote_data: NearIntentsQuoteData,
     request: SwapQuoteRequest,
 ) -> TransactionParams | None:
@@ -207,11 +212,25 @@ def _build_transaction_params(
                     to=deposit_address,
                     value=source_amount,
                     data="0x",  # Empty data for native transfers
+                    gas_limit=str(EVM_GAS_LIMIT_NATIVE_TRANSFER),
                 ),
             )
         # ERC20 token transfer
         # Encode the transfer function call: transfer(deposit_address, amount)
         transfer_data = encode_erc20_transfer(deposit_address, source_amount)
+
+        # Estimate gas limit for the ERC-20 transfer
+        gas_limit = await estimate_gas_limit(
+            chain=source_chain,
+            from_address=refund_to,
+            to=source_token.address,
+            value="0",
+            data=transfer_data,
+        )
+
+        # Fallback to constant if estimation fails
+        if gas_limit is None:
+            gas_limit = EVM_GAS_LIMIT_ERC20_TRANSFER
 
         return TransactionParams(
             evm=EvmTransactionParams(
@@ -220,6 +239,7 @@ def _build_transaction_params(
                 to=source_token.address,  # Token contract address
                 value="0",  # No native value for token transfers
                 data=transfer_data,  # Encoded transfer() call
+                gas_limit=str(gas_limit),
             ),
         )
 
@@ -254,7 +274,7 @@ async def from_near_intents_quote_to_route(
     # Build transaction params for firm quotes
     transaction_params = None
     if firm:
-        transaction_params = _build_transaction_params(quote_data, request)
+        transaction_params = await _build_transaction_params(quote_data, request)
 
     # Compute estimated network fee based on source chain
     network_fee = await compute_network_fee(request)

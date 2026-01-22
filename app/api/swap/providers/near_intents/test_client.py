@@ -601,17 +601,24 @@ async def test_get_firm_route_evm_native_eth(
 
 @pytest.mark.asyncio
 @patch(
+    "app.api.swap.providers.near_intents.transformations.estimate_gas_limit",
+    new_callable=AsyncMock,
+)
+@patch(
     "app.api.swap.providers.near_intents.utils.get_evm_gas_price",
     new_callable=AsyncMock,
 )
 async def test_get_firm_route_evm_erc20_token(
     mock_get_evm_gas_price,
+    mock_estimate_gas_limit,
     client,
     mock_httpx_client,
     mock_supported_tokens_cache,
 ):
     # Mock gas price to 1 wei so fee = gas_limit * 1 = gas_limit
     mock_get_evm_gas_price.return_value = 1
+    # Mock gas limit estimation to return the expected value for ERC20 transfers
+    mock_estimate_gas_limit.return_value = 65000
 
     # Mock supported tokens - ERC20 USDC and BTC
     supported_tokens = [
