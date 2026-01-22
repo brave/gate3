@@ -1,11 +1,15 @@
 import asyncio
 import logging
+import time
 
 from app.api.tokens.manager import TokenManager
 
 from .constants import DEFAULT_SLIPPAGE_PERCENTAGE
+from .metrics import record_provider_error, record_quote_metrics
 from .models import (
     RoutePriority,
+    SwapError,
+    SwapErrorKind,
     SwapProviderEnum,
     SwapQuoteRequest,
     SwapRoute,
@@ -177,17 +181,39 @@ async def get_all_indicative_routes(
 
     async def fetch_routes(client: BaseSwapProvider) -> list[SwapRoute]:
         """Fetch routes from a client, returning empty list and tracking exceptions."""
+        start_time = time.perf_counter()
+        provider_id = client.provider_id.value
+        success = False
+
         try:
             # Default slippage for providers that don't support auto slippage
             apply_default_slippage(client, request)
 
-            return await client.get_indicative_routes(request)
-        except Exception as e:
-            logger.warning(
-                f"Error fetching routes from {client.provider_id.value}: {e}"
+            routes = await client.get_indicative_routes(request)
+            success = True
+            return routes
+        except SwapError as e:
+            logger.warning(f"Error fetching routes from {provider_id}: {e}")
+            record_provider_error(
+                request, e.kind.value, "indicative_quote", provider=provider_id
             )
             exceptions.append(e)
             return []
+        except Exception as e:
+            logger.warning(f"Error fetching routes from {provider_id}: {e}")
+            record_provider_error(
+                request,
+                SwapErrorKind.UNKNOWN.value,
+                "indicative_quote",
+                provider=provider_id,
+            )
+            exceptions.append(e)
+            return []
+        finally:
+            duration = time.perf_counter() - start_time
+            record_quote_metrics(
+                request, "indicative", duration, success, provider=provider_id
+            )
 
     # Fetch routes from all clients in parallel
     results = await asyncio.gather(*[fetch_routes(c) for c in clients])
