@@ -10,6 +10,7 @@ from app.api.common.models import Chain
 from .gas import (
     NotEvmChainError,
     _gas_price_cache,
+    estimate_gas_limit,
     get_eip1559_gas_fees,
     get_evm_gas_price,
     get_gas_price,
@@ -309,3 +310,107 @@ async def test_get_evm_gas_price_caches_result():
         result3 = await get_evm_gas_price(Chain.ARBITRUM)
         assert result3 == 550_000_000
         assert mock_eip1559.call_count == 2  # Called for new chain
+
+
+# Tests for estimate_gas_limit
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("chain", [Chain.SOLANA, Chain.BITCOIN])
+async def test_estimate_gas_limit_raises_for_non_evm_chain(chain):
+    """Should raise NotEvmChainError for non-EVM chains."""
+    with pytest.raises(NotEvmChainError):
+        await estimate_gas_limit(
+            chain=chain,
+            from_address="0x1234567890123456789012345678901234567890",
+            to="0x0987654321098765432109876543210987654321",
+            value="0",
+            data="0x",
+        )
+
+
+@pytest.mark.asyncio
+async def test_estimate_gas_limit_returns_none_without_api_key():
+    """Should return None when API key is not configured."""
+    with patch("app.api.common.evm.gas.settings") as mock_settings:
+        mock_settings.ALCHEMY_API_KEY = None
+        result = await estimate_gas_limit(
+            chain=Chain.ETHEREUM,
+            from_address="0x1234567890123456789012345678901234567890",
+            to="0x0987654321098765432109876543210987654321",
+            value="0",
+            data="0x",
+        )
+        assert result is None
+
+
+@pytest.mark.asyncio
+async def test_estimate_gas_limit_none_on_rpc_error(mock_httpx_client):
+    """Should return None and log warning on RPC error."""
+    with patch("app.api.common.evm.gas.settings") as mock_settings:
+        mock_settings.ALCHEMY_API_KEY = "test-api-key"
+
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "error": {"code": -32000, "message": "execution reverted"},
+        }
+        mock_httpx_client.post.return_value = mock_response
+
+        result = await estimate_gas_limit(
+            chain=Chain.ETHEREUM,
+            from_address="0x1234567890123456789012345678901234567890",
+            to="0x0987654321098765432109876543210987654321",
+            value="0",
+            data="0x",
+        )
+        assert result is None
+
+
+@pytest.mark.asyncio
+async def test_estimate_gas_limit_none_on_http_error(mock_httpx_client):
+    """Should return None on HTTP error."""
+    with patch("app.api.common.evm.gas.settings") as mock_settings:
+        mock_settings.ALCHEMY_API_KEY = "test-api-key"
+
+        mock_httpx_client.post.side_effect = httpx.HTTPError("Connection failed")
+
+        result = await estimate_gas_limit(
+            chain=Chain.ETHEREUM,
+            from_address="0x1234567890123456789012345678901234567890",
+            to="0x0987654321098765432109876543210987654321",
+            value="0",
+            data="0x",
+        )
+        assert result is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "chain",
+    [Chain.ETHEREUM, Chain.ARBITRUM, Chain.BASE, Chain.POLYGON],
+)
+async def test_estimate_gas_limit_works_for_various_evm_chains(
+    mock_httpx_client, chain
+):
+    """Should work for various EVM chains."""
+    with patch("app.api.common.evm.gas.settings") as mock_settings:
+        mock_settings.ALCHEMY_API_KEY = "test-api-key"
+
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "result": "0xfde8",  # 65000
+        }
+        mock_httpx_client.post.return_value = mock_response
+
+        result = await estimate_gas_limit(
+            chain=chain,
+            from_address="0x1234567890123456789012345678901234567890",
+            to="0x0987654321098765432109876543210987654321",
+            value="0",
+            data="0xa9059cbb",  # transfer() selector
+        )
+        assert result == 65000

@@ -296,9 +296,8 @@ class EvmTransactionParams(SwapBaseModel):
     value: str
     data: str
 
-    # Gas fee parameters (optional)
-    gas_limit: str | None = Field(
-        default=None,
+    # Gas fee parameters
+    gas_limit: str = Field(
         description="Gas limit for the transaction",
     )
     gas_price: str | None = Field(

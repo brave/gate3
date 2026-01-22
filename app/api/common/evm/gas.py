@@ -186,6 +186,73 @@ async def get_eip1559_gas_fees(chain: Chain) -> dict | None:
     return None
 
 
+async def estimate_gas_limit(
+    chain: Chain,
+    from_address: str,
+    to: str,
+    value: str,
+    data: str,
+) -> int | None:
+    """Estimate gas limit for an EVM transaction using eth_estimateGas RPC.
+
+    Args:
+        chain: The EVM chain to estimate gas for
+        from_address: The sender address
+        to: The recipient/contract address
+        value: The value to send in wei (decimal string)
+        data: The transaction data (hex string)
+
+    Returns:
+        Estimated gas limit as int, or None if estimation fails
+
+    Raises:
+        NotEvmChainError: If the chain is not an EVM chain
+    """
+    rpc_url = _get_alchemy_rpc_url(chain)
+    if not rpc_url:
+        return None
+
+    # Convert decimal value string to hex format for RPC call
+    value_hex = hex(int(value)) if value and value != "0" else "0x0"
+
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            response = await client.post(
+                rpc_url,
+                json={
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "eth_estimateGas",
+                    "params": [
+                        {
+                            "from": from_address,
+                            "to": to,
+                            "value": value_hex,
+                            "data": data,
+                        }
+                    ],
+                },
+            )
+            response.raise_for_status()
+            data_response = response.json()
+
+            if "result" in data_response:
+                # Result is hex string like "0x5208" (21000)
+                return int(data_response["result"], 16)
+
+            if "error" in data_response:
+                logger.warning(
+                    f"Alchemy gas estimation error for {chain.alchemy_id}: {data_response['error']}"
+                )
+
+    except httpx.HTTPError as e:
+        logger.warning(f"Failed to estimate gas for {chain.alchemy_id}: {e}")
+    except (ValueError, KeyError) as e:
+        logger.warning(f"Failed to parse gas estimate for {chain.alchemy_id}: {e}")
+
+    return None
+
+
 async def get_evm_gas_price(chain: Chain) -> int | None:
     """Get current gas price for an EVM chain.
 
