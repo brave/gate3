@@ -1,9 +1,17 @@
+import time
+
 from fastapi import APIRouter, Depends, FastAPI, Query, Request
 from fastapi.responses import JSONResponse
 
 from app.api.common.models import Coin, Tags
 from app.api.tokens.manager import TokenManager
 
+from .metrics import (
+    record_auto_best_provider,
+    record_provider_error,
+    record_quote_metrics,
+    record_status_request,
+)
 from .models import (
     SwapError,
     SwapErrorKind,
@@ -118,10 +126,19 @@ async def get_indicative_quote(
 
     The quotes may not include deposit addresses or expiration times.
     """
+    start_time = time.perf_counter()
+    success = False
+
     try:
         # For AUTO mode, fetch routes from all eligible providers
         if request.provider is None or request.provider == SwapProviderEnum.AUTO:
             routes = await get_all_indicative_routes(request, token_manager)
+
+            # Record which provider won (first route is best)
+            if routes:
+                record_auto_best_provider(request, routes[0].provider)
+
+            success = True
             return SwapQuote(routes=routes)
 
         # For specific provider, get routes from that provider only
@@ -129,18 +146,24 @@ async def get_indicative_quote(
         apply_default_slippage(provider, request)
 
         routes = await provider.get_indicative_routes(request)
+        success = True
         return SwapQuote(routes=routes)
-    except SwapError:
-        # Re-raise SwapError as-is (from provider)
+    except SwapError as e:
+        record_provider_error(request, e.kind.value, "indicative_quote")
         raise
     except ValueError as e:
+        record_provider_error(request, SwapErrorKind.UNKNOWN.value, "indicative_quote")
         raise SwapError(message=str(e), kind=SwapErrorKind.UNKNOWN, status_code=400)
     except Exception as e:
+        record_provider_error(request, SwapErrorKind.UNKNOWN.value, "indicative_quote")
         raise SwapError(
             message=f"Failed to get indicative quote: {e!s}",
             kind=SwapErrorKind.UNKNOWN,
             status_code=500,
         )
+    finally:
+        duration = time.perf_counter() - start_time
+        record_quote_metrics(request, "indicative", duration, success)
 
 
 @router.post("/v1/quote/firm", response_model=SwapQuote)
@@ -163,23 +186,32 @@ async def get_firm_quote(
     Important: Save the entire response, including provider metadata,
     as it may contain signatures or other data needed for dispute resolution.
     """
+    start_time = time.perf_counter()
+    success = False
+
     try:
         provider = await get_provider_client_for_request(request, token_manager)
         apply_default_slippage(provider, request)
 
         route = await provider.get_firm_route(request)
+        success = True
         return SwapQuote(routes=[route])
-    except SwapError:
-        # Re-raise SwapError as-is (from provider)
+    except SwapError as e:
+        record_provider_error(request, e.kind.value, "firm_quote")
         raise
     except ValueError as e:
+        record_provider_error(request, SwapErrorKind.UNKNOWN.value, "firm_quote")
         raise SwapError(message=str(e), kind=SwapErrorKind.UNKNOWN, status_code=400)
     except Exception as e:
+        record_provider_error(request, SwapErrorKind.UNKNOWN.value, "firm_quote")
         raise SwapError(
             message=f"Failed to get firm quote: {e!s}",
             kind=SwapErrorKind.UNKNOWN,
             status_code=500,
         )
+    finally:
+        duration = time.perf_counter() - start_time
+        record_quote_metrics(request, "firm", duration, success)
 
 
 @router.post("/v1/post-submit-hook")
@@ -237,7 +269,9 @@ async def get_swap_status(
     """
     try:
         client = await get_provider_client_for_request(request, token_manager)
-        return await client.get_status(request)
+        response = await client.get_status(request)
+        record_status_request(request, response)
+        return response
     except SwapError:
         # Re-raise SwapError as-is (from provider)
         raise
