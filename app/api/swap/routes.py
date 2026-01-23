@@ -26,6 +26,7 @@ from .models import (
 from .utils import (
     apply_default_slippage,
     get_all_indicative_routes,
+    get_provider_client,
     get_provider_client_for_request,
     get_supported_provider_clients,
 )
@@ -230,7 +231,7 @@ async def post_submit_hook(
 
     """
     try:
-        client = await get_provider_client_for_request(request, token_manager)
+        client = await get_provider_client(request.provider, token_manager)
         await client.post_submit_hook(request)
         return {}
     except SwapError:
@@ -268,7 +269,7 @@ async def get_swap_status(
 
     """
     try:
-        client = await get_provider_client_for_request(request, token_manager)
+        client = await get_provider_client(request.provider, token_manager)
         response = await client.get_status(request)
         record_status_request(request, response)
         return response
