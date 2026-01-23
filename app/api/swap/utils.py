@@ -24,13 +24,14 @@ from .providers.squid.client import SquidClient
 logger = logging.getLogger(__name__)
 
 
-async def _get_provider_client(
+async def get_provider_client(
     provider: SwapProviderEnum,
     token_manager: TokenManager,
 ) -> BaseSwapProvider:
-    """Get a provider client instance.
+    """Get a provider client instance by provider enum.
 
-    Internal helper - use get_provider_client_for_request for external usage.
+    Use this when you have a known provider and don't need support checks
+    (e.g., for status lookups or post-submit hooks).
 
     Args:
         provider: The SwapProviderEnum (must not be AUTO)
@@ -84,8 +85,18 @@ async def get_provider_client_for_request(
     if request.provider is None:
         raise ValueError("No provider specified. Please specify a provider.")
 
-    client = await _get_provider_client(request.provider, token_manager)
-    if not await client.has_support(request):
+    client = await get_provider_client(request.provider, token_manager)
+
+    support_request = SwapSupportRequest(
+        source_coin=request.source_coin,
+        source_chain_id=request.source_chain_id,
+        source_token_address=request.source_token_address,
+        destination_coin=request.destination_coin,
+        destination_chain_id=request.destination_chain_id,
+        destination_token_address=request.destination_token_address,
+        recipient=request.recipient,
+    )
+    if not await client.has_support(support_request):
         raise ValueError(
             f"Provider {request.provider.value} does not support this swap",
         )
@@ -132,7 +143,7 @@ async def get_supported_provider_clients(
         if provider == SwapProviderEnum.AUTO:
             continue
         try:
-            client = await _get_provider_client(provider, token_manager)
+            client = await get_provider_client(provider, token_manager)
             if await client.has_support(request):
                 supported_clients.append(client)
         except NotImplementedError:
