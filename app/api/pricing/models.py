@@ -170,4 +170,4 @@ class BatchTokenPriceRequests(BaseModel):
 class CoingeckoPlatform(BaseModel):
     id: str
     chain_id: str | None
-    native_token_id: str
+    native_token_id: str | None = None

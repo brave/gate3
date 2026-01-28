@@ -3,10 +3,11 @@ from unittest.mock import AsyncMock, patch
 import httpx
 import pytest
 
-from app.api.common.models import Chain
+from app.api.common.models import Chain, Coin
 from app.api.pricing.coingecko import CoinGeckoClient
 from app.api.pricing.models import (
     BatchTokenPriceRequests,
+    CoingeckoPlatform,
     TokenPriceRequest,
     VsCurrency,
 )
@@ -97,3 +98,61 @@ async def test_vs_currency_enum_entries_valid():
         f"VsCurrency enum contains currencies not supported by CoinGecko API: {unsupported}. "
         f"Either remove these from the enum or verify CoinGecko still supports them."
     )
+
+
+@pytest.mark.asyncio
+async def test_filter_excludes_native_token_with_null_native_token_id(client):
+    """Test that filter marks tokens as unavailable when platform has null native_token_id."""
+    batch = BatchTokenPriceRequests(
+        requests=[
+            TokenPriceRequest(coin=Coin.ETH, chain_id="0xad", address=None),
+        ],
+        vs_currency=VsCurrency.USD,
+    )
+
+    with (
+        patch.object(client, "get_platform_map") as mock_platform_map,
+        patch.object(client, "get_coin_map") as mock_coin_map,
+    ):
+        mock_platform_map.return_value = {
+            "some-platform": CoingeckoPlatform(
+                id="some-platform",
+                chain_id="0xad",
+                native_token_id=None,
+            )
+        }
+        mock_coin_map.return_value = {}
+
+        available, unavailable = await client.filter(batch)
+
+        assert available.is_empty()
+        assert unavailable.size() == 1
+
+
+@pytest.mark.asyncio
+async def test_filter_includes_native_token_when_native_token_id_present(client):
+    """Test that filter marks tokens as available when platform has native_token_id."""
+    batch = BatchTokenPriceRequests(
+        requests=[
+            TokenPriceRequest(coin=Coin.ETH, chain_id="0x1", address=None),
+        ],
+        vs_currency=VsCurrency.USD,
+    )
+
+    with (
+        patch.object(client, "get_platform_map") as mock_platform_map,
+        patch.object(client, "get_coin_map") as mock_coin_map,
+    ):
+        mock_platform_map.return_value = {
+            "ethereum": CoingeckoPlatform(
+                id="ethereum",
+                chain_id="0x1",
+                native_token_id="ethereum",
+            )
+        }
+        mock_coin_map.return_value = {}
+
+        available, unavailable = await client.filter(batch)
+
+        assert available.size() == 1
+        assert unavailable.is_empty()
