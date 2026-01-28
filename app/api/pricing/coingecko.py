@@ -181,7 +181,7 @@ class CoinGeckoClient:
         # Native asset on EVM chains
         elif request.coin == Coin.ETH and not request.address:
             for platform in platform_map.values():
-                if platform.chain_id == request.chain_id:
+                if platform.chain_id == request.chain_id and platform.native_token_id:
                     return platform.native_token_id
 
             return None
