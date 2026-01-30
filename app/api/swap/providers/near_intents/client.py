@@ -1,5 +1,4 @@
 import logging
-import time
 
 import httpx
 
@@ -18,6 +17,7 @@ from app.api.swap.models import (
 from app.api.swap.providers.base import BaseSwapProvider
 from app.config import settings
 
+from .cache import DepositSubmitRateLimiter
 from .models import (
     NearIntentsError,
     NearIntentsQuoteResponse,
@@ -33,11 +33,6 @@ from .transformations import (
 from .utils import categorize_error
 
 logger = logging.getLogger(__name__)
-
-# Rate limit for deposit submission: once per 5 seconds per deposit address
-_DEPOSIT_SUBMIT_INTERVAL_SECONDS = 5
-# Cache of last submission time per deposit address
-_deposit_submit_timestamps: dict[str, float] = {}
 
 
 class NearIntentsClient(BaseSwapProvider):
@@ -213,22 +208,18 @@ class NearIntentsClient(BaseSwapProvider):
     async def _maybe_submit_deposit(self, request: SwapStatusRequest) -> None:
         """Submit deposit if not already submitted recently.
 
-        Rate-limits deposit submission to once per 10 seconds per deposit address.
+        Rate-limits deposit submission to once per X seconds per deposit address.
+        Uses Redis for distributed rate-limiting across multiple workers.
         """
         if not request.tx_hash:
             return
 
-        deposit_address = request.deposit_address
-        now = time.monotonic()
-
-        last_submit_time = _deposit_submit_timestamps.get(deposit_address)
-        if (
-            last_submit_time is not None
-            and now - last_submit_time < _DEPOSIT_SUBMIT_INTERVAL_SECONDS
-        ):
+        should_submit = await DepositSubmitRateLimiter.should_submit(
+            request.deposit_address
+        )
+        if not should_submit:
             return
 
-        _deposit_submit_timestamps[deposit_address] = now
         await self._submit_deposit_to_api(request)
 
     async def get_status(self, request: SwapStatusRequest) -> SwapStatusResponse:
@@ -245,9 +236,6 @@ class NearIntentsClient(BaseSwapProvider):
 
                 if near_response.status == "PENDING_DEPOSIT":
                     await self._maybe_submit_deposit(request)
-                else:
-                    # Clear rate limit cache when no longer pending deposit
-                    _deposit_submit_timestamps.pop(request.deposit_address, None)
 
                 return from_near_intents_status(near_response, request)
 

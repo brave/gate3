@@ -67,6 +67,26 @@ def mock_supported_tokens_cache():
         yield mock_cache
 
 
+@pytest.fixture
+def mock_deposit_rate_limiter():
+    """Mock for the DepositSubmitRateLimiter Redis-based rate limiter."""
+    with patch(
+        "app.api.swap.providers.near_intents.client.DepositSubmitRateLimiter",
+    ) as mock_limiter:
+        # Track calls to simulate rate-limiting behavior
+        submitted_addresses = set()
+
+        async def mock_should_submit(deposit_address):
+            if deposit_address in submitted_addresses:
+                return False
+            submitted_addresses.add(deposit_address)
+            return True
+
+        mock_limiter.should_submit = AsyncMock(side_effect=mock_should_submit)
+        mock_limiter._submitted_addresses = submitted_addresses
+        yield mock_limiter
+
+
 @pytest.mark.asyncio
 async def test_get_supported_tokens_from_api(
     client,
@@ -993,6 +1013,7 @@ async def test_get_status_success(
     client,
     mock_httpx_client,
     mock_supported_tokens_cache,
+    mock_deposit_rate_limiter,
 ):
     """SUCCESS status returns correct response and does not submit deposit."""
     supported_tokens = [
@@ -1043,6 +1064,7 @@ async def test_get_status_with_memo(
     client,
     mock_httpx_client,
     mock_supported_tokens_cache,
+    mock_deposit_rate_limiter,
 ):
     # Mock supported tokens to avoid API call
     supported_tokens = [
@@ -1136,12 +1158,13 @@ async def test_get_status_pending_deposit_empty_tx_hash_skips_submit(
 
 
 @pytest.mark.asyncio
-async def test_get_status_pending_deposit_rate_limits_and_clears_cache(
+async def test_get_status_pending_deposit_rate_limits(
     client,
     mock_httpx_client,
     mock_supported_tokens_cache,
+    mock_deposit_rate_limiter,
 ):
-    """Deposit submission is rate-limited and cache is cleared when status changes."""
+    """Deposit submission is rate-limited across multiple status checks."""
     supported_tokens = [
         USDC_ON_SOLANA_TOKEN_INFO,
         BTC_TOKEN_INFO,
@@ -1178,28 +1201,13 @@ async def test_get_status_pending_deposit_rate_limits_and_clears_cache(
         json={"txHash": request.tx_hash, "depositAddress": request.deposit_address},
     )
 
-    # Second call within 10s window should NOT submit deposit again (rate-limited)
+    # Second call within rate limit window should NOT submit deposit again (rate-limited)
     await client.get_status(request)
     assert mock_httpx_client.post.call_count == 1  # Still 1
 
     # Third call should also be rate-limited
     await client.get_status(request)
     assert mock_httpx_client.post.call_count == 1  # Still 1
-
-    # Now simulate SUCCESS status - this should clear the cache
-    mock_success_response = MagicMock()
-    mock_success_response.status_code = 200
-    mock_success_response.json.return_value = {"status": "SUCCESS"}
-    mock_httpx_client.get.return_value = mock_success_response
-
-    await client.get_status(request)
-    assert mock_httpx_client.post.call_count == 1  # No submit for SUCCESS
-
-    # Back to PENDING_DEPOSIT - should submit again since cache was cleared
-    mock_httpx_client.get.return_value = mock_pending_response
-
-    await client.get_status(request)
-    assert mock_httpx_client.post.call_count == 2  # Now 2, cache was cleared
 
 
 @pytest.mark.asyncio
