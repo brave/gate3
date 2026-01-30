@@ -60,7 +60,6 @@ def create_mock_route(
         estimated_time=estimated_time,
         network_fee=network_fee,
         gasless=gasless,
-        has_post_submit_hook=True,
         requires_token_allowance=False,
         requires_firm_route=True,
         slippage_percentage="0.5",

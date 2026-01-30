@@ -989,153 +989,25 @@ async def test_get_route_error_response(
 
 
 @pytest.mark.asyncio
-async def test_post_submit_hook_success(client, mock_httpx_client):
-    # Mock API response with valid structure
-    mock_response = MagicMock()
-    mock_response.status_code = 200
-    mock_response.json.return_value = {
-        "quoteResponse": {
-            "quoteRequest": MOCK_QUOTE_REQUEST,
-            "quote": MOCK_INDICATIVE_QUOTE,
-        },
-        "status": "PENDING",
-        "updatedAt": "2025-12-11T13:48:50.883000Z",
-        "swapDetails": {},
-    }
-    mock_httpx_client.post.return_value = mock_response
-
-    request = SwapStatusRequest(
-        tx_hash="4jLC9UPQJUyEK9dbgTywQQHeJTngX54FjJ6ZLPb1BUspGX4ZZGrg3u4P5tjHGqzpuq1c73rD2QwhyFQETvPgWdm5",
-        source_coin=Chain.SOLANA.coin,
-        source_chain_id=Chain.SOLANA.chain_id,
-        destination_coin=Chain.BITCOIN.coin,
-        destination_chain_id=Chain.BITCOIN.chain_id,
-        deposit_address="4Rqnz7SPU4EqSUravxbKTSBti4RNf1XGaqvBmnLfvH83",
-        deposit_memo=None,
-        provider=SwapProviderEnum.NEAR_INTENTS,
-        route_id="test-route-id",
-    )
-
-    await client.post_submit_hook(request)
-
-    # Verify API was called
-    mock_httpx_client.post.assert_called_once()
-    call_args = mock_httpx_client.post.call_args
-    assert call_args[0][0] == "https://1click.chaindefuser.com/v0/deposit/submit"
-    assert call_args[1]["json"]["txHash"] == request.tx_hash
-    assert call_args[1]["json"]["depositAddress"] == request.deposit_address
-    assert "memo" not in call_args[1]["json"]
-
-
-@pytest.mark.asyncio
-async def test_post_submit_hook_with_memo(client, mock_httpx_client):
-    # Mock API response with valid structure
-    mock_response = MagicMock()
-    mock_response.status_code = 200
-    mock_response.json.return_value = {
-        "quoteResponse": {
-            "quoteRequest": MOCK_QUOTE_REQUEST,
-            "quote": MOCK_INDICATIVE_QUOTE,
-        },
-        "status": "PENDING",
-        "updatedAt": "2025-12-11T13:48:50.883000Z",
-        "swapDetails": {},
-    }
-    mock_httpx_client.post.return_value = mock_response
-
-    request = SwapStatusRequest(
-        tx_hash="test_hash",
-        source_coin=Chain.SOLANA.coin,
-        source_chain_id=Chain.SOLANA.chain_id,
-        destination_coin=Chain.BITCOIN.coin,
-        destination_chain_id=Chain.BITCOIN.chain_id,
-        deposit_address="test_address",
-        deposit_memo="test_memo",
-        provider=SwapProviderEnum.NEAR_INTENTS,
-        route_id="test-route-id",
-    )
-
-    await client.post_submit_hook(request)
-
-    # Verify memo was included
-    call_args = mock_httpx_client.post.call_args
-    assert call_args[1]["json"]["memo"] == "test_memo"
-
-
-@pytest.mark.asyncio
-async def test_post_submit_hook_error(client, mock_httpx_client):
-    # Mock error response
-    mock_response = MagicMock()
-    mock_response.status_code = 400
-    mock_response.json.return_value = {"message": "Invalid transaction hash"}
-    mock_httpx_client.post.return_value = mock_response
-
-    request = SwapStatusRequest(
-        tx_hash="invalid_hash",
-        source_coin=Chain.SOLANA.coin,
-        source_chain_id=Chain.SOLANA.chain_id,
-        destination_coin=Chain.BITCOIN.coin,
-        destination_chain_id=Chain.BITCOIN.chain_id,
-        deposit_address="test_address",
-        deposit_memo=None,
-        provider=SwapProviderEnum.NEAR_INTENTS,
-        route_id="test-route-id",
-    )
-
-    with pytest.raises(SwapError) as exc_info:
-        await client.post_submit_hook(request)
-
-    assert exc_info.value.message == "Invalid transaction hash"
-    assert exc_info.value.kind == SwapErrorKind.UNKNOWN
-
-
-@pytest.mark.asyncio
 async def test_get_status_success(
     client,
     mock_httpx_client,
     mock_supported_tokens_cache,
 ):
-    # Mock supported tokens
+    """SUCCESS status returns correct response and does not submit deposit."""
     supported_tokens = [
         USDC_ON_SOLANA_TOKEN_INFO,
         BTC_TOKEN_INFO,
     ]
     mock_supported_tokens_cache.get.return_value = supported_tokens
 
-    # Mock API response
     mock_response = MagicMock()
     mock_response.status_code = 200
-    mock_response.json.return_value = {
-        "quoteResponse": {
-            "quoteRequest": MOCK_QUOTE_REQUEST,
-            "quote": {
-                **MOCK_FIRM_QUOTE,
-                "depositAddress": "4Rqnz7SPU4EqSUravxbKTSBti4RNf1XGaqvBmnLfvH83",
-            },
-        },
-        "status": "SUCCESS",
-        "updatedAt": "2025-12-11T13:48:50.883000Z",
-        "swapDetails": {
-            "amountIn": "2005138",
-            "amountInFormatted": "2.005138",
-            "amountInUsd": "2.0049",
-            "amountOut": "711",
-            "amountOutFormatted": "0.0000071",
-            "amountOutUsd": "0.6433",
-            "refundedAmount": "0",
-            "refundedAmountFormatted": "0",
-            "destinationChainTxHashes": [
-                {
-                    "hash": "ab7da53a8119097af975eee2c8ac09e035d549c605cfa712696267267a19414f",
-                    "explorerUrl": "",
-                },
-            ],
-        },
-    }
+    mock_response.json.return_value = {"status": "SUCCESS"}
     mock_httpx_client.get.return_value = mock_response
 
     request = SwapStatusRequest(
-        tx_hash="4jLC9UPQJUyEK9dbgTywQQHeJTngX54FjJ6ZLPb1BUspGX4ZZGrg3u4P5tjHGqzpuq1c73rD2QwhyFQETvPgWdm5",
+        tx_hash="test_hash",
         source_coin=Chain.SOLANA.coin,
         source_chain_id=Chain.SOLANA.chain_id,
         destination_coin=Chain.BITCOIN.coin,
@@ -1148,11 +1020,14 @@ async def test_get_status_success(
 
     result = await client.get_status(request)
 
-    # Verify API was called
-    mock_httpx_client.get.assert_called_once()
-    call_args = mock_httpx_client.get.call_args
-    assert call_args[0][0] == "https://1click.chaindefuser.com/v0/status"
-    assert call_args[1]["params"]["depositAddress"] == request.deposit_address
+    # Verify API call
+    mock_httpx_client.get.assert_called_once_with(
+        "https://1click.chaindefuser.com/v0/status",
+        params={"depositAddress": request.deposit_address},
+    )
+
+    # Verify no deposit submission for SUCCESS status
+    mock_httpx_client.post.assert_not_called()
 
     # Verify response
     assert result.status == SwapStatus.SUCCESS
@@ -1176,19 +1051,16 @@ async def test_get_status_with_memo(
     ]
     mock_supported_tokens_cache.get.return_value = supported_tokens
 
-    # Mock API response with valid structure (all required fields)
-    mock_response = MagicMock()
-    mock_response.status_code = 200
-    mock_response.json.return_value = {
-        "quoteResponse": {
-            "quoteRequest": MOCK_QUOTE_REQUEST,
-            "quote": MOCK_INDICATIVE_QUOTE,
-        },
-        "status": "PENDING_DEPOSIT",
-        "updatedAt": "2025-12-11T13:48:50.883000Z",
-        "swapDetails": {},
-    }
-    mock_httpx_client.get.return_value = mock_response
+    # Mock GET response for status check
+    mock_get_response = MagicMock()
+    mock_get_response.status_code = 200
+    mock_get_response.json.return_value = {"status": "PENDING_DEPOSIT"}
+    mock_httpx_client.get.return_value = mock_get_response
+
+    # Mock POST response for deposit submission (called when status is PENDING_DEPOSIT)
+    mock_post_response = MagicMock()
+    mock_post_response.status_code = 200
+    mock_httpx_client.post.return_value = mock_post_response
 
     request = SwapStatusRequest(
         tx_hash="test_hash",
@@ -1196,7 +1068,7 @@ async def test_get_status_with_memo(
         source_chain_id=Chain.SOLANA.chain_id,
         destination_coin=Chain.BITCOIN.coin,
         destination_chain_id=Chain.BITCOIN.chain_id,
-        deposit_address="test_address",
+        deposit_address="memo_test_unique_addr_xyz789",
         deposit_memo="test_memo",
         provider=SwapProviderEnum.NEAR_INTENTS,
         route_id="test-route-id",
@@ -1204,13 +1076,130 @@ async def test_get_status_with_memo(
 
     result = await client.get_status(request)
 
-    # Verify memo was included in params
-    call_args = mock_httpx_client.get.call_args
-    assert call_args[1]["params"]["depositMemo"] == "test_memo"
+    # Verify GET params include memo
+    mock_httpx_client.get.assert_called_once_with(
+        "https://1click.chaindefuser.com/v0/status",
+        params={"depositAddress": request.deposit_address, "depositMemo": "test_memo"},
+    )
 
-    # Verify status and internal_status
+    # Verify POST body includes memo
+    mock_httpx_client.post.assert_called_once_with(
+        "https://1click.chaindefuser.com/v0/deposit/submit",
+        json={
+            "txHash": request.tx_hash,
+            "depositAddress": request.deposit_address,
+            "memo": "test_memo",
+        },
+    )
+
     assert result.status == SwapStatus.PENDING
     assert result.internal_status == "PENDING_DEPOSIT"
+
+
+@pytest.mark.asyncio
+async def test_get_status_pending_deposit_empty_tx_hash_skips_submit(
+    client,
+    mock_httpx_client,
+    mock_supported_tokens_cache,
+):
+    """When status is PENDING_DEPOSIT but tx_hash is empty, skip deposit submission."""
+    supported_tokens = [
+        USDC_ON_SOLANA_TOKEN_INFO,
+        BTC_TOKEN_INFO,
+    ]
+    mock_supported_tokens_cache.get.return_value = supported_tokens
+
+    mock_get_response = MagicMock()
+    mock_get_response.status_code = 200
+    mock_get_response.json.return_value = {"status": "PENDING_DEPOSIT"}
+    mock_httpx_client.get.return_value = mock_get_response
+
+    request = SwapStatusRequest(
+        tx_hash="",
+        source_coin=Chain.SOLANA.coin,
+        source_chain_id=Chain.SOLANA.chain_id,
+        destination_coin=Chain.BITCOIN.coin,
+        destination_chain_id=Chain.BITCOIN.chain_id,
+        deposit_address="empty_tx_hash_unique_addr_ghi012",
+        deposit_memo=None,
+        provider=SwapProviderEnum.NEAR_INTENTS,
+        route_id="test-route-id",
+    )
+
+    result = await client.get_status(request)
+
+    # Verify deposit submission was NOT called (empty tx_hash)
+    mock_httpx_client.post.assert_not_called()
+
+    assert result.status == SwapStatus.PENDING
+    assert result.internal_status == "PENDING_DEPOSIT"
+
+
+@pytest.mark.asyncio
+async def test_get_status_pending_deposit_rate_limits_and_clears_cache(
+    client,
+    mock_httpx_client,
+    mock_supported_tokens_cache,
+):
+    """Deposit submission is rate-limited and cache is cleared when status changes."""
+    supported_tokens = [
+        USDC_ON_SOLANA_TOKEN_INFO,
+        BTC_TOKEN_INFO,
+    ]
+    mock_supported_tokens_cache.get.return_value = supported_tokens
+
+    mock_post_response = MagicMock()
+    mock_post_response.status_code = 200
+    mock_httpx_client.post.return_value = mock_post_response
+
+    # Use a unique deposit address to avoid interference from other tests
+    request = SwapStatusRequest(
+        tx_hash="test_hash",
+        source_coin=Chain.SOLANA.coin,
+        source_chain_id=Chain.SOLANA.chain_id,
+        destination_coin=Chain.BITCOIN.coin,
+        destination_chain_id=Chain.BITCOIN.chain_id,
+        deposit_address="rate_limit_unique_addr_abc123",
+        deposit_memo=None,
+        provider=SwapProviderEnum.NEAR_INTENTS,
+        route_id="test-route-id",
+    )
+
+    # Setup PENDING_DEPOSIT response
+    mock_pending_response = MagicMock()
+    mock_pending_response.status_code = 200
+    mock_pending_response.json.return_value = {"status": "PENDING_DEPOSIT"}
+    mock_httpx_client.get.return_value = mock_pending_response
+
+    # First call should submit deposit
+    await client.get_status(request)
+    mock_httpx_client.post.assert_called_once_with(
+        "https://1click.chaindefuser.com/v0/deposit/submit",
+        json={"txHash": request.tx_hash, "depositAddress": request.deposit_address},
+    )
+
+    # Second call within 10s window should NOT submit deposit again (rate-limited)
+    await client.get_status(request)
+    assert mock_httpx_client.post.call_count == 1  # Still 1
+
+    # Third call should also be rate-limited
+    await client.get_status(request)
+    assert mock_httpx_client.post.call_count == 1  # Still 1
+
+    # Now simulate SUCCESS status - this should clear the cache
+    mock_success_response = MagicMock()
+    mock_success_response.status_code = 200
+    mock_success_response.json.return_value = {"status": "SUCCESS"}
+    mock_httpx_client.get.return_value = mock_success_response
+
+    await client.get_status(request)
+    assert mock_httpx_client.post.call_count == 1  # No submit for SUCCESS
+
+    # Back to PENDING_DEPOSIT - should submit again since cache was cleared
+    mock_httpx_client.get.return_value = mock_pending_response
+
+    await client.get_status(request)
+    assert mock_httpx_client.post.call_count == 2  # Now 2, cache was cleared
 
 
 @pytest.mark.asyncio

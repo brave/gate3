@@ -473,9 +473,6 @@ class SwapRoute(SwapBaseModel):
     )
 
     # Provider-specific requirements
-    has_post_submit_hook: bool = Field(
-        description="Whether client must call post-submit hook after deposit transaction",
-    )
     requires_token_allowance: bool = Field(
         description="Whether client must check/approve token allowance before swap (EVM only)",
     )

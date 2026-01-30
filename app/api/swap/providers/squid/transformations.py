@@ -272,7 +272,6 @@ async def from_squid_route_to_route(
         network_fee=network_fee,
         deposit_address=deposit_address,
         transaction_params=transaction_params,
-        has_post_submit_hook=False,
         requires_token_allowance=True,  # ERC20 tokens need approval
         requires_firm_route=False,  # Squid returns transaction in route response
         slippage_percentage=str(estimate.aggregate_slippage),

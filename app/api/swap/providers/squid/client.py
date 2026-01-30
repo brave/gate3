@@ -38,10 +38,6 @@ class SquidClient(BaseSwapProvider):
         return SwapProviderEnum.SQUID
 
     @property
-    def has_post_submit_hook(self) -> bool:
-        return False
-
-    @property
     def requires_token_allowance(self) -> bool:
         return True
 
@@ -283,13 +279,3 @@ class SquidClient(BaseSwapProvider):
                 message="Unhandled Squid API error",
                 kind=SwapErrorKind.UNKNOWN,
             )
-
-    async def post_submit_hook(self, request: SwapStatusRequest) -> None:
-        """Post-submit hook for Squid.
-
-        Squid does not require a post-submit hook, so this is a no-op.
-
-        Args:
-            request: The swap status request
-        """
-        pass
