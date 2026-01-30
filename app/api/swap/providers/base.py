@@ -25,16 +25,6 @@ class BaseSwapProvider(ABC):
         """
 
     @property
-    def has_post_submit_hook(self) -> bool:
-        """Whether client must call post-submit hook after deposit transaction.
-
-        Returns:
-            True if post-submit hook is required, False otherwise
-
-        """
-        return False
-
-    @property
     def requires_token_allowance(self) -> bool:
         """Whether client must check/approve ERC20 token allowance before swap (EVM only).
 
@@ -136,23 +126,6 @@ class BaseSwapProvider(ABC):
 
         Raises:
             ValueError: If swap status request is not supported
-            httpx.HTTPError: If API request fails
-
-        """
-
-    @abstractmethod
-    async def post_submit_hook(self, request: SwapStatusRequest) -> None:
-        """Post-submit hook called after a deposit transaction is submitted.
-
-        This hook can be used by providers to perform provider-specific actions
-        after a deposit transaction has been submitted. The exact behavior and
-        purpose of this hook is implementation-specific to each provider.
-
-        Args:
-            request: The swap status request containing tx_hash and deposit_address
-
-        Raises:
-            ValueError: If the hook operation fails
             httpx.HTTPError: If API request fails
 
         """

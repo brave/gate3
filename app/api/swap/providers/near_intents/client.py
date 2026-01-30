@@ -1,4 +1,5 @@
 import logging
+import time
 
 import httpx
 
@@ -33,6 +34,11 @@ from .utils import categorize_error
 
 logger = logging.getLogger(__name__)
 
+# Rate limit for deposit submission: once per 5 seconds per deposit address
+_DEPOSIT_SUBMIT_INTERVAL_SECONDS = 5
+# Cache of last submission time per deposit address
+_deposit_submit_timestamps: dict[str, float] = {}
+
 
 class NearIntentsClient(BaseSwapProvider):
     """NEAR Intents 1Click API client"""
@@ -40,11 +46,6 @@ class NearIntentsClient(BaseSwapProvider):
     @property
     def provider_id(self) -> SwapProviderEnum:
         return SwapProviderEnum.NEAR_INTENTS
-
-    @property
-    def has_post_submit_hook(self) -> bool:
-        """NEAR Intents has post-submit hook to accelerate swap processing."""
-        return True
 
     @property
     def requires_token_allowance(self) -> bool:
@@ -161,7 +162,6 @@ class NearIntentsClient(BaseSwapProvider):
                     response=near_response,
                     request=request,
                     firm=not dry,
-                    has_post_submit_hook=self.has_post_submit_hook,
                     requires_token_allowance=self.requires_token_allowance,
                     requires_firm_route=self.requires_firm_route,
                 )
@@ -180,19 +180,11 @@ class NearIntentsClient(BaseSwapProvider):
         """Get firm route with deposit address."""
         return await self._get_route(request, dry=False)
 
-    async def post_submit_hook(self, request: SwapStatusRequest) -> None:
-        """Post-submit hook that submits deposit transaction hash to NEAR Intents API.
+    async def _submit_deposit_to_api(self, request: SwapStatusRequest) -> None:
+        """Submit deposit transaction hash to NEAR Intents API.
 
         This allows the system to preemptively verify the deposit and can
         accelerate swap processing.
-
-        Args:
-            request: The swap status request containing tx_hash and deposit_address
-
-        Raises:
-            ValueError: If deposit transaction submission fails
-            httpx.HTTPError: If API request fails
-
         """
         payload = {
             "txHash": request.tx_hash,
@@ -209,10 +201,35 @@ class NearIntentsClient(BaseSwapProvider):
             )
 
             if 200 <= response.status_code < 300:
-                NearIntentsStatusResponse.model_validate(response.json())
                 return
 
-            self._handle_error_response(response)
+            # Log but don't fail if deposit submission fails
+            logger.warning(
+                "Failed to submit deposit: %s %s",
+                response.status_code,
+                response.text,
+            )
+
+    async def _maybe_submit_deposit(self, request: SwapStatusRequest) -> None:
+        """Submit deposit if not already submitted recently.
+
+        Rate-limits deposit submission to once per 10 seconds per deposit address.
+        """
+        if not request.tx_hash:
+            return
+
+        deposit_address = request.deposit_address
+        now = time.monotonic()
+
+        last_submit_time = _deposit_submit_timestamps.get(deposit_address)
+        if (
+            last_submit_time is not None
+            and now - last_submit_time < _DEPOSIT_SUBMIT_INTERVAL_SECONDS
+        ):
+            return
+
+        _deposit_submit_timestamps[deposit_address] = now
+        await self._submit_deposit_to_api(request)
 
     async def get_status(self, request: SwapStatusRequest) -> SwapStatusResponse:
         params = {"depositAddress": request.deposit_address}
@@ -225,6 +242,12 @@ class NearIntentsClient(BaseSwapProvider):
             if 200 <= response.status_code < 300:
                 data = response.json()
                 near_response = NearIntentsStatusResponse.model_validate(data)
+
+                if near_response.status == "PENDING_DEPOSIT":
+                    await self._maybe_submit_deposit(request)
+                else:
+                    # Clear rate limit cache when no longer pending deposit
+                    _deposit_submit_timestamps.pop(request.deposit_address, None)
 
                 return from_near_intents_status(near_response, request)
 

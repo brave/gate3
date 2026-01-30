@@ -215,38 +215,6 @@ async def get_firm_quote(
         record_quote_metrics(request, "firm", duration, success)
 
 
-@router.post("/v1/post-submit-hook")
-async def post_submit_hook(
-    request: SwapStatusRequest,
-    token_manager: TokenManager = Depends(TokenManager),
-) -> dict:
-    """Post-submit hook called after a deposit transaction is submitted.
-
-    This endpoint allows providers to perform provider-specific actions after
-    a deposit transaction has been submitted. The exact behavior depends on
-    the swap provider implementation.
-
-    Returns:
-        Empty dict on success
-
-    """
-    try:
-        client = await get_provider_client(request.provider, token_manager)
-        await client.post_submit_hook(request)
-        return {}
-    except SwapError:
-        # Re-raise SwapError as-is (from provider)
-        raise
-    except ValueError as e:
-        raise SwapError(message=str(e), kind=SwapErrorKind.UNKNOWN, status_code=400)
-    except Exception as e:
-        raise SwapError(
-            message=f"Failed to execute post-submit hook: {e!s}",
-            kind=SwapErrorKind.UNKNOWN,
-            status_code=500,
-        )
-
-
 @router.post("/v1/status", response_model=SwapStatusResponse)
 async def get_swap_status(
     request: SwapStatusRequest,
