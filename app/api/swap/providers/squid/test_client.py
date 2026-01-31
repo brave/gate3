@@ -193,7 +193,6 @@ async def test_get_indicative_routes_success(
     assert route.estimated_time == 180
     assert route.requires_token_allowance is True
     assert route.requires_firm_route is False
-    assert route.has_post_submit_hook is False
     assert route.id == "squid-quote-12345abcde"
 
 
@@ -342,24 +341,6 @@ async def test_get_status_ongoing(
 
     assert status.status == SwapStatus.PROCESSING
     assert status.internal_status == "bridging"
-
-
-@pytest.mark.asyncio
-async def test_post_submit_hook_is_noop(client):
-    """Test that post_submit_hook is a no-op."""
-    request = SwapStatusRequest(
-        tx_hash="0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
-        source_coin=Chain.ETHEREUM.coin,
-        source_chain_id=Chain.ETHEREUM.chain_id,
-        destination_coin=Chain.ARBITRUM.coin,
-        destination_chain_id=Chain.ARBITRUM.chain_id,
-        deposit_address="0xce16F69375520ab01377ce7B88f5BA8C48F8D666",
-        provider=SwapProviderEnum.SQUID,
-        route_id="test-route-id",
-    )
-
-    # Should not raise any exception
-    await client.post_submit_hook(request)
 
 
 @pytest.mark.parametrize(
