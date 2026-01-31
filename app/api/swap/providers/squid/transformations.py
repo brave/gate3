@@ -1,4 +1,5 @@
-from app.api.common.models import Chain, Coin
+from app.api.common.amount import Amount
+from app.api.common.models import Coin
 from app.api.tokens.manager import TokenManager
 
 from ...models import (
@@ -113,36 +114,60 @@ def _build_transaction_params(
 
 def _compute_network_fee(
     squid_response: SquidRouteResponse,
-    source_chain: Chain,
+    request: SwapQuoteRequest,
 ) -> NetworkFee | None:
-    """Compute network fee from Squid gas costs.
+    """Compute network fee from Squid gas costs and transaction value.
 
-    Only includes gas costs for the source chain.
+    Includes:
+    - Gas costs for the source chain
+    - Transaction value fees:
+      - For native asset source: excess value over source_amount (bridge fees)
+      - For ERC20 source: entire transaction value (since token is via approval)
 
     Args:
         squid_response: The Squid route response
-        source_chain: The source chain for filtering gas costs
+        request: The original swap quote request
 
     Returns:
-        NetworkFee if gas costs are available, None otherwise
+        NetworkFee if fees are present, None otherwise
     """
-    estimate = squid_response.route.estimate
-    if not estimate.gas_costs:
+    source_chain = request.source_chain
+    if not source_chain:
         return None
 
-    # Sum gas costs for source chain only
-    total_gas = 0
-    for gas_cost in estimate.gas_costs:
-        # Check if this gas cost is for the source chain
-        token = gas_cost.token
-        if get_chain_from_squid_chain_id(token.chain_id) == source_chain:
-            total_gas += int(gas_cost.amount)
+    estimate = squid_response.route.estimate
+    total_fee = Amount.zero()
 
-    if total_gas == 0:
+    # Sum gas costs for source chain only
+    if estimate.gas_costs:
+        for gas_cost in estimate.gas_costs:
+            # Check if this gas cost is for the source chain
+            token = gas_cost.token
+            if get_chain_from_squid_chain_id(token.chain_id) == source_chain:
+                total_fee += Amount(gas_cost.amount)
+
+    # Add transaction value as network fee
+    # - For native asset source: only the excess over source_amount is fee
+    #   (since source_amount is also sent in value)
+    # - For ERC20 source: entire value is fee (token transferred via approval)
+    tx_request = squid_response.route.transaction_request
+    if tx_request and source_chain.coin == Coin.ETH:
+        tx_value = Amount(tx_request.value)
+        if tx_value.is_positive():
+            if request.source_token_address is None:
+                # Native asset: only excess is fee
+                source_amount = Amount(estimate.from_amount)
+                if tx_value > source_amount:
+                    total_fee += tx_value - source_amount
+            else:
+                # ERC20: entire value is fee
+                total_fee += tx_value
+
+    if total_fee.is_undefined() or total_fee.is_zero():
         return None
 
     return NetworkFee(
-        amount=str(total_gas),
+        amount=str(total_fee),
         decimals=source_chain.decimals,
         symbol=source_chain.symbol,
     )
@@ -215,11 +240,8 @@ async def from_squid_route_to_route(
 
     steps = _convert_actions_to_steps(estimate.actions)
 
-    # Compute network fee for source chain only
-    source_chain = request.source_chain
-    network_fee = None
-    if source_chain:
-        network_fee = _compute_network_fee(squid_response, source_chain)
+    # Compute network fee (gas costs + any native asset bridge fees)
+    network_fee = _compute_network_fee(squid_response, request)
 
     # Build transaction params
     transaction_params = _build_transaction_params(squid_response, request)

@@ -20,6 +20,8 @@ from .mocks import (
     ETH_ON_ARBITRUM_TOKEN_INFO,
     ETH_ON_ETHEREUM_TOKEN_INFO,
     MOCK_SQUID_ERROR_RESPONSE,
+    MOCK_SQUID_ROUTE_ERC20_WITH_BRIDGE_FEE,
+    MOCK_SQUID_ROUTE_NATIVE_WITH_BRIDGE_FEE,
     MOCK_SQUID_ROUTE_RESPONSE,
     MOCK_SQUID_STATUS_ONGOING,
     MOCK_SQUID_STATUS_SUCCESS,
@@ -382,3 +384,77 @@ def test_get_squid_chain_id_from_chain(chain, expected):
 
     result = get_squid_chain_id_from_chain(chain)
     assert result == expected
+
+
+@pytest.mark.asyncio
+async def test_network_fee_native_asset_with_bridge_fee(
+    client,
+    mock_httpx_client,
+    mock_token_manager,
+):
+    """Network fee includes excess tx value for native asset source."""
+    mock_token_manager.get = AsyncMock(return_value=None)
+
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = MOCK_SQUID_ROUTE_NATIVE_WITH_BRIDGE_FEE
+    mock_httpx_client.post.return_value = mock_response
+
+    request = SwapQuoteRequest(
+        source_coin=Chain.ETHEREUM.coin,
+        source_chain_id=Chain.ETHEREUM.chain_id,
+        source_token_address=None,  # Native ETH
+        destination_coin=Chain.ARBITRUM.coin,
+        destination_chain_id=Chain.ARBITRUM.chain_id,
+        destination_token_address="0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
+        recipient="0x1234567890123456789012345678901234567890",
+        amount="1000000000000000000",
+        slippage_percentage="1.0",
+        swap_type=SwapType.EXACT_INPUT,
+        refund_to="0x1234567890123456789012345678901234567890",
+        provider=SwapProviderEnum.SQUID,
+    )
+
+    route = await client.get_firm_route(request)
+
+    # Network fee = 0.03 ETH gas + 0.02 ETH bridge fee (tx value excess) = 0.05 ETH
+    assert route.network_fee is not None
+    assert route.network_fee.amount == "50000000000000000"
+    assert route.network_fee.symbol == "ETH"
+
+
+@pytest.mark.asyncio
+async def test_network_fee_erc20_with_bridge_fee(
+    client,
+    mock_httpx_client,
+    mock_token_manager,
+):
+    """Network fee includes entire tx value for ERC20 source."""
+    mock_token_manager.get = AsyncMock(return_value=None)
+
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = MOCK_SQUID_ROUTE_ERC20_WITH_BRIDGE_FEE
+    mock_httpx_client.post.return_value = mock_response
+
+    request = SwapQuoteRequest(
+        source_coin=Chain.ETHEREUM.coin,
+        source_chain_id=Chain.ETHEREUM.chain_id,
+        source_token_address="0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",  # USDC
+        destination_coin=Chain.ARBITRUM.coin,
+        destination_chain_id=Chain.ARBITRUM.chain_id,
+        destination_token_address="0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
+        recipient="0x1234567890123456789012345678901234567890",
+        amount="1000000000",
+        slippage_percentage="1.0",
+        swap_type=SwapType.EXACT_INPUT,
+        refund_to="0x1234567890123456789012345678901234567890",
+        provider=SwapProviderEnum.SQUID,
+    )
+
+    route = await client.get_firm_route(request)
+
+    # Network fee = 0.03 ETH gas + 0.02 ETH bridge fee (entire tx value) = 0.05 ETH
+    assert route.network_fee is not None
+    assert route.network_fee.amount == "50000000000000000"
+    assert route.network_fee.symbol == "ETH"
