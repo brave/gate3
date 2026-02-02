@@ -1158,6 +1158,52 @@ async def test_get_status_pending_deposit_empty_tx_hash_skips_submit(
 
 
 @pytest.mark.asyncio
+async def test_get_status_deposit_submission_failure_does_not_raise(
+    client,
+    mock_httpx_client,
+    mock_supported_tokens_cache,
+    mock_deposit_rate_limiter,
+):
+    """Deposit submission failure should not cause get_status to fail."""
+    supported_tokens = [USDC_ON_SOLANA_TOKEN_INFO, BTC_TOKEN_INFO]
+    mock_supported_tokens_cache.get.return_value = supported_tokens
+
+    # Mock GET response for status check (PENDING_DEPOSIT)
+    mock_get_response = MagicMock()
+    mock_get_response.status_code = 200
+    mock_get_response.json.return_value = {"status": "PENDING_DEPOSIT"}
+    mock_httpx_client.get.return_value = mock_get_response
+
+    # Mock POST response to fail (500 Internal Server Error)
+    mock_post_response = MagicMock()
+    mock_post_response.status_code = 500
+    mock_post_response.text = "Internal Server Error"
+    mock_httpx_client.post.return_value = mock_post_response
+
+    request = SwapStatusRequest(
+        tx_hash="test_hash",
+        source_coin=Chain.SOLANA.coin,
+        source_chain_id=Chain.SOLANA.chain_id,
+        destination_coin=Chain.BITCOIN.coin,
+        destination_chain_id=Chain.BITCOIN.chain_id,
+        deposit_address="failure_test_unique_addr",
+        deposit_memo=None,
+        provider=SwapProviderEnum.NEAR_INTENTS,
+        route_id="test-route-id",
+    )
+
+    # Should NOT raise - deposit submission failure is non-fatal
+    result = await client.get_status(request)
+
+    # Verify status check succeeded despite deposit submission failure
+    assert result.status == SwapStatus.PENDING
+    assert result.internal_status == "PENDING_DEPOSIT"
+
+    # Verify deposit submission was attempted
+    mock_httpx_client.post.assert_called_once()
+
+
+@pytest.mark.asyncio
 async def test_get_status_pending_deposit_rate_limits(
     client,
     mock_httpx_client,
