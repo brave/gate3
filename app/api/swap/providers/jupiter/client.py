@@ -36,10 +36,6 @@ class JupiterClient(BaseSwapProvider):
         return SwapProviderEnum.JUPITER
 
     @property
-    def has_post_submit_hook(self) -> bool:
-        return False
-
-    @property
     def requires_token_allowance(self) -> bool:
         return False
 
@@ -203,17 +199,6 @@ class JupiterClient(BaseSwapProvider):
             request,
             self.token_manager,
         )
-
-    async def post_submit_hook(self, request: SwapStatusRequest) -> None:
-        """Post-submit hook for Jupiter.
-
-        Jupiter does not require a post-submit hook, so this is a no-op.
-
-        Args:
-            request: The swap status request
-        """
-        # Jupiter doesn't require post-submit hook
-        pass
 
     async def get_status(self, request: SwapStatusRequest) -> SwapStatusResponse:
         """Get swap status from Jupiter.

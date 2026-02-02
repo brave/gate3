@@ -17,6 +17,7 @@ from app.api.swap.models import (
 from app.api.swap.providers.base import BaseSwapProvider
 from app.config import settings
 
+from .cache import DepositSubmitRateLimiter
 from .models import (
     NearIntentsError,
     NearIntentsQuoteResponse,
@@ -40,11 +41,6 @@ class NearIntentsClient(BaseSwapProvider):
     @property
     def provider_id(self) -> SwapProviderEnum:
         return SwapProviderEnum.NEAR_INTENTS
-
-    @property
-    def has_post_submit_hook(self) -> bool:
-        """NEAR Intents has post-submit hook to accelerate swap processing."""
-        return True
 
     @property
     def requires_token_allowance(self) -> bool:
@@ -161,7 +157,6 @@ class NearIntentsClient(BaseSwapProvider):
                     response=near_response,
                     request=request,
                     firm=not dry,
-                    has_post_submit_hook=self.has_post_submit_hook,
                     requires_token_allowance=self.requires_token_allowance,
                     requires_firm_route=self.requires_firm_route,
                 )
@@ -180,19 +175,11 @@ class NearIntentsClient(BaseSwapProvider):
         """Get firm route with deposit address."""
         return await self._get_route(request, dry=False)
 
-    async def post_submit_hook(self, request: SwapStatusRequest) -> None:
-        """Post-submit hook that submits deposit transaction hash to NEAR Intents API.
+    async def _submit_deposit_to_api(self, request: SwapStatusRequest) -> None:
+        """Submit deposit transaction hash to NEAR Intents API.
 
         This allows the system to preemptively verify the deposit and can
         accelerate swap processing.
-
-        Args:
-            request: The swap status request containing tx_hash and deposit_address
-
-        Raises:
-            ValueError: If deposit transaction submission fails
-            httpx.HTTPError: If API request fails
-
         """
         payload = {
             "txHash": request.tx_hash,
@@ -209,10 +196,31 @@ class NearIntentsClient(BaseSwapProvider):
             )
 
             if 200 <= response.status_code < 300:
-                NearIntentsStatusResponse.model_validate(response.json())
                 return
 
-            self._handle_error_response(response)
+            # Log but don't fail if deposit submission fails
+            logger.warning(
+                "Failed to submit deposit: %s %s",
+                response.status_code,
+                response.text,
+            )
+
+    async def _maybe_submit_deposit(self, request: SwapStatusRequest) -> None:
+        """Submit deposit if not already submitted recently.
+
+        Rate-limits deposit submission to once per X seconds per deposit address.
+        Uses Redis for distributed rate-limiting across multiple workers.
+        """
+        if not request.tx_hash:
+            return
+
+        should_submit = await DepositSubmitRateLimiter.should_submit(
+            request.deposit_address
+        )
+        if not should_submit:
+            return
+
+        await self._submit_deposit_to_api(request)
 
     async def get_status(self, request: SwapStatusRequest) -> SwapStatusResponse:
         params = {"depositAddress": request.deposit_address}
@@ -225,6 +233,9 @@ class NearIntentsClient(BaseSwapProvider):
             if 200 <= response.status_code < 300:
                 data = response.json()
                 near_response = NearIntentsStatusResponse.model_validate(data)
+
+                if near_response.status == "PENDING_DEPOSIT":
+                    await self._maybe_submit_deposit(request)
 
                 return from_near_intents_status(near_response, request)
 

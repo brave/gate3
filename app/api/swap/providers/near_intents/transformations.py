@@ -263,7 +263,6 @@ async def from_near_intents_quote_to_route(
     response: NearIntentsQuoteResponse,
     request: SwapQuoteRequest,
     firm: bool,
-    has_post_submit_hook: bool,
     requires_token_allowance: bool,
     requires_firm_route: bool,
 ) -> SwapRoute:
@@ -327,7 +326,6 @@ async def from_near_intents_quote_to_route(
         deposit_memo=quote_data.deposit_memo,
         expires_at=expires_at,
         transaction_params=transaction_params,
-        has_post_submit_hook=has_post_submit_hook,
         requires_token_allowance=requires_token_allowance,
         requires_firm_route=requires_firm_route,
         slippage_percentage=request.slippage_percentage,

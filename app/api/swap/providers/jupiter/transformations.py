@@ -204,7 +204,6 @@ async def from_jupiter_order_to_route(
         network_fee=network_fee,
         expires_at=jupiter_response.expire_at,
         transaction_params=transaction_params,
-        has_post_submit_hook=False,  # Jupiter doesn't require post-submit hook
         requires_token_allowance=False,  # Jupiter handles this internally
         requires_firm_route=False,  # Jupiter provides transaction in order response
         gasless=jupiter_response.gasless,
