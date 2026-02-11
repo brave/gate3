@@ -28,7 +28,7 @@ async def auth(environment: Environment, request: Request) -> RedirectResponse:
     query_params = dict(request.query_params)
 
     # Extract the returnUrl parameter which contains another URL
-    req_return_url = URL(query_params.get("returnUrl"))
+    req_return_url = URL(query_params.get("returnUrl", ""))
     if not req_return_url.query:
         raise HTTPException(status_code=400, detail="Missing returnUrl parameter")
 
