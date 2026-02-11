@@ -57,7 +57,7 @@ async def token(environment: Environment, request: Request) -> JSONResponse:
     config = settings.oauth.zebpay
     env_config = config.get_env_config(environment.value)
 
-    url = f"{str(env_config.api_url).rstrip('/')}/connect/token"
+    url = f"{str(env_config.oauth_url).rstrip('/')}/connect/token"
     body = await request.body()
     query_params = dict(request.query_params)
 
