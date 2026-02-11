@@ -189,8 +189,9 @@ async def from_jupiter_order_to_route(
     if jupiter_response.transaction:
         transaction_params = _build_transaction_params(jupiter_response, request)
     else:
-        ...
-        # raise SwapError
+        raise ValueError(
+            "Jupiter order response does not contain a transaction",
+        )
 
     return SwapRoute(
         id=route_id,

@@ -299,6 +299,41 @@ async def test_get_order_with_error_in_response(
 
 
 @pytest.mark.asyncio
+async def test_get_firm_route_raises_on_empty_transaction(
+    client,
+    mock_httpx_client,
+    mock_token_manager,
+):
+    mock_token_manager.get = AsyncMock(return_value=SOL_TOKEN_INFO)
+
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = {
+        **MOCK_JUPITER_ORDER_RESPONSE,
+        "transaction": "",
+    }
+    mock_httpx_client.get.return_value = mock_response
+
+    request = SwapQuoteRequest(
+        source_coin=Chain.SOLANA.coin,
+        source_chain_id=Chain.SOLANA.chain_id,
+        source_token_address=None,
+        destination_coin=Chain.SOLANA.coin,
+        destination_chain_id=Chain.SOLANA.chain_id,
+        destination_token_address="EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+        recipient="11111111111111111111111111111111",
+        amount="100000000",
+        slippage_percentage="0.5",
+        swap_type=SwapType.EXACT_INPUT,
+        refund_to="11111111111111111111111111111111",
+        provider=SwapProviderEnum.JUPITER,
+    )
+
+    with pytest.raises(ValueError, match="does not contain a transaction"):
+        await client.get_firm_route(request)
+
+
+@pytest.mark.asyncio
 async def test_jupiter_works_with_none_slippage_percentage(
     client,
     mock_httpx_client,
