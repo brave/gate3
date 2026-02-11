@@ -117,8 +117,8 @@ def test_zebpay_auth_redirect(return_url_base, redirect_uri):
 @respx.mock
 def test_zebpay_token_exchange_success():
     """Test successful token exchange - validates request forwarding and response."""
-    # Mock Zebpay token endpoint (uses api_url)
-    route = respx.post("https://api-sandbox.zebpay.test/api/connect/token").mock(
+    # Mock Zebpay token endpoint (uses oauth_url)
+    route = respx.post("https://oauth.sandbox.zebpay.test/connect/token").mock(
         return_value=httpx.Response(
             200,
             json={
@@ -175,7 +175,7 @@ def test_zebpay_token_exchange_success():
 def test_zebpay_token_exchange_error():
     """Test token exchange with server error."""
     # Mock Zebpay token endpoint with error response
-    respx.post("https://api-sandbox.zebpay.test/api/connect/token").mock(
+    respx.post("https://oauth.sandbox.zebpay.test/connect/token").mock(
         return_value=httpx.Response(403)
     )
 
