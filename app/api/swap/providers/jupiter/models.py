@@ -1,12 +1,5 @@
-from enum import Enum
-
 from pydantic import BaseModel, ConfigDict
 from pydantic.alias_generators import to_camel
-
-
-class JupiterSwapMode(str, Enum):
-    EXACT_IN = "ExactIn"
-    EXACT_OUT = "ExactOut"
 
 
 class JupiterOrderRequest(BaseModel):
@@ -17,7 +10,6 @@ class JupiterOrderRequest(BaseModel):
     amount: str
     taker: str
     receiver: str | None = None
-    swap_mode: JupiterSwapMode
 
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
@@ -37,7 +29,7 @@ class JupiterSwapInfo(BaseModel):
 class JupiterRoutePlan(BaseModel):
     """A single hop in the Jupiter route."""
 
-    percent: int
+    percent: float
     swap_info: JupiterSwapInfo
 
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
@@ -49,7 +41,6 @@ class JupiterOrderResponse(BaseModel):
     in_amount: str
     out_amount: str
     other_amount_threshold: str
-    swap_mode: JupiterSwapMode
     slippage_bps: int
     price_impact: float | None
     route_plan: list[JupiterRoutePlan]

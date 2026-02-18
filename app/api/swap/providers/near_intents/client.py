@@ -56,6 +56,10 @@ class NearIntentsClient(BaseSwapProvider):
     def has_auto_slippage_support(self) -> bool:
         return False
 
+    @property
+    def has_exact_output_support(self) -> bool:
+        return True
+
     def __init__(self, token_manager=None):
         self.base_url = settings.NEAR_INTENTS_BASE_URL
         self.jwt_token = settings.NEAR_INTENTS_JWT

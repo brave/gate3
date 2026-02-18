@@ -10,6 +10,7 @@ from app.api.swap.models import (
     SwapStatusRequest,
     SwapStatusResponse,
     SwapSupportRequest,
+    SwapType,
 )
 from app.api.swap.providers.base import BaseSwapProvider
 from app.api.tokens.manager import TokenManager
@@ -49,6 +50,10 @@ class SquidClient(BaseSwapProvider):
     @property
     def has_auto_slippage_support(self) -> bool:
         return True
+
+    @property
+    def has_exact_output_support(self) -> bool:
+        return False
 
     def __init__(self, token_manager: TokenManager):
         self.base_url = "https://v2.api.squidrouter.com"
@@ -149,7 +154,16 @@ class SquidClient(BaseSwapProvider):
         ):
             raise SwapError(
                 message="Unsupported chain",
-                kind=SwapErrorKind.UNKNOWN,
+                kind=SwapErrorKind.CHAIN_NOT_SUPPORTED,
+            )
+
+        if (
+            request.swap_type == SwapType.EXACT_OUTPUT
+            and not self.has_exact_output_support
+        ):
+            raise SwapError(
+                message="Squid does not support EXACT_OUTPUT swaps",
+                kind=SwapErrorKind.INVALID_REQUEST,
             )
 
         route_request = SquidRouteRequest(

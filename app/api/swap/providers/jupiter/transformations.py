@@ -1,6 +1,6 @@
 from decimal import Decimal
 
-from app.api.common.models import Chain, TokenInfo
+from app.api.common.models import Chain, TokenInfo, TokenType
 from app.api.tokens.manager import TokenManager
 
 from ...models import (
@@ -11,10 +11,11 @@ from ...models import (
     SwapRoute,
     SwapRouteStep,
     SwapStepToken,
+    SwapTool,
     SwapType,
     TransactionParams,
 )
-from .constants import JUPITER_TOOL, SOL_MINT
+from .constants import SOL_MINT, TOOLS
 from .models import JupiterOrderResponse
 from .utils import (
     generate_route_id,
@@ -116,11 +117,22 @@ async def from_jupiter_order_to_route(
             hop_input_token = source_token
         elif swap_info.input_mint == (destination_token.address or SOL_MINT):
             hop_input_token = destination_token
+        elif token := await token_manager.get(
+            coin=Chain.SOLANA.coin,
+            chain_id=Chain.SOLANA.chain_id,
+            address=swap_info.input_mint,
+        ):
+            hop_input_token = token
         else:
-            hop_input_token = await token_manager.get(
+            hop_input_token = TokenInfo(
                 coin=Chain.SOLANA.coin,
                 chain_id=Chain.SOLANA.chain_id,
                 address=swap_info.input_mint,
+                name=swap_info.input_mint,
+                symbol=swap_info.input_mint,
+                decimals=0,  # decimals is not needed for hop tokens
+                token_type=TokenType.UNKNOWN,
+                sources=[],
             )
 
         # Check if output mint matches source or destination token
@@ -128,17 +140,22 @@ async def from_jupiter_order_to_route(
             hop_output_token = source_token
         elif swap_info.output_mint == (destination_token.address or SOL_MINT):
             hop_output_token = destination_token
+        elif token := await token_manager.get(
+            coin=Chain.SOLANA.coin,
+            chain_id=Chain.SOLANA.chain_id,
+            address=swap_info.output_mint,
+        ):
+            hop_output_token = token
         else:
-            hop_output_token = await token_manager.get(
+            hop_output_token = TokenInfo(
                 coin=Chain.SOLANA.coin,
                 chain_id=Chain.SOLANA.chain_id,
                 address=swap_info.output_mint,
-            )
-
-        if not hop_input_token or not hop_output_token:
-            raise ValueError(
-                f"Could not find token info for hop: "
-                f"input={swap_info.input_mint}, output={swap_info.output_mint}",
+                name=swap_info.output_mint,
+                symbol=swap_info.output_mint,
+                decimals=0,  # decimals is not needed for hop tokens
+                token_type=TokenType.UNKNOWN,
+                sources=[],
             )
 
         # Create step
@@ -147,7 +164,15 @@ async def from_jupiter_order_to_route(
             source_amount=swap_info.in_amount,
             destination_token=_token_info_to_step_token(hop_output_token),
             destination_amount=swap_info.out_amount,
-            tool=JUPITER_TOOL,
+            tool=next(
+                (
+                    SwapTool(name=swap_info.label, logo=tool.logo)
+                    for tool in TOOLS
+                    if swap_info.label.lower() in tool.name.lower()
+                ),
+                SwapTool(name=swap_info.label, logo=None),
+            ),
+            percent=hop.percent,
         )
         steps.append(step)
 
@@ -184,14 +209,7 @@ async def from_jupiter_order_to_route(
     # Generate route ID
     route_id = generate_route_id()
 
-    # The transaction field may be an empty string if the order is invalid
-    transaction_params = None
-    if jupiter_response.transaction:
-        transaction_params = _build_transaction_params(jupiter_response, request)
-    else:
-        raise ValueError(
-            "Jupiter order response does not contain a transaction",
-        )
+    transaction_params = _build_transaction_params(jupiter_response, request)
 
     return SwapRoute(
         id=route_id,
