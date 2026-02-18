@@ -47,7 +47,11 @@ class _c(BaseModel):
     near_intents_id: str | None = None
     has_nft_support: bool
 
+    # Network metadata
+    name: str
+
     # Native token info
+    native_asset_name: str
     symbol: str
     decimals: int
 
@@ -72,6 +76,8 @@ class Chain(Enum):
         alchemy_id="eth-mainnet",
         near_intents_id="eth",
         has_nft_support=True,
+        name="Ethereum",
+        native_asset_name="Ether",
         symbol="ETH",
         decimals=18,
     )
@@ -82,6 +88,8 @@ class Chain(Enum):
         alchemy_id="arb-mainnet",
         near_intents_id="arb",
         has_nft_support=True,
+        name="Arbitrum",
+        native_asset_name="Ether",
         symbol="ETH",
         decimals=18,
     )
@@ -92,6 +100,8 @@ class Chain(Enum):
         alchemy_id="avax-mainnet",
         near_intents_id="avax",
         has_nft_support=True,
+        name="Avalanche",
+        native_asset_name="Avalanche",
         symbol="AVAX",
         decimals=18,
     )
@@ -102,6 +112,8 @@ class Chain(Enum):
         alchemy_id="base-mainnet",
         near_intents_id="base",
         has_nft_support=True,
+        name="Base",
+        native_asset_name="Ether",
         symbol="ETH",
         decimals=18,
     )
@@ -112,6 +124,8 @@ class Chain(Enum):
         alchemy_id="bnb-mainnet",
         near_intents_id="bsc",
         has_nft_support=False,
+        name="BNB Smart Chain",
+        native_asset_name="BNB",
         symbol="BNB",
         decimals=18,
     )
@@ -122,6 +136,8 @@ class Chain(Enum):
         alchemy_id="opt-mainnet",
         near_intents_id="op",
         has_nft_support=True,
+        name="Optimism",
+        native_asset_name="Ether",
         symbol="ETH",
         decimals=18,
     )
@@ -132,6 +148,8 @@ class Chain(Enum):
         alchemy_id="polygon-mainnet",
         near_intents_id="pol",
         has_nft_support=True,
+        name="Polygon",
+        native_asset_name="POL",
         symbol="POL",
         decimals=18,
     )
@@ -144,6 +162,8 @@ class Chain(Enum):
         alchemy_id="bitcoin-mainnet",
         near_intents_id="btc",
         has_nft_support=False,
+        name="Bitcoin",
+        native_asset_name="Bitcoin",
         symbol="BTC",
         decimals=8,
     )
@@ -154,6 +174,8 @@ class Chain(Enum):
         alchemy_id="solana-mainnet",
         near_intents_id="sol",
         has_nft_support=True,
+        name="Solana",
+        native_asset_name="Solana",
         symbol="SOL",
         decimals=9,
     )
@@ -164,6 +186,8 @@ class Chain(Enum):
         alchemy_id="filecoin-mainnet",
         near_intents_id=None,
         has_nft_support=False,
+        name="Filecoin",
+        native_asset_name="Filecoin",
         symbol="FIL",
         decimals=18,
     )
@@ -174,6 +198,8 @@ class Chain(Enum):
         alchemy_id="cardano-mainnet",
         near_intents_id="cardano",
         has_nft_support=False,
+        name="Cardano",
+        native_asset_name="Cardano",
         symbol="ADA",
         decimals=6,
     )
@@ -184,6 +210,8 @@ class Chain(Enum):
         alchemy_id="zcash-mainnet",
         near_intents_id="zec",
         has_nft_support=False,
+        name="Zcash",
+        native_asset_name="Zcash",
         symbol="ZEC",
         decimals=8,
     )
@@ -198,6 +226,8 @@ class Chain(Enum):
             "alchemy_id",
             "near_intents_id",
             "has_nft_support",
+            "name",
+            "native_asset_name",
             "symbol",
             "decimals",
         ]:
