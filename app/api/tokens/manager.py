@@ -1,7 +1,8 @@
 import json
+import logging
 from typing import Literal
 
-import requests
+import httpx
 from redis.commands.search.field import TextField
 from redis.commands.search.index_definition import IndexDefinition
 from redis.commands.search.query import Query
@@ -11,6 +12,10 @@ from app.api.tokens.contants import SPL_TOKEN_2022_PROGRAM_ID, SPL_TOKEN_PROGRAM
 from app.api.tokens.models import TokenSearchResponse
 from app.core.cache import Cache
 
+logger = logging.getLogger(__name__)
+
+TokenRegistry = dict[str, dict[str, str]]
+
 
 class TokenManager:
     key_prefix = "token"
@@ -18,6 +23,41 @@ class TokenManager:
 
     # Pre-computed chain lookup for O(1) access
     _chain_lookup = {chain.chain_id: chain for chain in Chain}
+
+    @classmethod
+    def _merge_into_registry(
+        cls, registry: TokenRegistry, key: str, token_data: dict[str, str]
+    ) -> None:
+        """Merge token_data into registry[key] with field-level logic.
+
+        - sources: union of JSON-decoded sets, re-encoded
+        - All other fields: last non-empty writer wins
+        """
+        existing = registry.get(key)
+        if existing is None:
+            registry[key] = dict(token_data)
+        else:
+            # Union sources
+            old_sources = set(json.loads(existing.get("sources", "[]")))
+            new_sources = set(json.loads(token_data.get("sources", "[]")))
+            merged_sources = sorted(old_sources | new_sources)
+            existing["sources"] = json.dumps(merged_sources)
+
+            # Last non-empty writer wins for all other fields
+            for field, value in token_data.items():
+                if field == "sources" or value == "":
+                    continue
+                # Prefer non-SVG logos (PNG from CoinGecko over SVG from Jupiter)
+                old = existing.get(field, "")
+                if field == "logo" and old and not old.endswith(".svg"):
+                    continue
+                existing[field] = value
+
+        # Recompute lowercase fields
+        entry = registry[key]
+        entry["name_lower"] = entry.get("name", "").lower()
+        entry["symbol_lower"] = entry.get("symbol", "").lower()
+        entry["address_lower"] = entry.get("address", "").lower()
 
     @classmethod
     async def create_index(cls) -> None:
@@ -55,19 +95,29 @@ class TokenManager:
             # Clear existing tokens
             await cls._clear_tokens(pipe)
 
-            # Ingest Coingecko data
-            await cls.ingest_from_coingecko(pipe)
+            # Build in-memory registry from all sources
+            registry: TokenRegistry = {}
+            cls._seed_native_tokens(registry)
 
-            # Ingest Jupiter LST tokens
-            await cls.ingest_from_jupiter("lst", pipe)
+            ingestion_sources = [
+                ("coingecko", cls.ingest_from_coingecko(registry)),
+                ("jupiter:lst", cls.ingest_from_jupiter("lst", registry)),
+                ("jupiter:verified", cls.ingest_from_jupiter("verified", registry)),
+                ("near_intents", cls.ingest_from_near_intents(registry)),
+            ]
 
-            # Ingest Jupiter verified tokens
-            await cls.ingest_from_jupiter("verified", pipe)
+            for source_name, coro in ingestion_sources:
+                try:
+                    await coro
+                except Exception:
+                    logger.exception("Failed to ingest tokens from %s", source_name)
 
-            # Ingest NEAR Intents tokens
-            await cls.ingest_from_near_intents(pipe)
+            # Write merged registry to pipeline
+            for key, token_data in registry.items():
+                pipe.hset(key, mapping=token_data)
 
-            # Execute all operations atomically
+            # Create index and execute atomically
+            await cls.create_index()
             await pipe.execute()
 
     @classmethod
@@ -76,7 +126,7 @@ class TokenManager:
             cursor = 0
             while True:
                 cursor, keys = await redis_client.scan(
-                    cursor, match=f"{cls.key_prefix}:*"
+                    cursor, match=f"{cls.key_prefix}:*", count=1_000
                 )
                 for key in keys:
                     pipe.delete(key)
@@ -92,14 +142,34 @@ class TokenManager:
                 await index.dropindex()
 
     @classmethod
-    async def ingest_from_coingecko(cls, pipe) -> None:
-        # Create index if it doesn't exist
-        await cls.create_index()
+    def _seed_native_tokens(cls, registry: TokenRegistry) -> None:
+        """Seed native tokens from Chain enum metadata into the registry."""
+        for chain in Chain:
+            token_info = TokenInfo(
+                coin=chain.coin,
+                chain_id=chain.chain_id,
+                address=None,
+                name=chain.native_asset_name,
+                symbol=chain.symbol,
+                decimals=chain.decimals,
+                logo=None,
+                sources=[TokenSource.BRAVE],
+                token_type=TokenType.UNKNOWN,
+            )
 
+            key = cls._build_key(chain.coin, chain.chain_id, None)
+            token_data = cls._prepare_token_data(token_info)
+            token_data["sources"] = json.dumps([TokenSource.BRAVE])
+            cls._merge_into_registry(registry, key, token_data)
+
+    @classmethod
+    async def ingest_from_coingecko(cls, registry: TokenRegistry) -> None:
         url = "https://raw.githubusercontent.com/brave/token-lists/refs/heads/main/data/v1/coingecko.json"
 
-        response = requests.get(url, timeout=10)
-        json_data = response.json()
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url)
+            response.raise_for_status()
+            json_data = response.json()
 
         for raw_chain_id, tokens in json_data.items():
             for address, raw_token_info in tokens.items():
@@ -108,7 +178,7 @@ class TokenManager:
                     continue
 
                 decimals = raw_token_info.get("decimals")
-                if not decimals:
+                if decimals is None:
                     continue
 
                 token_info = TokenInfo(
@@ -143,26 +213,22 @@ class TokenManager:
 
                 key = cls._build_key(chain.coin, chain.chain_id, address)
                 token_data = cls._prepare_token_data(token_info)
-
-                # Get existing data for comparison
-                async with Cache.get_client() as redis_client:
-                    existing = await redis_client.hgetall(key)
-
-                sources = set(json.loads(existing["sources"])) if existing else set()
-                sources.add(TokenSource.COINGECKO)
-                token_data["sources"] = json.dumps(sorted(list(sources)))
-
-                if existing != token_data:
-                    pipe.hset(key, mapping=token_data)
+                token_data["sources"] = json.dumps([TokenSource.COINGECKO])
+                cls._merge_into_registry(registry, key, token_data)
 
     @classmethod
-    async def ingest_from_jupiter(cls, tag: Literal["lst", "verified"], pipe) -> None:
-        # Create index if it doesn't exist
-        await cls.create_index()
-
+    async def ingest_from_jupiter(
+        cls, tag: Literal["lst", "verified"], registry: TokenRegistry
+    ) -> None:
         url = f"https://lite-api.jup.ag/tokens/v2/tag?query={tag}"
-        response = requests.get(url, timeout=10)
-        json_data = response.json()
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url)
+            response.raise_for_status()
+            json_data = response.json()
+
+        source = (
+            TokenSource.JUPITER_LST if tag == "lst" else TokenSource.JUPITER_VERIFIED
+        )
 
         for token in json_data:
             token_info = TokenInfo(
@@ -187,26 +253,11 @@ class TokenManager:
 
             key = cls._build_key(Chain.SOLANA.coin, Chain.SOLANA.chain_id, token["id"])
             token_data = cls._prepare_token_data(token_info)
-
-            async with Cache.get_client() as redis_client:
-                existing = await redis_client.hgetall(key)
-
-            sources = set(json.loads(existing["sources"])) if existing else set()
-            sources.add(
-                TokenSource.JUPITER_LST
-                if tag == "lst"
-                else TokenSource.JUPITER_VERIFIED
-            )
-            token_data["sources"] = json.dumps(sorted(list(sources)))
-
-            if existing != token_data:
-                pipe.hset(key, mapping=token_data)
+            token_data["sources"] = json.dumps([source])
+            cls._merge_into_registry(registry, key, token_data)
 
     @classmethod
-    async def ingest_from_near_intents(cls, pipe) -> None:
-        # Create index if it doesn't exist
-        await cls.create_index()
-
+    async def ingest_from_near_intents(cls, registry: TokenRegistry) -> None:
         # Import here to avoid circular imports
         from app.api.swap.providers.near_intents.client import NearIntentsClient
 
@@ -223,21 +274,9 @@ class TokenManager:
                 token_info.chain_id,
                 token_info.address,
             )
-            async with Cache.get_client() as redis_client:
-                existing = await redis_client.hgetall(key)
-
-            sources = set(json.loads(existing["sources"])) if existing else set()
-            sources.add(TokenSource.NEAR_INTENTS)
-            token_info.sources = sorted(list(sources))
             token_data = cls._prepare_token_data(token_info)
-
-            if existing:
-                existing["near_intents_asset_id"] = token_data["near_intents_asset_id"]
-                existing["sources"] = token_data["sources"]
-
-                pipe.hset(key, mapping=existing)
-            else:
-                pipe.hset(key, mapping=token_data)
+            token_data["sources"] = json.dumps([TokenSource.NEAR_INTENTS])
+            cls._merge_into_registry(registry, key, token_data)
 
     @classmethod
     async def get(
@@ -254,7 +293,7 @@ class TokenManager:
 
             return cls._parse_token_from_redis_data(key, token_data)
         except Exception as e:
-            print(f"Error retrieving token: {e}")
+            logger.error("Error retrieving token: %s", e)
             return None
 
     @classmethod
@@ -316,9 +355,9 @@ class TokenManager:
         try:
             async with Cache.get_client() as redis_client:
                 await redis_client.hset(key, mapping=token_data)
-                print(f"Added/updated token at {key}")
+                logger.info("Added/updated token at %s", key)
         except Exception as e:
-            print(f"Error adding token: {e}")
+            logger.error("Error adding token: %s", e)
 
     @staticmethod
     def _as_response(
@@ -398,7 +437,7 @@ class TokenManager:
                     token_info = cls._parse_token_from_redis_data(key, token_data)
                     results.append(token_info)
                 except Exception as e:
-                    print(f"Error processing token key {key}: {e}")
+                    logger.error("Error processing token key %s: %s", key, e)
                     continue
 
             return results

@@ -1,12 +1,15 @@
 import json
+import logging
 from dataclasses import dataclass
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import fakeredis
+import httpx
 import pytest
+import respx
 
-from app.api.common.models import Chain, TokenInfo, TokenSource, TokenType
-from app.api.tokens.contants import SPL_TOKEN_2022_PROGRAM_ID
+from app.api.common.models import Chain, Coin, TokenInfo, TokenSource, TokenType
+from app.api.tokens.contants import SPL_TOKEN_2022_PROGRAM_ID, SPL_TOKEN_PROGRAM_ID
 from app.api.tokens.manager import TokenManager
 
 
@@ -291,10 +294,10 @@ async def test_search_no_results(cache):
 
 
 @pytest.mark.asyncio
+@respx.mock
 async def test_refresh_with_coingecko_data(cache):
     # Mock the Coingecko API response
-    mock_response = Mock()
-    mock_response.json.return_value = {
+    coingecko_data = {
         "0x1": {
             "0x1234567890123456789012345678901234567890": {
                 "name": "Test Token",
@@ -304,14 +307,14 @@ async def test_refresh_with_coingecko_data(cache):
             }
         }
     }
+    respx.get(
+        "https://raw.githubusercontent.com/brave/token-lists/refs/heads/main/data/v1/coingecko.json"
+    ).mock(return_value=httpx.Response(200, json=coingecko_data))
 
     with (
         patch.object(TokenManager, "create_index"),
-        patch("app.api.tokens.manager.requests.get", return_value=mock_response),
         patch.object(TokenManager, "ingest_from_jupiter"),
-        patch.object(
-            TokenManager, "ingest_from_near_intents"
-        ),  # Mock to avoid external API calls
+        patch.object(TokenManager, "ingest_from_near_intents"),
     ):
         # Refresh tokens (which includes Coingecko ingestion)
         await TokenManager.refresh()
@@ -332,10 +335,10 @@ async def test_refresh_with_coingecko_data(cache):
 
 
 @pytest.mark.asyncio
+@respx.mock
 async def test_refresh_with_jupiter_data(cache):
-    # Mock the Jupiter API response
-    mock_response = Mock()
-    mock_response.json.return_value = [
+    # Mock the Jupiter API responses
+    jupiter_verified_data = [
         {
             "id": "So11111111111111111111111111111111111111112",
             "name": "Wrapped SOL",
@@ -345,14 +348,17 @@ async def test_refresh_with_jupiter_data(cache):
             "tokenProgram": SPL_TOKEN_2022_PROGRAM_ID,
         }
     ]
+    respx.get("https://lite-api.jup.ag/tokens/v2/tag?query=lst").mock(
+        return_value=httpx.Response(200, json=[])
+    )
+    respx.get("https://lite-api.jup.ag/tokens/v2/tag?query=verified").mock(
+        return_value=httpx.Response(200, json=jupiter_verified_data)
+    )
 
     with (
         patch.object(TokenManager, "create_index"),
-        patch("app.api.tokens.manager.requests.get", return_value=mock_response),
         patch.object(TokenManager, "ingest_from_coingecko"),
-        patch.object(
-            TokenManager, "ingest_from_near_intents"
-        ),  # Mock to avoid external API calls
+        patch.object(TokenManager, "ingest_from_near_intents"),
     ):
         # Refresh tokens (which includes Jupiter ingestion)
         await TokenManager.refresh()
@@ -486,3 +492,253 @@ async def test_search_query_construction(cache, query, expected_query):
         # Verify dialect and paging were called
         mock_query_instance.dialect.assert_called_once_with(2)
         mock_query_instance.paging.assert_called_once_with(offset, limit)
+
+
+@pytest.mark.asyncio
+async def test_refresh_seeds_all_chains(cache):
+    """Verify that every Chain enum member gets a native token seeded."""
+    with (
+        patch.object(TokenManager, "create_index"),
+        patch.object(TokenManager, "ingest_from_coingecko"),
+        patch.object(TokenManager, "ingest_from_jupiter"),
+        patch.object(TokenManager, "ingest_from_near_intents"),
+    ):
+        await TokenManager.refresh()
+
+    for chain in Chain:
+        result = await TokenManager.get(chain.coin, chain.chain_id, None)
+        assert result is not None, f"Native token missing for {chain}"
+        assert result.coin == chain.coin
+        assert result.chain_id == chain.chain_id
+        assert result.address is None
+        assert result.name == chain.native_asset_name
+        assert result.symbol == chain.symbol
+        assert result.decimals == chain.decimals
+        assert TokenSource.BRAVE in result.sources
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_refresh_merges_overlapping_sources(cache):
+    """CoinGecko + NEAR Intents provide same token → fields merged correctly."""
+    respx.get(
+        "https://raw.githubusercontent.com/brave/token-lists/refs/heads/main/data/v1/coingecko.json"
+    ).mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "0x1": {
+                    "0xABC": {
+                        "name": "TestToken",
+                        "symbol": "TT",
+                        "decimals": 18,
+                        "logo": "https://example.com/logo.png",
+                    }
+                }
+            },
+        )
+    )
+    respx.get("https://lite-api.jup.ag/tokens/v2/tag?query=lst").mock(
+        return_value=httpx.Response(200, json=[])
+    )
+    respx.get("https://lite-api.jup.ag/tokens/v2/tag?query=verified").mock(
+        return_value=httpx.Response(200, json=[])
+    )
+
+    near_token = TokenInfo(
+        coin=Coin.ETH,
+        chain_id="0x1",
+        address="0xABC",
+        name="TestToken",
+        symbol="TT",
+        decimals=18,
+        logo=None,
+        sources=[TokenSource.NEAR_INTENTS],
+        token_type=TokenType.ERC20,
+        near_intents_asset_id="near:asset:1",
+    )
+
+    with (
+        patch.object(TokenManager, "create_index"),
+        patch(
+            "app.api.swap.providers.near_intents.client.NearIntentsClient"
+        ) as MockNearClient,
+    ):
+        MockNearClient.return_value.get_supported_tokens = AsyncMock(
+            return_value=[near_token]
+        )
+        await TokenManager.refresh()
+
+    result = await TokenManager.get(Coin.ETH, "0x1", "0xABC")
+    assert result is not None
+    # Sources accumulated from both providers
+    assert TokenSource.COINGECKO in result.sources
+    assert TokenSource.NEAR_INTENTS in result.sources
+    # CoinGecko logo preserved (NEAR Intents had None)
+    assert result.logo == "https://example.com/logo.png"
+    # NEAR Intents asset_id preserved (CoinGecko didn't have one)
+    assert result.near_intents_asset_id == "near:asset:1"
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_refresh_continues_when_coingecko_fails(cache):
+    """CoinGecko returns HTTP 500, Jupiter succeeds → native + Jupiter tokens still exist."""
+    respx.get(
+        "https://raw.githubusercontent.com/brave/token-lists/refs/heads/main/data/v1/coingecko.json"
+    ).mock(return_value=httpx.Response(500))
+
+    jupiter_data = [
+        {
+            "id": "So11111111111111111111111111111111111111112",
+            "name": "Wrapped SOL",
+            "symbol": "SOL",
+            "decimals": 9,
+            "icon": "https://example.com/sol.png",
+            "tokenProgram": SPL_TOKEN_2022_PROGRAM_ID,
+        }
+    ]
+    respx.get("https://lite-api.jup.ag/tokens/v2/tag?query=lst").mock(
+        return_value=httpx.Response(200, json=[])
+    )
+    respx.get("https://lite-api.jup.ag/tokens/v2/tag?query=verified").mock(
+        return_value=httpx.Response(200, json=jupiter_data)
+    )
+
+    with (
+        patch.object(TokenManager, "create_index"),
+        patch.object(TokenManager, "ingest_from_near_intents"),
+    ):
+        await TokenManager.refresh()
+
+    # Native tokens still present
+    for chain in Chain:
+        result = await TokenManager.get(chain.coin, chain.chain_id, None)
+        assert result is not None, f"Native token missing for {chain}"
+
+    # Jupiter token still present
+    result = await TokenManager.get(
+        Chain.SOLANA.coin,
+        Chain.SOLANA.chain_id,
+        "So11111111111111111111111111111111111111112",
+    )
+    assert result is not None
+    assert result.name == "Wrapped SOL"
+
+
+@pytest.mark.asyncio
+async def test_refresh_logs_error_on_source_failure(cache, caplog):
+    """Source fails → error logged with source name."""
+    with (
+        patch.object(TokenManager, "create_index"),
+        patch.object(
+            TokenManager, "ingest_from_coingecko", side_effect=RuntimeError("timeout")
+        ),
+        patch.object(TokenManager, "ingest_from_jupiter"),
+        patch.object(TokenManager, "ingest_from_near_intents"),
+        caplog.at_level(logging.ERROR, logger="app.api.tokens.manager"),
+    ):
+        await TokenManager.refresh()
+
+    assert "Failed to ingest tokens from coingecko" in caplog.text
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_refresh_prefers_png_logo_over_svg(cache):
+    """CoinGecko provides PNG logo, Jupiter provides SVG → PNG is kept."""
+    sol_address = "So11111111111111111111111111111111111111112"
+    png_logo = "https://assets.coingecko.com/coins/images/sol.png"
+    svg_logo = "https://raw.githubusercontent.com/jup-ag/sol.svg"
+
+    respx.get(
+        "https://raw.githubusercontent.com/brave/token-lists/refs/heads/main/data/v1/coingecko.json"
+    ).mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                Chain.SOLANA.chain_id: {
+                    sol_address: {
+                        "name": "Wrapped SOL",
+                        "symbol": "SOL",
+                        "decimals": 9,
+                        "logo": png_logo,
+                    }
+                }
+            },
+        )
+    )
+    respx.get("https://lite-api.jup.ag/tokens/v2/tag?query=lst").mock(
+        return_value=httpx.Response(200, json=[])
+    )
+    respx.get("https://lite-api.jup.ag/tokens/v2/tag?query=verified").mock(
+        return_value=httpx.Response(
+            200,
+            json=[
+                {
+                    "id": sol_address,
+                    "name": "Wrapped SOL",
+                    "symbol": "SOL",
+                    "decimals": 9,
+                    "icon": svg_logo,
+                    "tokenProgram": SPL_TOKEN_PROGRAM_ID,
+                }
+            ],
+        )
+    )
+
+    with (
+        patch.object(TokenManager, "create_index"),
+        patch.object(TokenManager, "ingest_from_near_intents"),
+    ):
+        await TokenManager.refresh()
+
+    result = await TokenManager.get(
+        Chain.SOLANA.coin, Chain.SOLANA.chain_id, sol_address
+    )
+    assert result is not None
+    assert result.logo == png_logo, (
+        "PNG logo from CoinGecko should not be replaced by SVG from Jupiter"
+    )
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_refresh_allows_svg_when_no_prior_logo(cache):
+    """Jupiter provides SVG logo, no prior logo exists → SVG is used."""
+    sol_address = "JupiterOnlyToken111111111111111111111111111"
+    svg_logo = "https://raw.githubusercontent.com/jup-ag/token.svg"
+
+    respx.get(
+        "https://raw.githubusercontent.com/brave/token-lists/refs/heads/main/data/v1/coingecko.json"
+    ).mock(return_value=httpx.Response(200, json={}))
+    respx.get("https://lite-api.jup.ag/tokens/v2/tag?query=lst").mock(
+        return_value=httpx.Response(200, json=[])
+    )
+    respx.get("https://lite-api.jup.ag/tokens/v2/tag?query=verified").mock(
+        return_value=httpx.Response(
+            200,
+            json=[
+                {
+                    "id": sol_address,
+                    "name": "Jupiter Only",
+                    "symbol": "JONLY",
+                    "decimals": 6,
+                    "icon": svg_logo,
+                    "tokenProgram": SPL_TOKEN_PROGRAM_ID,
+                }
+            ],
+        )
+    )
+
+    with (
+        patch.object(TokenManager, "create_index"),
+        patch.object(TokenManager, "ingest_from_near_intents"),
+    ):
+        await TokenManager.refresh()
+
+    result = await TokenManager.get(
+        Chain.SOLANA.coin, Chain.SOLANA.chain_id, sol_address
+    )
+    assert result is not None
+    assert result.logo == svg_logo, "SVG logo should be used when no prior logo exists"
