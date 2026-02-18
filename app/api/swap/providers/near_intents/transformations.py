@@ -296,6 +296,7 @@ async def from_near_intents_quote_to_route(
         destination_token=_token_info_to_step_token(destination_token),
         destination_amount=quote_data.amount_out,
         tool=NEAR_INTENTS_TOOL,
+        percent=100,
     )
 
     # Generate route ID

@@ -26,6 +26,9 @@ class SwapBaseModel(BaseModel):
 # ============================================================================
 class SwapErrorKind(str, Enum):
     INSUFFICIENT_LIQUIDITY = "INSUFFICIENT_LIQUIDITY"
+    CHAIN_NOT_SUPPORTED = "CHAIN_NOT_SUPPORTED"
+    TOKEN_NOT_SUPPORTED = "TOKEN_NOT_SUPPORTED"
+    INVALID_REQUEST = "INVALID_REQUEST"
     UNKNOWN = "UNKNOWN"
 
 
@@ -409,6 +412,9 @@ class SwapRouteStep(SwapBaseModel):
     destination_token: SwapStepToken = Field(description="Destination token info")
     destination_amount: str = Field(description="Amount in smallest unit")
 
+    percent: float | None = Field(
+        default=None, description="Percentage of the swap step"
+    )
     tool: SwapTool = Field(description="DEX/protocol used for this step")
 
 

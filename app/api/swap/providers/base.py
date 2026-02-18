@@ -59,6 +59,15 @@ class BaseSwapProvider(ABC):
             True if auto slippage computation is supported, False otherwise
         """
 
+    @property
+    @abstractmethod
+    def has_exact_output_support(self) -> bool:
+        """Whether this provider supports exact output amount.
+
+        Returns:
+            True if exact output amount is supported, False otherwise
+        """
+
     @abstractmethod
     async def get_supported_tokens(self) -> list[TokenInfo]:
         """Get list of tokens supported by this provider.

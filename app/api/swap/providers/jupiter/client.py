@@ -22,7 +22,6 @@ from .models import (
     JupiterError,
     JupiterOrderRequest,
     JupiterOrderResponse,
-    JupiterSwapMode,
 )
 from .transformations import from_jupiter_order_to_route
 from .utils import categorize_error
@@ -47,6 +46,10 @@ class JupiterClient(BaseSwapProvider):
     @property
     def has_auto_slippage_support(self) -> bool:
         return True
+
+    @property
+    def has_exact_output_support(self) -> bool:
+        return False
 
     def __init__(self, token_manager: TokenManager):
         self.base_url = "https://api.jup.ag"
@@ -117,16 +120,20 @@ class JupiterClient(BaseSwapProvider):
         Raises:
             SwapError: If the API request fails
         """
+        if (
+            request.swap_type == SwapType.EXACT_OUTPUT
+            and not self.has_exact_output_support
+        ):
+            raise SwapError(
+                message="Jupiter does not support EXACT_OUTPUT swaps",
+                kind=SwapErrorKind.INVALID_REQUEST,
+            )
+
         order_request = JupiterOrderRequest(
             input_mint=request.source_token_address or SOL_MINT,
             output_mint=request.destination_token_address or SOL_MINT,
             amount=request.amount,
             taker=request.refund_to,  # Jupiter uses wallet address as the taker
-            swap_mode=(
-                JupiterSwapMode.EXACT_IN
-                if request.swap_type == SwapType.EXACT_INPUT
-                else JupiterSwapMode.EXACT_OUT
-            ),
             receiver=(
                 request.recipient
                 if not is_address_equal(request.recipient, request.refund_to)
@@ -169,7 +176,8 @@ class JupiterClient(BaseSwapProvider):
         """Get indicative routes from Jupiter.
 
         For Jupiter, we use the order endpoint which returns both quote and transaction.
-        We can use this for indicative quotes as well.
+        We can use this for indicative quotes as well. The transaction may be empty
+        (e.g. insufficient funds) which is acceptable for indicative quotes.
 
         Args:
             request: The swap quote request
@@ -177,7 +185,12 @@ class JupiterClient(BaseSwapProvider):
         Returns:
             List of SwapRoute (Jupiter typically returns one route)
         """
-        route = await self.get_firm_route(request)
+        jupiter_response = await self._get_order(request)
+        route = await from_jupiter_order_to_route(
+            jupiter_response,
+            request,
+            self.token_manager,
+        )
         return [route]
 
     async def get_firm_route(self, request: SwapQuoteRequest) -> SwapRoute:
@@ -191,8 +204,19 @@ class JupiterClient(BaseSwapProvider):
 
         Returns:
             SwapRoute with transaction parameters
+
+        Raises:
+            SwapError: If the response does not contain a transaction
         """
         jupiter_response = await self._get_order(request)
+
+        if not jupiter_response.transaction:
+            error_message = (
+                jupiter_response.error_message
+                or "Jupiter order response does not contain a transaction"
+            )
+            kind = categorize_error(error_message)
+            raise SwapError(message=error_message, kind=kind)
 
         return await from_jupiter_order_to_route(
             jupiter_response,

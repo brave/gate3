@@ -69,6 +69,7 @@ def _convert_actions_to_steps(actions: list[SquidAction]) -> list[SwapRouteStep]
             destination_token=_squid_token_to_step_token(action.to_token),
             destination_amount=action.to_amount,
             tool=tool,
+            percent=100,
         )
         steps.append(step)
 

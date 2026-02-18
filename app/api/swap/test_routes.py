@@ -220,6 +220,7 @@ def test_indicative_quote_response(mock_get_all_indicative_routes):
                             "logo": None,
                         },
                         "destinationAmount": "3500",
+                        "percent": None,
                         "tool": {"name": "NEAR Intents", "logo": None},
                     }
                 ],

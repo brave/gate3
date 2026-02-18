@@ -329,7 +329,7 @@ async def test_get_firm_route_raises_on_empty_transaction(
         provider=SwapProviderEnum.JUPITER,
     )
 
-    with pytest.raises(ValueError, match="does not contain a transaction"):
+    with pytest.raises(SwapError, match="does not contain a transaction"):
         await client.get_firm_route(request)
 
 
