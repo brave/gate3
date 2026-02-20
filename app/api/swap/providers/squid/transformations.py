@@ -256,7 +256,7 @@ async def from_squid_route_to_route(
     # Convert aggregate price impact from string to float
     try:
         price_impact = float(estimate.aggregate_price_impact)
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         price_impact = None
 
     # Use provider's quote_id as id, or generate one if not available

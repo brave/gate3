@@ -23,7 +23,7 @@ def get_squid_chain_id_from_chain(chain: Chain) -> str | None:
         try:
             decimal_id = int(chain.chain_id, 16)
             return str(decimal_id)
-        except (ValueError, TypeError):
+        except ValueError, TypeError:
             return None
     elif chain == Chain.BITCOIN:
         return "bitcoin"
@@ -96,16 +96,23 @@ def categorize_error(error_message: str | None) -> SwapErrorKind:
 
     error_lower = error_message.lower()
 
+    # Amount too low errors
+    if any(
+        phrase in error_lower
+        for phrase in [
+            "amount too small",
+            "amount too low",
+        ]
+    ):
+        return SwapErrorKind.AMOUNT_TOO_LOW
+
     # Insufficient liquidity errors
     if any(
         phrase in error_lower
         for phrase in [
             "insufficient liquidity",
             "not enough liquidity",
-            "liquidity",
             "no route found",
-            "amount too small",
-            "amount too low",
         ]
     ):
         return SwapErrorKind.INSUFFICIENT_LIQUIDITY

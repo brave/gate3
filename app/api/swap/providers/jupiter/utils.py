@@ -17,15 +17,22 @@ def categorize_error(error_message: str | None) -> SwapErrorKind:
 
     error_lower = error_message.lower()
 
+    # Amount too low errors
+    if any(
+        phrase in error_lower
+        for phrase in [
+            "amount too small",
+            "amount too low",
+        ]
+    ):
+        return SwapErrorKind.AMOUNT_TOO_LOW
+
     # Insufficient liquidity errors
     if any(
         phrase in error_lower
         for phrase in [
             "insufficient liquidity",
             "not enough liquidity",
-            "liquidity",
-            "amount too small",
-            "amount too low",
         ]
     ):
         return SwapErrorKind.INSUFFICIENT_LIQUIDITY

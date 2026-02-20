@@ -9,6 +9,8 @@ from ...models import (
     CardanoTransactionParams,
     EvmTransactionParams,
     SolanaTransactionParams,
+    SwapError,
+    SwapErrorKind,
     SwapProviderEnum,
     SwapQuoteRequest,
     SwapRoute,
@@ -75,6 +77,21 @@ def to_near_intents_request(
 
     request.set_source_token(supported_tokens)
     request.set_destination_token(supported_tokens)
+
+    unsupported = []
+    if not request.source_token:
+        unsupported.append(
+            f"{request.source_token_address or 'native'} on {request.source_chain_id}"
+        )
+    if not request.destination_token:
+        unsupported.append(
+            f"{request.destination_token_address or 'native'} on {request.destination_chain_id}"
+        )
+    if unsupported:
+        raise SwapError(
+            message=f"Unsupported token(s): {', '.join(unsupported)}",
+            kind=SwapErrorKind.UNSUPPORTED_TOKENS,
+        )
 
     # Convert percentage string to basis points (bps) for Near Intents
     # e.g., "0.5" -> 50 bps, "1.0" -> 100 bps
