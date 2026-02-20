@@ -26,8 +26,9 @@ class SwapBaseModel(BaseModel):
 # ============================================================================
 class SwapErrorKind(str, Enum):
     INSUFFICIENT_LIQUIDITY = "INSUFFICIENT_LIQUIDITY"
+    AMOUNT_TOO_LOW = "AMOUNT_TOO_LOW"
     CHAIN_NOT_SUPPORTED = "CHAIN_NOT_SUPPORTED"
-    TOKEN_NOT_SUPPORTED = "TOKEN_NOT_SUPPORTED"
+    UNSUPPORTED_TOKENS = "UNSUPPORTED_TOKENS"
     INVALID_REQUEST = "INVALID_REQUEST"
     UNKNOWN = "UNKNOWN"
 

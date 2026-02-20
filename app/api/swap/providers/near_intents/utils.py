@@ -50,7 +50,7 @@ def encode_erc20_transfer(to_address: str, amount: str) -> str:
         amount_int = int(amount)
         amount_hex = hex(amount_int)[2:]  # Remove 0x prefix
         amount_padded = amount_hex.zfill(64)
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         # If amount conversion fails, return empty data
         return "0x"
 
@@ -83,7 +83,7 @@ def calculate_price_impact(quote_data: NearIntentsQuoteData) -> float | None:
             # Price impact: (amount_out_usd / amount_in_usd - 1) * 100
             # Negative values indicate loss due to fees/slippage
             return ((amount_out / amount_in) - 1) * 100
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         # If conversion fails, return None
         pass
 
@@ -102,21 +102,29 @@ def categorize_error(error_message: str) -> SwapErrorKind:
     """
     error_lower = error_message.lower()
 
-    # Insufficient liquidity errors
+    # Amount too low errors
     # Examples:
     # - "Amount is too low for bridge, try at least 1264000"
-    # - "Insufficient liquidity"
-    # - "Not enough liquidity"
     # - "Amount too small"
     if any(
         phrase in error_lower
         for phrase in [
             "too low",
             "too small",
+            "try at least",
+        ]
+    ):
+        return SwapErrorKind.AMOUNT_TOO_LOW
+
+    # Insufficient liquidity errors
+    # Examples:
+    # - "Insufficient liquidity"
+    # - "Not enough liquidity"
+    if any(
+        phrase in error_lower
+        for phrase in [
             "insufficient liquidity",
             "not enough liquidity",
-            "liquidity",
-            "try at least",
         ]
     ):
         return SwapErrorKind.INSUFFICIENT_LIQUIDITY
