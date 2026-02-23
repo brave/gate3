@@ -16,7 +16,11 @@ from app.api.swap.models import (
     SwapTool,
     SwapType,
 )
-from app.api.swap.utils import get_all_indicative_routes, sort_routes
+from app.api.swap.utils import (
+    get_all_indicative_routes,
+    get_provider_client_for_request,
+    sort_routes,
+)
 
 
 def create_mock_route(
@@ -393,8 +397,8 @@ async def test_get_all_indicative_routes_raises_first_exception_when_no_routes()
 
 
 @pytest.mark.asyncio
-async def test_get_all_indicative_routes_raises_value_error_when_no_clients():
-    """When no clients support the swap, raise ValueError."""
+async def test_get_all_indicative_routes_raises_swap_error_when_no_clients():
+    """When no clients support the swap, raise SwapError with UNSUPPORTED_TOKENS."""
     with patch(
         "app.api.swap.utils.get_supported_provider_clients",
         new_callable=AsyncMock,
@@ -402,15 +406,16 @@ async def test_get_all_indicative_routes_raises_value_error_when_no_clients():
     ):
         request = create_mock_request()
 
-        with pytest.raises(ValueError) as exc_info:
+        with pytest.raises(SwapError) as exc_info:
             await get_all_indicative_routes(request, token_manager=None)
 
-        assert "No provider supports this swap" in str(exc_info.value)
+        assert exc_info.value.kind == SwapErrorKind.UNSUPPORTED_TOKENS
+        assert "No provider supports this swap" in exc_info.value.message
 
 
 @pytest.mark.asyncio
-async def test_get_all_indicative_routes_raises_value_error_when_empty_routes_no_exceptions():
-    """When clients return empty routes with no exceptions, raise ValueError."""
+async def test_get_all_indicative_routes_raises_swap_error_when_empty_routes_no_exceptions():
+    """When clients return empty routes with no exceptions, raise SwapError with UNSUPPORTED_TOKENS."""
     mock_client = AsyncMock()
     mock_client.provider_id = SwapProviderEnum.NEAR_INTENTS
     mock_client.get_indicative_routes = AsyncMock(return_value=[])  # Empty routes
@@ -422,7 +427,34 @@ async def test_get_all_indicative_routes_raises_value_error_when_empty_routes_no
     ):
         request = create_mock_request()
 
-        with pytest.raises(ValueError) as exc_info:
+        with pytest.raises(SwapError) as exc_info:
             await get_all_indicative_routes(request, token_manager=None)
 
-        assert "No provider supports this swap" in str(exc_info.value)
+        assert exc_info.value.kind == SwapErrorKind.UNSUPPORTED_TOKENS
+        assert "No provider supports this swap" in exc_info.value.message
+
+
+# =============================================================================
+# Tests for get_provider_client_for_request
+# =============================================================================
+
+
+@pytest.mark.asyncio
+async def test_get_provider_client_for_request_unsupported_swap_raises_swap_error():
+    """When the provider doesn't support the swap, raise SwapError with UNSUPPORTED_TOKENS."""
+    mock_client = AsyncMock()
+    mock_client.has_support = AsyncMock(return_value=False)
+
+    request = create_mock_request()
+    request.provider = SwapProviderEnum.NEAR_INTENTS
+
+    with patch(
+        "app.api.swap.utils.get_provider_client",
+        new_callable=AsyncMock,
+        return_value=mock_client,
+    ):
+        with pytest.raises(SwapError) as exc_info:
+            await get_provider_client_for_request(request, token_manager=None)
+
+        assert exc_info.value.kind == SwapErrorKind.UNSUPPORTED_TOKENS
+        assert "NEAR_INTENTS" in exc_info.value.message

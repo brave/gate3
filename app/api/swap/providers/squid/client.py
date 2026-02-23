@@ -153,8 +153,8 @@ class SquidClient(BaseSwapProvider):
             )
         ):
             raise SwapError(
-                message="Unsupported chain",
-                kind=SwapErrorKind.CHAIN_NOT_SUPPORTED,
+                message="Unsupported network",
+                kind=SwapErrorKind.UNSUPPORTED_NETWORK,
             )
 
         if (
@@ -260,8 +260,8 @@ class SquidClient(BaseSwapProvider):
 
         if not source_chain or not dest_chain:
             raise SwapError(
-                message="Unsupported chain",
-                kind=SwapErrorKind.UNKNOWN,
+                message="Unsupported network",
+                kind=SwapErrorKind.UNSUPPORTED_NETWORK,
             )
 
         source_chain_id = get_squid_chain_id_from_chain(source_chain)

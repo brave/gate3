@@ -67,13 +67,19 @@ def to_near_intents_request(
     supported_tokens: list[TokenInfo],
 ) -> NearIntentsQuoteRequestBody:
     if not request.source_chain or not request.destination_chain:
-        raise ValueError("Invalid source or destination chain")
+        raise SwapError(
+            message="Invalid source or destination network",
+            kind=SwapErrorKind.UNSUPPORTED_NETWORK,
+        )
 
     if (
         not request.source_chain.near_intents_id
         or not request.destination_chain.near_intents_id
     ):
-        raise ValueError("Invalid source or destination chain")
+        raise SwapError(
+            message="Invalid source or destination network",
+            kind=SwapErrorKind.UNSUPPORTED_NETWORK,
+        )
 
     request.set_source_token(supported_tokens)
     request.set_destination_token(supported_tokens)
@@ -99,8 +105,9 @@ def to_near_intents_request(
     # At this point, slippage_percentage should already be defaulted to a
     # valid value by the route builder.
     if request.slippage_percentage is None:
-        raise ValueError(
-            "slippage_percentage must be set before building a Near Intents quote request",
+        raise SwapError(
+            message="slippage_percentage must be set before building a Near Intents quote request",
+            kind=SwapErrorKind.INVALID_REQUEST,
         )
     slippage_bps = int(float(request.slippage_percentage) * 100)
 
@@ -260,8 +267,11 @@ async def _build_transaction_params(
             ),
         )
 
-    # Unsupported chain
-    raise NotImplementedError(f"Unsupported chain: {source_chain}")
+    # Unsupported network
+    raise SwapError(
+        message=f"Unsupported network: {source_chain}",
+        kind=SwapErrorKind.UNSUPPORTED_NETWORK,
+    )
 
 
 def _token_info_to_step_token(token: TokenInfo) -> SwapStepToken:
@@ -300,11 +310,17 @@ async def from_near_intents_quote_to_route(
     destination_token = request.destination_token
 
     if not source_token or not destination_token:
-        raise ValueError("Source and destination tokens must be set")
+        raise SwapError(
+            message="Source and destination tokens must be set",
+            kind=SwapErrorKind.UNSUPPORTED_TOKENS,
+        )
 
     # Ensure slippage_percentage is set
     if request.slippage_percentage is None:
-        raise ValueError("Slippage percentage is required")
+        raise SwapError(
+            message="Slippage percentage is required",
+            kind=SwapErrorKind.INVALID_REQUEST,
+        )
 
     # Create single step for NEAR Intents (it handles the route internally)
     step = SwapRouteStep(

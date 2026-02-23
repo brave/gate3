@@ -41,12 +41,15 @@ async def get_provider_client(
         BaseSwapProvider instance
 
     Raises:
-        ValueError: If provider is AUTO or unknown
+        SwapError: If provider is AUTO or unknown
         NotImplementedError: If provider is not yet implemented
 
     """
     if provider == SwapProviderEnum.AUTO:
-        raise ValueError("AUTO is not a concrete provider")
+        raise SwapError(
+            message="AUTO is not a concrete provider",
+            kind=SwapErrorKind.INVALID_REQUEST,
+        )
     if provider == SwapProviderEnum.NEAR_INTENTS:
         return NearIntentsClient(token_manager=token_manager)
     if provider == SwapProviderEnum.ZERO_EX:
@@ -57,7 +60,10 @@ async def get_provider_client(
         raise NotImplementedError("LiFi provider not yet implemented")
     if provider == SwapProviderEnum.SQUID:
         return SquidClient(token_manager=token_manager)
-    raise ValueError(f"Unknown provider: {provider}")
+    raise SwapError(
+        message=f"Unknown provider: {provider}",
+        kind=SwapErrorKind.INVALID_REQUEST,
+    )
 
 
 async def get_provider_client_for_request(
@@ -77,13 +83,19 @@ async def get_provider_client_for_request(
         BaseSwapProvider instance
 
     Raises:
-        ValueError: If provider is AUTO, None, or doesn't support the swap
+        SwapError: If provider is AUTO, None, or doesn't support the swap
 
     """
     if request.provider == SwapProviderEnum.AUTO:
-        raise ValueError("AUTO provider is not allowed. Please specify a provider.")
+        raise SwapError(
+            message="AUTO provider is not allowed. Please specify a provider.",
+            kind=SwapErrorKind.INVALID_REQUEST,
+        )
     if request.provider is None:
-        raise ValueError("No provider specified. Please specify a provider.")
+        raise SwapError(
+            message="No provider specified. Please specify a provider.",
+            kind=SwapErrorKind.INVALID_REQUEST,
+        )
 
     client = await get_provider_client(request.provider, token_manager)
 
@@ -97,8 +109,9 @@ async def get_provider_client_for_request(
         recipient=request.recipient,
     )
     if not await client.has_support(support_request):
-        raise ValueError(
-            f"Provider {request.provider.value} does not support this swap",
+        raise SwapError(
+            message=f"Provider {request.provider.value} does not support this swap",
+            kind=SwapErrorKind.UNSUPPORTED_TOKENS,
         )
     return client
 
@@ -177,14 +190,15 @@ async def get_all_indicative_routes(
 
     Raises:
         Exception: The first exception encountered if no routes are returned
-        ValueError: If no provider supports the swap and no exceptions occurred
+        SwapError: If no provider supports the swap and no exceptions occurred
 
     """
     clients = await get_supported_provider_clients(request, token_manager)
 
     if not clients:
-        raise ValueError(
-            "No provider supports this swap. Please check your token pair and chains.",
+        raise SwapError(
+            message="No provider supports this swap. Please check your token pair and chains.",
+            kind=SwapErrorKind.UNSUPPORTED_TOKENS,
         )
 
     # Track exceptions from each client
@@ -243,8 +257,9 @@ async def get_all_indicative_routes(
         raise exceptions[0]
 
     # No routes, no exceptions - shouldn't happen but handle gracefully
-    raise ValueError(
-        "No provider supports this swap. Please check your token pair and chains.",
+    raise SwapError(
+        message="No provider supports this swap. Please check your token pair and chains.",
+        kind=SwapErrorKind.UNSUPPORTED_TOKENS,
     )
 
 

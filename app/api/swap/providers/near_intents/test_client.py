@@ -925,12 +925,12 @@ async def test_get_firm_route_cardano(
 
 
 @pytest.mark.asyncio
-async def test_get_firm_route_unsupported_chain_raises_not_implemented(
+async def test_get_firm_route_unsupported_network_raises_not_implemented(
     client,
     mock_httpx_client,
     mock_supported_tokens_cache,
 ):
-    # Mock supported tokens - FIL (unsupported chain) and BTC
+    # Mock supported tokens - FIL (unsupported network) and BTC
     # Filecoin has near_intents_id=None, so it's not supported by Near Intents
     supported_tokens = [
         FIL_TOKEN_INFO,
@@ -960,10 +960,11 @@ async def test_get_firm_route_unsupported_chain_raises_not_implemented(
 
     # The error should be raised in to_near_intents_request because
     # Filecoin doesn't have near_intents_id support (it's None)
-    with pytest.raises(ValueError) as exc_info:
+    with pytest.raises(SwapError) as exc_info:
         await client.get_firm_route(request)
 
-    assert "Invalid source or destination chain" in str(exc_info.value)
+    assert exc_info.value.kind == SwapErrorKind.UNSUPPORTED_NETWORK
+    assert "Invalid source or destination network" in exc_info.value.message
 
 
 @pytest.mark.asyncio

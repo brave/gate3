@@ -6,6 +6,8 @@ from app.api.tokens.manager import TokenManager
 from ...models import (
     NetworkFee,
     SolanaTransactionParams,
+    SwapError,
+    SwapErrorKind,
     SwapProviderEnum,
     SwapQuoteRequest,
     SwapRoute,
@@ -87,8 +89,9 @@ async def from_jupiter_order_to_route(
         address=input_address,
     )
     if not source_token:
-        raise ValueError(
-            f"Could not find token info for input mint address: {jupiter_response.input_mint}",
+        raise SwapError(
+            message=f"Could not find token info for input mint address: {jupiter_response.input_mint}",
+            kind=SwapErrorKind.UNSUPPORTED_TOKENS,
         )
 
     output_address = (
@@ -102,8 +105,9 @@ async def from_jupiter_order_to_route(
         address=output_address,
     )
     if not destination_token:
-        raise ValueError(
-            f"Could not find token info for output mint address: {jupiter_response.output_mint}",
+        raise SwapError(
+            message=f"Could not find token info for output mint address: {jupiter_response.output_mint}",
+            kind=SwapErrorKind.UNSUPPORTED_TOKENS,
         )
 
     # Build route steps from route plan
