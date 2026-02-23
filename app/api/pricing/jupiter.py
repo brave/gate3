@@ -143,7 +143,7 @@ class JupiterClient:
                     source=PriceSource.JUPITER,
                 )
                 jupiter_responses.append(item)
-            except (KeyError, ValueError):
+            except KeyError, ValueError:
                 continue
 
         # Cache the responses

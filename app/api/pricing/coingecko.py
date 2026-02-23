@@ -146,7 +146,7 @@ class CoinGeckoClient:
                     cache_status=CacheStatus.MISS,
                     source=PriceSource.COINGECKO,
                 )
-            except (KeyError, ValueError):
+            except KeyError, ValueError:
                 continue
 
             coingecko_responses.append(item)

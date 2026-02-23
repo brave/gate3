@@ -967,6 +967,40 @@ async def test_get_firm_route_unsupported_chain_raises_not_implemented(
 
 
 @pytest.mark.asyncio
+async def test_get_route_unsupported_token_raises_token_not_supported(
+    client,
+    mock_httpx_client,
+    mock_supported_tokens_cache,
+):
+    supported_tokens = [
+        USDC_ON_SOLANA_TOKEN_INFO,
+        BTC_TOKEN_INFO,
+    ]
+    mock_supported_tokens_cache.get.return_value = supported_tokens
+
+    request = SwapQuoteRequest(
+        source_coin=Chain.SOLANA.coin,
+        source_chain_id=Chain.SOLANA.chain_id,
+        source_token_address="UNSUPPORTED_TOKEN_ADDRESS",
+        destination_coin=Chain.BITCOIN.coin,
+        destination_chain_id=Chain.BITCOIN.chain_id,
+        destination_token_address=None,
+        recipient="bc1qpjqsdj3qvfl4hzfa49p28ns9xkpl73cyg9exzn",
+        amount="2037265",
+        slippage_percentage="0.5",
+        swap_type=SwapType.EXACT_INPUT,
+        refund_to="8eekKfUAGSJbq3CdA2TmHb8tKuyzd5gtEas3MYAtXzrT",
+        provider=SwapProviderEnum.NEAR_INTENTS,
+    )
+
+    with pytest.raises(SwapError) as exc_info:
+        await client.get_indicative_routes(request)
+
+    assert exc_info.value.kind == SwapErrorKind.UNSUPPORTED_TOKENS
+    assert "Unsupported token(s)" in exc_info.value.message
+
+
+@pytest.mark.asyncio
 async def test_get_route_error_response(
     client,
     mock_httpx_client,
