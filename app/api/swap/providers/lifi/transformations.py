@@ -217,12 +217,6 @@ async def from_lifi_quote_to_route(
     if not deposit_address and response.transaction_request:
         deposit_address = response.transaction_request.to
 
-    # Deposit memo for Bitcoin
-    deposit_memo = None
-    source_chain = request.source_chain
-    if source_chain and source_chain.coin == Coin.BTC and response.transaction_request:
-        deposit_memo = response.transaction_request.data
-
     route_id = response.id or generate_route_id()
 
     return SwapRoute(
@@ -235,7 +229,7 @@ async def from_lifi_quote_to_route(
         price_impact=None,
         network_fee=network_fee,
         deposit_address=deposit_address,
-        deposit_memo=deposit_memo,
+        deposit_memo=None,
         transaction_params=transaction_params,
         requires_token_allowance=True,
         requires_firm_route=False,
