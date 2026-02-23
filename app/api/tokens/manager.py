@@ -104,6 +104,7 @@ class TokenManager:
                 ("jupiter:lst", cls.ingest_from_jupiter("lst", registry)),
                 ("jupiter:verified", cls.ingest_from_jupiter("verified", registry)),
                 ("near_intents", cls.ingest_from_near_intents(registry)),
+                ("lifi", cls.ingest_from_lifi(registry)),
             ]
 
             for source_name, coro in ingestion_sources:
@@ -276,6 +277,24 @@ class TokenManager:
             )
             token_data = cls._prepare_token_data(token_info)
             token_data["sources"] = json.dumps([TokenSource.NEAR_INTENTS])
+            cls._merge_into_registry(registry, key, token_data)
+
+    @classmethod
+    async def ingest_from_lifi(cls, registry: TokenRegistry) -> None:
+        # Import here to avoid circular imports
+        from app.api.swap.providers.lifi.client import LifiClient
+
+        lifi_client = LifiClient(token_manager=cls)
+        tokens = await lifi_client.get_supported_tokens()
+
+        for token_info in tokens:
+            key = cls._build_key(
+                token_info.coin,
+                token_info.chain_id,
+                token_info.address,
+            )
+            token_data = cls._prepare_token_data(token_info)
+            token_data["sources"] = json.dumps([TokenSource.LIFI])
             cls._merge_into_registry(registry, key, token_data)
 
     @classmethod
