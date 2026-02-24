@@ -315,6 +315,7 @@ async def test_refresh_with_coingecko_data(cache):
         patch.object(TokenManager, "create_index"),
         patch.object(TokenManager, "ingest_from_jupiter"),
         patch.object(TokenManager, "ingest_from_near_intents"),
+        patch.object(TokenManager, "ingest_from_lifi"),
     ):
         # Refresh tokens (which includes Coingecko ingestion)
         await TokenManager.refresh()
@@ -359,6 +360,7 @@ async def test_refresh_with_jupiter_data(cache):
         patch.object(TokenManager, "create_index"),
         patch.object(TokenManager, "ingest_from_coingecko"),
         patch.object(TokenManager, "ingest_from_near_intents"),
+        patch.object(TokenManager, "ingest_from_lifi"),
     ):
         # Refresh tokens (which includes Jupiter ingestion)
         await TokenManager.refresh()
@@ -502,6 +504,7 @@ async def test_refresh_seeds_all_chains(cache):
         patch.object(TokenManager, "ingest_from_coingecko"),
         patch.object(TokenManager, "ingest_from_jupiter"),
         patch.object(TokenManager, "ingest_from_near_intents"),
+        patch.object(TokenManager, "ingest_from_lifi"),
     ):
         await TokenManager.refresh()
 
@@ -560,6 +563,7 @@ async def test_refresh_merges_overlapping_sources(cache):
 
     with (
         patch.object(TokenManager, "create_index"),
+        patch.object(TokenManager, "ingest_from_lifi"),
         patch(
             "app.api.swap.providers.near_intents.client.NearIntentsClient"
         ) as MockNearClient,
@@ -608,6 +612,7 @@ async def test_refresh_continues_when_coingecko_fails(cache):
     with (
         patch.object(TokenManager, "create_index"),
         patch.object(TokenManager, "ingest_from_near_intents"),
+        patch.object(TokenManager, "ingest_from_lifi"),
     ):
         await TokenManager.refresh()
 
@@ -636,6 +641,7 @@ async def test_refresh_logs_error_on_source_failure(cache, caplog):
         ),
         patch.object(TokenManager, "ingest_from_jupiter"),
         patch.object(TokenManager, "ingest_from_near_intents"),
+        patch.object(TokenManager, "ingest_from_lifi"),
         caplog.at_level(logging.ERROR, logger="app.api.tokens.manager"),
     ):
         await TokenManager.refresh()
@@ -690,6 +696,7 @@ async def test_refresh_prefers_png_logo_over_svg(cache):
     with (
         patch.object(TokenManager, "create_index"),
         patch.object(TokenManager, "ingest_from_near_intents"),
+        patch.object(TokenManager, "ingest_from_lifi"),
     ):
         await TokenManager.refresh()
 
@@ -734,6 +741,7 @@ async def test_refresh_allows_svg_when_no_prior_logo(cache):
     with (
         patch.object(TokenManager, "create_index"),
         patch.object(TokenManager, "ingest_from_near_intents"),
+        patch.object(TokenManager, "ingest_from_lifi"),
     ):
         await TokenManager.refresh()
 
@@ -742,3 +750,42 @@ async def test_refresh_allows_svg_when_no_prior_logo(cache):
     )
     assert result is not None
     assert result.logo == svg_logo, "SVG logo should be used when no prior logo exists"
+
+
+@pytest.mark.asyncio
+async def test_refresh_with_lifi_data(cache):
+    lifi_token = TokenInfo(
+        coin=Chain.ETHEREUM.coin,
+        chain_id=Chain.ETHEREUM.chain_id,
+        address="0xLifiToken123456789012345678901234567890",
+        name="LiFi Token",
+        symbol="LIFI",
+        decimals=18,
+        logo="https://example.com/lifi.png",
+        sources=[],
+        token_type=TokenType.ERC20,
+    )
+
+    with (
+        patch.object(TokenManager, "create_index"),
+        patch.object(TokenManager, "ingest_from_coingecko"),
+        patch.object(TokenManager, "ingest_from_jupiter"),
+        patch.object(TokenManager, "ingest_from_near_intents"),
+        patch("app.api.swap.providers.lifi.client.LifiClient") as MockLifiClient,
+    ):
+        MockLifiClient.return_value.get_supported_tokens = AsyncMock(
+            return_value=[lifi_token]
+        )
+        await TokenManager.refresh()
+
+    result = await TokenManager.get(
+        Chain.ETHEREUM.coin,
+        Chain.ETHEREUM.chain_id,
+        "0xLifiToken123456789012345678901234567890",
+    )
+
+    assert result is not None
+    assert result.name == "LiFi Token"
+    assert result.symbol == "LIFI"
+    assert result.decimals == 18
+    assert TokenSource.LIFI in result.sources

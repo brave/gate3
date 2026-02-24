@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     NEAR_INTENTS_JWT: str | None = None
     JUPITER_API_KEY: str | None = None
     SQUID_INTEGRATOR_ID: str | None = None
+    LIFI_API_KEY: str | None = None
 
     # OAuth Provider credentials (nested)
     # Automatically uses OAUTH_ prefix from OAuthConfig

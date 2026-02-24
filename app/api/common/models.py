@@ -273,6 +273,7 @@ class TokenSource(str, Enum):
     JUPITER_VERIFIED = "jupiter_verified"
     BRAVE = "brave"
     NEAR_INTENTS = "near_intents"
+    LIFI = "lifi"
     UNKNOWN = "unknown"
 
 
