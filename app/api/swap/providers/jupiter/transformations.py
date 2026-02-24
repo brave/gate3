@@ -49,7 +49,25 @@ def _build_transaction_params(
     Returns:
         TransactionParams if transaction is available, None otherwise
     """
+    if not jupiter_response.taker:
+        raise SwapError(
+            message="Jupiter response missing taker address",
+            kind=SwapErrorKind.INVALID_REQUEST,
+        )
+
+    if not request.refund_to:
+        raise SwapError(
+            message="Swap request missing refund_to address",
+            kind=SwapErrorKind.INVALID_REQUEST,
+        )
+
     if not jupiter_response.transaction:
+        if jupiter_response.error_code or jupiter_response.error_message:
+            raise SwapError(
+                message=jupiter_response.error_message
+                or f"Jupiter error code: {jupiter_response.error_code}",
+                kind=SwapErrorKind.UNKNOWN,
+            )
         return None
 
     return TransactionParams(
@@ -180,8 +198,16 @@ async def from_jupiter_order_to_route(
         )
         steps.append(step)
 
-    # Calculate price impact
-    price_impact = Decimal(jupiter_response.price_impact) * 100
+    # Validate and calculate price impact
+    if jupiter_response.price_impact is None:
+        price_impact = None
+    elif abs(jupiter_response.price_impact) > 1.0:
+        raise SwapError(
+            message=f"Jupiter returned invalid price impact: {jupiter_response.price_impact}",
+            kind=SwapErrorKind.UNKNOWN,
+        )
+    else:
+        price_impact = float(Decimal(jupiter_response.price_impact) * 100)
 
     # Calculate network fee
     total_fee_lamports = (
@@ -189,9 +215,15 @@ async def from_jupiter_order_to_route(
         + jupiter_response.prioritization_fee_lamports
     )
 
-    # Convert slippage bps to percentage
+    # Validate and convert slippage bps to percentage
     #
     # We ignore the slippage percentage from the request since Jupiter Ultra V3 can automatically determine it.
+    if jupiter_response.slippage_bps < 0 or jupiter_response.slippage_bps > 10_000:
+        raise SwapError(
+            message=f"Jupiter returned invalid slippage_bps: {jupiter_response.slippage_bps}",
+            kind=SwapErrorKind.INVALID_REQUEST,
+        )
+
     slippage_percentage = int(jupiter_response.slippage_bps) / 100
 
     network_fee = None
@@ -223,7 +255,7 @@ async def from_jupiter_order_to_route(
         destination_amount=jupiter_response.out_amount,
         destination_amount_min=jupiter_response.other_amount_threshold,
         estimated_time=0,  # Jupiter swaps are atomic (0 seconds)
-        price_impact=float(price_impact),
+        price_impact=price_impact,
         network_fee=network_fee,
         expires_at=jupiter_response.expire_at,
         transaction_params=transaction_params,
