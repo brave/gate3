@@ -199,16 +199,15 @@ async def from_jupiter_order_to_route(
         steps.append(step)
 
     # Validate and calculate price impact
-    if (
-        jupiter_response.price_impact is not None
-        and abs(jupiter_response.price_impact) > 1.0
-    ):
+    if jupiter_response.price_impact is None:
+        price_impact = None
+    elif abs(jupiter_response.price_impact) > 1.0:
         raise SwapError(
             message=f"Jupiter returned invalid price impact: {jupiter_response.price_impact}",
             kind=SwapErrorKind.UNKNOWN,
         )
-
-    price_impact = Decimal(jupiter_response.price_impact) * 100
+    else:
+        price_impact = float(Decimal(jupiter_response.price_impact) * 100)
 
     # Calculate network fee
     total_fee_lamports = (
@@ -256,7 +255,7 @@ async def from_jupiter_order_to_route(
         destination_amount=jupiter_response.out_amount,
         destination_amount_min=jupiter_response.other_amount_threshold,
         estimated_time=0,  # Jupiter swaps are atomic (0 seconds)
-        price_impact=float(price_impact),
+        price_impact=price_impact,
         network_fee=network_fee,
         expires_at=jupiter_response.expire_at,
         transaction_params=transaction_params,

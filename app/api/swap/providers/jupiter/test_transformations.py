@@ -99,6 +99,15 @@ async def test_raises_on_empty_transaction_with_error(swap_request, token_manage
 
 
 @pytest.mark.asyncio
+async def test_raises_on_empty_transaction_with_error_code_only(
+    swap_request, token_manager
+):
+    response = _jupiter_response(transaction="", errorCode=42, errorMessage=None)
+    with pytest.raises(SwapError, match="Jupiter error code: 42"):
+        await from_jupiter_order_to_route(response, swap_request, token_manager)
+
+
+@pytest.mark.asyncio
 async def test_empty_transaction_without_error_returns_no_params(
     swap_request, token_manager
 ):
@@ -117,11 +126,15 @@ async def test_invalid_slippage_bps(swap_request, token_manager, bps):
 
 
 @pytest.mark.asyncio
-async def test_valid_slippage_bps_boundary(swap_request, token_manager):
+@pytest.mark.parametrize(
+    ("bps", "expected"),
+    [(0, "0.0"), (10_000, "100.0")],
+)
+async def test_valid_slippage_bps_boundary(swap_request, token_manager, bps, expected):
     route = await from_jupiter_order_to_route(
-        _jupiter_response(slippageBps=10_000), swap_request, token_manager
+        _jupiter_response(slippageBps=bps), swap_request, token_manager
     )
-    assert route.slippage_percentage == "100.0"
+    assert route.slippage_percentage == expected
 
 
 @pytest.mark.asyncio
@@ -134,8 +147,22 @@ async def test_invalid_price_impact(swap_request, token_manager, impact):
 
 
 @pytest.mark.asyncio
-async def test_valid_price_impact_boundary(swap_request, token_manager):
+async def test_none_price_impact(swap_request, token_manager):
     route = await from_jupiter_order_to_route(
-        _jupiter_response(priceImpact=-1.0), swap_request, token_manager
+        _jupiter_response(priceImpact=None), swap_request, token_manager
     )
-    assert route.price_impact == -100.0
+    assert route.price_impact is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("impact", "expected"),
+    [(-1.0, -100.0), (1.0, 100.0)],
+)
+async def test_valid_price_impact_boundary(
+    swap_request, token_manager, impact, expected
+):
+    route = await from_jupiter_order_to_route(
+        _jupiter_response(priceImpact=impact), swap_request, token_manager
+    )
+    assert route.price_impact == expected
