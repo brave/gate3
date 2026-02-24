@@ -231,7 +231,8 @@ async def from_lifi_quote_to_route(
         deposit_address=deposit_address,
         deposit_memo=None,
         transaction_params=transaction_params,
-        requires_token_allowance=True,
+        requires_token_allowance=request.source_coin == Coin.ETH
+        and request.source_token_address is not None,
         requires_firm_route=False,
         slippage_percentage=str(response.action.slippage * 100),
         id=route_id,

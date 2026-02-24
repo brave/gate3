@@ -191,7 +191,7 @@ async def test_get_indicative_routes_success(
     assert route.destination_amount == "1850000000"
     assert route.destination_amount_min == "1831500000"
     assert route.estimated_time == 180
-    assert route.requires_token_allowance is True
+    assert route.requires_token_allowance is False  # Native token, no allowance
     assert route.requires_firm_route is False
     assert route.id == "squid-quote-12345abcde"
 
