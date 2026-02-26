@@ -37,12 +37,14 @@ def _token_info_to_step_token(token_info: TokenInfo) -> SwapStepToken:
 def _build_transaction_params(
     jupiter_response: JupiterOrderResponse,
     request: SwapQuoteRequest,
+    indicative: bool = False,
 ) -> TransactionParams | None:
     """Build transaction parameters from Jupiter order response.
 
     Args:
         jupiter_response: The Jupiter order response
         request: The original swap quote request
+        indicative: If True, tolerate missing transaction (e.g. insufficient funds)
 
     Returns:
         TransactionParams if transaction is available, None otherwise
@@ -60,10 +62,9 @@ def _build_transaction_params(
         )
 
     if not jupiter_response.transaction:
-        if jupiter_response.error_code or jupiter_response.error_message:
+        if not indicative:
             raise SwapError(
-                message=jupiter_response.error_message
-                or f"Jupiter error code: {jupiter_response.error_code}",
+                message=f"Missing transaction in firm quote: msg={jupiter_response.error_message} code={jupiter_response.error_code}",
                 kind=SwapErrorKind.UNKNOWN,
             )
         return None
@@ -83,6 +84,7 @@ async def from_jupiter_order_to_route(
     jupiter_response: JupiterOrderResponse,
     request: SwapQuoteRequest,
     token_manager: TokenManager,
+    indicative: bool = False,
 ) -> SwapRoute:
     """Convert Jupiter order response to SwapRoute.
 
@@ -92,6 +94,7 @@ async def from_jupiter_order_to_route(
         jupiter_response: The Jupiter order response
         request: The original swap quote request
         token_manager: TokenManager instance used for token lookup
+        indicative: If True, tolerate missing transaction (e.g. insufficient funds)
 
     Returns:
         SwapRoute with all steps and details
@@ -244,7 +247,9 @@ async def from_jupiter_order_to_route(
     # Generate route ID
     route_id = generate_route_id()
 
-    transaction_params = _build_transaction_params(jupiter_response, request)
+    transaction_params = _build_transaction_params(
+        jupiter_response, request, indicative
+    )
 
     return SwapRoute(
         id=route_id,

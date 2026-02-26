@@ -190,6 +190,7 @@ class JupiterClient(BaseSwapProvider):
             jupiter_response,
             request,
             self.token_manager,
+            indicative=True,
         )
         return [route]
 
