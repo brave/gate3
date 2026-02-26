@@ -366,34 +366,78 @@ async def test_get_all_indicative_routes_success_ignores_failed_clients():
 
 
 @pytest.mark.asyncio
-async def test_get_all_indicative_routes_raises_first_exception_when_no_routes():
-    """When no routes returned but exceptions occurred, raise the first exception."""
-    first_error = SwapError(
-        "First provider failed", SwapErrorKind.INSUFFICIENT_LIQUIDITY
-    )
-    second_error = SwapError("Second provider failed", SwapErrorKind.UNKNOWN)
-
-    client1 = AsyncMock()
-    client1.provider_id = SwapProviderEnum.NEAR_INTENTS
-    client1.get_indicative_routes = AsyncMock(side_effect=first_error)
-
-    client2 = AsyncMock()
-    client2.provider_id = SwapProviderEnum.JUPITER
-    client2.get_indicative_routes = AsyncMock(side_effect=second_error)
+@pytest.mark.parametrize(
+    "errors, expected_exc_type, expected_message, expected_kind",
+    [
+        pytest.param(
+            [
+                SwapError("Generic failure", SwapErrorKind.UNKNOWN),
+                SwapError("Not enough liquidity", SwapErrorKind.INSUFFICIENT_LIQUIDITY),
+            ],
+            SwapError,
+            "Not enough liquidity",
+            SwapErrorKind.INSUFFICIENT_LIQUIDITY,
+            id="specific_over_unknown",
+        ),
+        pytest.param(
+            [
+                SwapError("Amount too low", SwapErrorKind.AMOUNT_TOO_LOW),
+                SwapError("Not enough liquidity", SwapErrorKind.INSUFFICIENT_LIQUIDITY),
+            ],
+            SwapError,
+            "Amount too low",
+            SwapErrorKind.AMOUNT_TOO_LOW,
+            id="keeps_first_specific",
+        ),
+        pytest.param(
+            [
+                RuntimeError("connection timeout"),
+                SwapError("API error", SwapErrorKind.UNKNOWN),
+            ],
+            SwapError,
+            "API error",
+            SwapErrorKind.UNKNOWN,
+            id="swap_error_over_generic",
+        ),
+        pytest.param(
+            [
+                RuntimeError("connection timeout"),
+                ValueError("bad value"),
+            ],
+            RuntimeError,
+            "connection timeout",
+            None,
+            id="all_generic_keeps_first",
+        ),
+    ],
+)
+async def test_get_all_indicative_routes_raises_most_specific_error(
+    errors, expected_exc_type, expected_message, expected_kind
+):
+    """When all providers fail, raise the most specific error:
+    specific SwapError > UNKNOWN SwapError > generic Exception."""
+    clients = []
+    for i, error in enumerate(errors):
+        client = AsyncMock()
+        client.provider_id = list(SwapProviderEnum)[i]
+        client.get_indicative_routes = AsyncMock(side_effect=error)
+        clients.append(client)
 
     with patch(
         "app.api.swap.utils.get_supported_provider_clients",
         new_callable=AsyncMock,
-        return_value=[client1, client2],
+        return_value=clients,
     ):
         request = create_mock_request()
 
-        with pytest.raises(SwapError) as exc_info:
+        with pytest.raises(expected_exc_type) as exc_info:
             await get_all_indicative_routes(request, token_manager=None)
 
-        # Should raise the first exception
-        assert exc_info.value.message == "First provider failed"
-        assert exc_info.value.kind == SwapErrorKind.INSUFFICIENT_LIQUIDITY
+        if isinstance(exc_info.value, SwapError):
+            assert exc_info.value.message == expected_message
+            assert exc_info.value.kind == expected_kind
+        else:
+            assert str(exc_info.value) == expected_message
 
 
 @pytest.mark.asyncio

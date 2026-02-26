@@ -253,9 +253,26 @@ async def get_all_indicative_routes(
     if all_routes:
         return sort_routes(all_routes, request.route_priority, request.swap_type)
 
-    # No routes - if there were exceptions, raise the first one
+    # No routes - raise the most specific exception.
+    # Prefer SwapErrors with a specific kind over UNKNOWN, and SwapErrors
+    # over generic exceptions, so the caller gets an actionable message.
     if exceptions:
-        raise exceptions[0]
+        best = exceptions[0]
+        for exc in exceptions[1:]:
+            # Prefer any SwapError over generic exceptions, and among SwapErrors
+            # prefer specific kinds over UNKNOWN. Keep the first generic exception
+            # if no SwapError is available.
+            if isinstance(exc, SwapError):
+                if not isinstance(best, SwapError):
+                    # Upgrade from a generic exception to a SwapError.
+                    best = exc
+                elif (
+                    best.kind == SwapErrorKind.UNKNOWN
+                    and exc.kind != SwapErrorKind.UNKNOWN
+                ):
+                    # Upgrade from UNKNOWN SwapError to a more specific kind.
+                    best = exc
+        raise best
 
     # No routes, no exceptions - shouldn't happen but handle gracefully
     raise SwapError(
