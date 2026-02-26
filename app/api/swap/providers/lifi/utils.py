@@ -10,6 +10,7 @@ from .constants import (
     LIFI_SOL_NATIVE_TOKEN_ADDRESS,
     LIFI_SOLANA_CHAIN_ID,
 )
+from .models import LifiError
 
 
 def get_lifi_chain_id(chain: Chain) -> int | None:
@@ -74,45 +75,32 @@ def convert_lifi_token_address(chain: Chain, token_address: str) -> str | None:
     return token_address
 
 
-def categorize_error(error_message: str | None) -> SwapErrorKind:
-    """Map LI.FI error messages to SwapErrorKind."""
-    if not error_message:
+_ERROR_CODE_MAPPING: dict[int, SwapErrorKind] = {
+    1000: SwapErrorKind.UNKNOWN,  # DefaultError
+    1001: SwapErrorKind.INVALID_REQUEST,  # FailedToBuildTransactionError
+    1002: SwapErrorKind.INSUFFICIENT_LIQUIDITY,  # NoQuoteError
+    1003: SwapErrorKind.INVALID_REQUEST,  # NotFoundError
+    1004: SwapErrorKind.INVALID_REQUEST,  # NotProcessableError
+    1005: SwapErrorKind.RATE_LIMIT_EXCEEDED,  # RateLimitError
+    1006: SwapErrorKind.UNKNOWN,  # ServerError
+    1007: SwapErrorKind.INVALID_REQUEST,  # SlippageError
+    1008: SwapErrorKind.UNKNOWN,  # ThirdPartyError
+    1009: SwapErrorKind.TIMEOUT,  # TimeoutError
+    1010: SwapErrorKind.INVALID_REQUEST,  # UnauthorizedError
+    1011: SwapErrorKind.INVALID_REQUEST,  # ValidationError
+    1012: SwapErrorKind.UNKNOWN,  # RpcFailure
+    1013: SwapErrorKind.INVALID_REQUEST,  # MalformedSchema
+}
+
+
+def categorize_error(error: LifiError) -> SwapErrorKind:
+    """Map LI.FI error codes to SwapErrorKind.
+
+    Ref: https://docs.li.fi/api-reference/error-codes
+    """
+    if error.code is None:
         return SwapErrorKind.UNKNOWN
-
-    error_lower = error_message.lower()
-
-    if any(
-        phrase in error_lower
-        for phrase in [
-            "no possible route",
-            "no routes found",
-            "insufficient liquidity",
-            "not enough liquidity",
-        ]
-    ):
-        return SwapErrorKind.INSUFFICIENT_LIQUIDITY
-
-    if any(
-        phrase in error_lower
-        for phrase in [
-            "amount too low",
-            "amount too small",
-            "fees higher than amount",
-        ]
-    ):
-        return SwapErrorKind.AMOUNT_TOO_LOW
-
-    if any(
-        phrase in error_lower
-        for phrase in [
-            "slippage",
-            "validation",
-            "malformed",
-        ]
-    ):
-        return SwapErrorKind.INVALID_REQUEST
-
-    return SwapErrorKind.UNKNOWN
+    return _ERROR_CODE_MAPPING.get(error.code, SwapErrorKind.UNKNOWN)
 
 
 def generate_route_id() -> str:

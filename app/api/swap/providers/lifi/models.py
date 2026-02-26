@@ -167,6 +167,6 @@ class LifiStatusResponse(BaseModel):
 
 class LifiError(BaseModel):
     message: str = Field(description="Error message")
-    errors: list[dict] | None = Field(default=None, description="Detailed errors")
+    code: int | None = Field(default=None, description="Error code")
 
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)

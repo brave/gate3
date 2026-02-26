@@ -23,7 +23,8 @@ from .mocks import (
     MOCK_LIFI_STATUS_PENDING,
     MOCK_LIFI_TOKENS_RESPONSE,
 )
-from .utils import get_lifi_chain_id
+from .models import LifiError
+from .utils import categorize_error, get_lifi_chain_id
 
 
 @pytest.fixture
@@ -238,7 +239,7 @@ async def test_get_route_api_error(
         await client.get_indicative_routes(request)
 
     assert exc_info.value.kind == SwapErrorKind.INSUFFICIENT_LIQUIDITY
-    assert "liquidity" in exc_info.value.message.lower()
+    assert "no possible route" in exc_info.value.message.lower()
 
 
 @pytest.mark.asyncio
@@ -407,3 +408,29 @@ async def test_get_supported_tokens(client, mock_httpx_client):
     assert len(btc_native) == 1
     assert btc_native[0].symbol == "BTC"
     assert btc_native[0].decimals == 8
+
+
+@pytest.mark.parametrize(
+    "code,expected_kind",
+    [
+        (1000, SwapErrorKind.UNKNOWN),  # DefaultError
+        (1001, SwapErrorKind.INVALID_REQUEST),  # FailedToBuildTransactionError
+        (1002, SwapErrorKind.INSUFFICIENT_LIQUIDITY),  # NoQuoteError
+        (1003, SwapErrorKind.INVALID_REQUEST),  # NotFoundError
+        (1004, SwapErrorKind.INVALID_REQUEST),  # NotProcessableError
+        (1005, SwapErrorKind.RATE_LIMIT_EXCEEDED),  # RateLimitError
+        (1006, SwapErrorKind.UNKNOWN),  # ServerError
+        (1007, SwapErrorKind.INVALID_REQUEST),  # SlippageError
+        (1008, SwapErrorKind.UNKNOWN),  # ThirdPartyError
+        (1009, SwapErrorKind.TIMEOUT),  # TimeoutError
+        (1010, SwapErrorKind.INVALID_REQUEST),  # UnauthorizedError
+        (1011, SwapErrorKind.INVALID_REQUEST),  # ValidationError
+        (1012, SwapErrorKind.UNKNOWN),  # RpcFailure
+        (1013, SwapErrorKind.INVALID_REQUEST),  # MalformedSchema
+        (9999, SwapErrorKind.UNKNOWN),  # Unknown code falls through
+        (None, SwapErrorKind.UNKNOWN),  # No code
+    ],
+)
+def test_categorize_error(code, expected_kind):
+    error = LifiError(message="test error", code=code)
+    assert categorize_error(error) == expected_kind
