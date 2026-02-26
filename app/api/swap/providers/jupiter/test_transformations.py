@@ -138,7 +138,7 @@ async def test_valid_slippage_bps_boundary(swap_request, token_manager, bps, exp
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("impact", [-1.5, 1.01])
+@pytest.mark.parametrize("impact", [-100.01, 100.01])
 async def test_invalid_price_impact(swap_request, token_manager, impact):
     with pytest.raises(SwapError, match="invalid price impact"):
         await from_jupiter_order_to_route(
@@ -157,7 +157,7 @@ async def test_none_price_impact(swap_request, token_manager):
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("impact", "expected"),
-    [(-1.0, -100.0), (1.0, 100.0)],
+    [(-100.0, -100.0), (100.0, 100.0), (-99.20, -99.20), (0.5, 0.5)],
 )
 async def test_valid_price_impact_boundary(
     swap_request, token_manager, impact, expected

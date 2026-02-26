@@ -1,5 +1,3 @@
-from decimal import Decimal
-
 from app.api.common.models import Chain, TokenInfo, TokenType
 from app.api.tokens.manager import TokenManager
 
@@ -199,15 +197,16 @@ async def from_jupiter_order_to_route(
         steps.append(step)
 
     # Validate and calculate price impact
+    # Jupiter Ultra V3 returns priceImpact as a percentage (e.g. -99.20 = -99.20%)
     if jupiter_response.price_impact is None:
         price_impact = None
-    elif abs(jupiter_response.price_impact) > 1.0:
+    elif abs(jupiter_response.price_impact) > 100.0:
         raise SwapError(
             message=f"Jupiter returned invalid price impact: {jupiter_response.price_impact}",
             kind=SwapErrorKind.UNKNOWN,
         )
     else:
-        price_impact = float(Decimal(jupiter_response.price_impact) * 100)
+        price_impact = jupiter_response.price_impact
 
     # Calculate network fee
     total_fee_lamports = (
