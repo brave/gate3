@@ -394,7 +394,5 @@ MOCK_LIFI_TOKENS_RESPONSE = {
 # Mock LI.FI error response
 MOCK_LIFI_ERROR_RESPONSE = {
     "message": "No possible route found for this swap",
-    "errors": [
-        {"message": "Insufficient liquidity for this trade"},
-    ],
+    "code": 1002,
 }

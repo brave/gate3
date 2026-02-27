@@ -147,19 +147,13 @@ class LifiClient(BaseSwapProvider):
         try:
             error_data = response.json()
             error = LifiError.model_validate(error_data)
-
-            error_message = error.message
-            if error.errors and len(error.errors) > 0:
-                first_error = error.errors[0]
-                error_message = first_error.get("message", error_message)
-
-            kind = categorize_error(error_message)
-            raise SwapError(message=error_message or "Unknown error", kind=kind)
+            kind = categorize_error(error)
+            raise SwapError(message=error.message, kind=kind)
         except SwapError:
             raise
-        except Exception:
+        except Exception as e:
             raise SwapError(
-                message=f"LI.FI API error: {response.status_code}",
+                message=str(e),
                 kind=SwapErrorKind.UNKNOWN,
             )
 
