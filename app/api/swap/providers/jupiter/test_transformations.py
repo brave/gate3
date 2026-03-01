@@ -94,8 +94,24 @@ async def test_raises_on_empty_transaction_with_error(swap_request, token_manage
     response = _jupiter_response(
         transaction="", errorCode=42, errorMessage="Insufficient funds"
     )
-    with pytest.raises(SwapError, match="Insufficient funds"):
+    with pytest.raises(
+        SwapError,
+        match="Missing transaction in firm quote: msg=Insufficient funds code=42",
+    ):
         await from_jupiter_order_to_route(response, swap_request, token_manager)
+
+
+@pytest.mark.asyncio
+async def test_indicative_tolerates_empty_transaction_with_error(
+    swap_request, token_manager
+):
+    response = _jupiter_response(
+        transaction="", errorCode=42, errorMessage="Insufficient funds"
+    )
+    route = await from_jupiter_order_to_route(
+        response, swap_request, token_manager, indicative=True
+    )
+    assert route.transaction_params is None
 
 
 @pytest.mark.asyncio
@@ -103,17 +119,19 @@ async def test_raises_on_empty_transaction_with_error_code_only(
     swap_request, token_manager
 ):
     response = _jupiter_response(transaction="", errorCode=42, errorMessage=None)
-    with pytest.raises(SwapError, match="Jupiter error code: 42"):
+    with pytest.raises(
+        SwapError, match="Missing transaction in firm quote: msg=None code=42"
+    ):
         await from_jupiter_order_to_route(response, swap_request, token_manager)
 
 
 @pytest.mark.asyncio
-async def test_empty_transaction_without_error_returns_no_params(
-    swap_request, token_manager
-):
+async def test_raises_on_empty_transaction_without_error(swap_request, token_manager):
     response = _jupiter_response(transaction="")
-    route = await from_jupiter_order_to_route(response, swap_request, token_manager)
-    assert route.transaction_params is None
+    with pytest.raises(
+        SwapError, match="Missing transaction in firm quote: msg=None code=None"
+    ):
+        await from_jupiter_order_to_route(response, swap_request, token_manager)
 
 
 @pytest.mark.asyncio
