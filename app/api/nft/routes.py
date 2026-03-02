@@ -20,6 +20,7 @@ from app.api.nft.models import (
     TraitAttribute,
 )
 from app.config import settings
+from app.core.http import create_http_client
 
 router = APIRouter(prefix="/api/nft", tags=[Tags.NFT])
 simplehash_router = APIRouter(prefix="/simplehash/api/v0", tags=[Tags.NFT])
@@ -166,7 +167,7 @@ async def _transform_solana_asset_to_simplehash(asset: SolanaAsset) -> SimpleHas
         )
 
     if not any([name, symbol, description, image_url]):
-        async with httpx.AsyncClient() as client:
+        async with create_http_client() as client:
             raw_content_response = await client.get(asset.content.json_uri)
             raw_content_response.raise_for_status()
             raw_content_data = SolanaAssetRawContent.model_validate(
@@ -226,7 +227,7 @@ async def get_nfts_by_owner(
     nfts = []
     next_page_key = None
 
-    async with httpx.AsyncClient() as client:
+    async with create_http_client() as client:
         for chain_str in chains:
             coin, chain_id = chain_str.split(".")
             chain = Chain.get(coin, chain_id)
@@ -349,7 +350,7 @@ async def get_nfts_by_ids(
     if not solana_nfts and not other_nfts:
         return SimpleHashNFTResponse(next_cursor=None, nfts=[])
 
-    async with httpx.AsyncClient() as client:
+    async with create_http_client() as client:
         # Handle Solana NFTs
         if solana_nfts:
             url = f"https://{Chain.SOLANA.alchemy_id}.g.alchemy.com/v2/{settings.ALCHEMY_API_KEY}"
@@ -430,7 +431,7 @@ async def get_solana_asset_proof(
         ..., description="The token address to fetch the proof for"
     ),
 ) -> SolanaAssetMerkleProof:
-    async with httpx.AsyncClient() as client:
+    async with create_http_client() as client:
         url = f"https://{Chain.SOLANA.alchemy_id}.g.alchemy.com/v2/{settings.ALCHEMY_API_KEY}"
         params = {
             "jsonrpc": "2.0",

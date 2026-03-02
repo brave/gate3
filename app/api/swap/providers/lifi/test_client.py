@@ -43,7 +43,7 @@ def client(mock_token_manager):
 
 @pytest.fixture
 def mock_httpx_client():
-    with patch("httpx.AsyncClient") as mock:
+    with patch("app.api.swap.providers.lifi.client.create_http_client") as mock:
         mock_client = AsyncMock()
         mock_context = AsyncMock()
         mock_context.__aenter__ = AsyncMock(return_value=mock_client)

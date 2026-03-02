@@ -2,7 +2,6 @@ import json
 import logging
 from typing import Literal
 
-import httpx
 from redis.commands.search.field import TextField
 from redis.commands.search.index_definition import IndexDefinition
 from redis.commands.search.query import Query
@@ -11,6 +10,7 @@ from app.api.common.models import Chain, Coin, TokenInfo, TokenSource, TokenType
 from app.api.tokens.contants import SPL_TOKEN_2022_PROGRAM_ID, SPL_TOKEN_PROGRAM_ID
 from app.api.tokens.models import TokenSearchResponse
 from app.core.cache import Cache
+from app.core.http import create_http_client
 
 logger = logging.getLogger(__name__)
 
@@ -167,7 +167,7 @@ class TokenManager:
     async def ingest_from_coingecko(cls, registry: TokenRegistry) -> None:
         url = "https://raw.githubusercontent.com/brave/token-lists/refs/heads/main/data/v1/coingecko.json"
 
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        async with create_http_client(timeout=10.0) as client:
             response = await client.get(url)
             response.raise_for_status()
             json_data = response.json()
@@ -222,7 +222,7 @@ class TokenManager:
         cls, tag: Literal["lst", "verified"], registry: TokenRegistry
     ) -> None:
         url = f"https://lite-api.jup.ag/tokens/v2/tag?query={tag}"
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        async with create_http_client(timeout=10.0) as client:
             response = await client.get(url)
             response.raise_for_status()
             json_data = response.json()

@@ -6,6 +6,7 @@ from pydantic import ValidationError
 
 from app.api.common.models import Chain, Coin
 from app.config import settings
+from app.core.http import create_http_client
 
 from .cache import CoingeckoPriceCache, CoinMapCache, PlatformMapCache
 from .constants import COINGECKO_CHUNK_SIZE, COINGECKO_MAX_CONCURRENT_REQUESTS
@@ -37,7 +38,7 @@ class CoinGeckoClient:
             if settings.COINGECKO_API_KEY
             else None
         )
-        return httpx.AsyncClient(timeout=10.0, headers=headers)
+        return create_http_client(timeout=10.0, headers=headers)
 
     async def filter(
         self, batch: BatchTokenPriceRequests

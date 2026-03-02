@@ -16,6 +16,7 @@ from app.api.swap.models import (
 from app.api.swap.providers.base import BaseSwapProvider
 from app.api.tokens.manager import TokenManager
 from app.config import settings
+from app.core.http import create_http_client
 
 from .constants import SOL_MINT
 from .models import (
@@ -61,8 +62,8 @@ class JupiterClient(BaseSwapProvider):
         if self.api_key:
             headers["x-api-key"] = self.api_key
 
-        return httpx.AsyncClient(
-            timeout=30.0,
+        return create_http_client(
+            timeout=10.0,
             headers=headers,
         )
 

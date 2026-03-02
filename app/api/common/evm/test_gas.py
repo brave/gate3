@@ -29,7 +29,7 @@ def clear_gas_price_cache():
 
 @pytest.fixture
 def mock_httpx_client():
-    with patch("app.api.common.evm.gas.httpx.AsyncClient") as mock:
+    with patch("app.api.common.evm.gas.create_http_client") as mock:
         mock_client = AsyncMock()
         mock.return_value.__aenter__.return_value = mock_client
         yield mock_client
