@@ -1382,7 +1382,7 @@ async def test_create_client_with_jwt(client):
         call_kwargs = mock_factory.call_args[1]
         assert "Authorization" in call_kwargs["headers"]
         assert call_kwargs["headers"]["Authorization"] == "Bearer test_jwt_token"
-        assert call_kwargs["timeout"] == 30.0
+        assert call_kwargs["timeout"] == 10.0
 
 
 @pytest.mark.asyncio
@@ -1401,7 +1401,7 @@ async def test_create_client_without_jwt():
         mock_factory.assert_called_once()
         call_kwargs = mock_factory.call_args[1]
         assert "Authorization" not in call_kwargs["headers"]
-        assert call_kwargs["timeout"] == 30.0
+        assert call_kwargs["timeout"] == 10.0
 
 
 # ============================================================================

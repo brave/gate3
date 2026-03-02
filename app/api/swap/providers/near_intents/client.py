@@ -72,7 +72,7 @@ class NearIntentsClient(BaseSwapProvider):
             headers["Authorization"] = f"Bearer {self.jwt_token}"
 
         return create_http_client(
-            timeout=30.0,
+            timeout=10.0,
             headers=headers,
         )
 

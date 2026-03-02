@@ -67,7 +67,7 @@ class SquidClient(BaseSwapProvider):
             headers["x-integrator-id"] = self.integrator_id
 
         return create_http_client(
-            timeout=30.0,
+            timeout=10.0,
             headers=headers,
         )
 

@@ -72,7 +72,7 @@ class LifiClient(BaseSwapProvider):
             headers["x-lifi-api-key"] = self.api_key
 
         return create_http_client(
-            timeout=30.0,
+            timeout=10.0,
             headers=headers,
         )
 

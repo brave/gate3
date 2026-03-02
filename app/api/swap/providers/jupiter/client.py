@@ -63,7 +63,7 @@ class JupiterClient(BaseSwapProvider):
             headers["x-api-key"] = self.api_key
 
         return create_http_client(
-            timeout=30.0,
+            timeout=10.0,
             headers=headers,
         )
 

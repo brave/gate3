@@ -113,7 +113,9 @@ async def test_caps_retry_after_at_max_delay():
 
 @pytest.mark.asyncio
 async def test_backoff_delays_increase_exponentially():
-    mock = MockTransport([_make_response(503)] * 3 + [_make_response(200)])
+    mock = MockTransport(
+        [_make_response(503) for _ in range(3)] + [_make_response(200)]
+    )
     transport = _make_retry_transport(
         mock,
         max_retries=3,
@@ -130,6 +132,20 @@ async def test_backoff_delays_increase_exponentially():
     assert response.status_code == 200
     delays = [call.args[0] for call in mock_sleep.call_args_list]
     assert delays == [0.5, 1.0, 2.0]
+
+
+@pytest.mark.asyncio
+async def test_stops_retrying_when_total_time_exceeded():
+    mock = MockTransport([_make_response(503) for _ in range(4)])
+    transport = _make_retry_transport(
+        mock, max_retries=3, initial_delay=0.0, jitter_factor=0.0, max_total_time=0.0
+    )
+
+    request = httpx.Request("GET", "https://example.com")
+    response = await transport.handle_async_request(request)
+
+    assert response.status_code == 503
+    assert mock.attempt == 1
 
 
 def test_create_http_client_returns_async_client():
