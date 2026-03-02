@@ -130,8 +130,10 @@ def mock_httpx_client(monkeypatch):
     mock_context.__aenter__.return_value = mock_client
     mock_context.__aexit__.return_value = None
 
-    # Mock the AsyncClient constructor to return our mock context manager
-    monkeypatch.setattr("httpx.AsyncClient", lambda: mock_context)
+    # Mock create_http_client to return our mock context manager
+    monkeypatch.setattr(
+        "app.api.nft.routes.create_http_client", lambda **kwargs: mock_context
+    )
 
     return mock_client
 

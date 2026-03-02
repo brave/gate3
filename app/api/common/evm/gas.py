@@ -6,6 +6,7 @@ import httpx
 from cachetools import TTLCache
 
 from app.config import settings
+from app.core.http import create_http_client
 
 from ..models import Chain, Coin
 
@@ -81,7 +82,7 @@ async def get_gas_price(chain: Chain) -> int | None:
         return None
 
     try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
+        async with create_http_client() as client:
             response = await client.post(
                 rpc_url,
                 json={
@@ -130,7 +131,7 @@ async def get_eip1559_gas_fees(chain: Chain) -> dict | None:
         return None
 
     try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
+        async with create_http_client() as client:
             response = await client.post(
                 rpc_url,
                 json={
@@ -216,7 +217,7 @@ async def estimate_gas_limit(
     value_hex = hex(int(value)) if value and value != "0" else "0x0"
 
     try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
+        async with create_http_client() as client:
             response = await client.post(
                 rpc_url,
                 json={

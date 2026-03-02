@@ -15,6 +15,7 @@ from app.api.swap.models import (
 from app.api.swap.providers.base import BaseSwapProvider
 from app.api.tokens.manager import TokenManager
 from app.config import settings
+from app.core.http import create_http_client
 
 from .models import (
     SquidError,
@@ -65,7 +66,7 @@ class SquidClient(BaseSwapProvider):
         if self.integrator_id:
             headers["x-integrator-id"] = self.integrator_id
 
-        return httpx.AsyncClient(
+        return create_http_client(
             timeout=30.0,
             headers=headers,
         )

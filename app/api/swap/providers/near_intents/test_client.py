@@ -48,7 +48,7 @@ def client():
 
 @pytest.fixture
 def mock_httpx_client():
-    with patch("httpx.AsyncClient") as mock:
+    with patch("app.api.swap.providers.near_intents.client.create_http_client") as mock:
         mock_client = AsyncMock()
         mock_context = AsyncMock()
         mock_context.__aenter__ = AsyncMock(return_value=mock_client)
@@ -1374,10 +1374,12 @@ async def test_get_status_error(client, mock_httpx_client, mock_supported_tokens
 
 @pytest.mark.asyncio
 async def test_create_client_with_jwt(client):
-    with patch("httpx.AsyncClient") as mock_client_class:
+    with patch(
+        "app.api.swap.providers.near_intents.client.create_http_client"
+    ) as mock_factory:
         client._create_client()
-        mock_client_class.assert_called_once()
-        call_kwargs = mock_client_class.call_args[1]
+        mock_factory.assert_called_once()
+        call_kwargs = mock_factory.call_args[1]
         assert "Authorization" in call_kwargs["headers"]
         assert call_kwargs["headers"]["Authorization"] == "Bearer test_jwt_token"
         assert call_kwargs["timeout"] == 30.0
@@ -1387,15 +1389,17 @@ async def test_create_client_with_jwt(client):
 async def test_create_client_without_jwt():
     with (
         patch("app.api.swap.providers.near_intents.client.settings") as mock_settings,
-        patch("httpx.AsyncClient") as mock_client_class,
+        patch(
+            "app.api.swap.providers.near_intents.client.create_http_client"
+        ) as mock_factory,
     ):
         mock_settings.NEAR_INTENTS_BASE_URL = "https://1click.chaindefuser.com"
         mock_settings.NEAR_INTENTS_JWT = None
         client = NearIntentsClient()
 
         client._create_client()
-        mock_client_class.assert_called_once()
-        call_kwargs = mock_client_class.call_args[1]
+        mock_factory.assert_called_once()
+        call_kwargs = mock_factory.call_args[1]
         assert "Authorization" not in call_kwargs["headers"]
         assert call_kwargs["timeout"] == 30.0
 

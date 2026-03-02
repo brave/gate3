@@ -3,6 +3,7 @@ import asyncio
 import httpx
 
 from app.api.common.models import Chain
+from app.core.http import create_http_client
 
 from .cache import JupiterPriceCache
 from .coingecko import CoinGeckoClient
@@ -24,7 +25,7 @@ class JupiterClient:
 
     @staticmethod
     def _create_client() -> httpx.AsyncClient:
-        return httpx.AsyncClient(timeout=10.0)
+        return create_http_client(timeout=10.0)
 
     @staticmethod
     async def filter(

@@ -16,6 +16,7 @@ from app.api.swap.models import (
 )
 from app.api.swap.providers.base import BaseSwapProvider
 from app.config import settings
+from app.core.http import create_http_client
 
 from .cache import DepositSubmitRateLimiter
 from .models import (
@@ -70,7 +71,7 @@ class NearIntentsClient(BaseSwapProvider):
         if self.jwt_token:
             headers["Authorization"] = f"Bearer {self.jwt_token}"
 
-        return httpx.AsyncClient(
+        return create_http_client(
             timeout=30.0,
             headers=headers,
         )

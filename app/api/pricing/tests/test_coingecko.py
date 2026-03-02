@@ -20,7 +20,7 @@ def client():
 
 @pytest.fixture
 def mock_httpx_client():
-    with patch("httpx.AsyncClient") as mock:
+    with patch("app.api.pricing.coingecko.create_http_client") as mock:
         mock_client = AsyncMock()
         mock.return_value.__aenter__.return_value = mock_client
         yield mock_client
