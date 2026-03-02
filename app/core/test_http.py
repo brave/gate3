@@ -148,6 +148,10 @@ async def test_stops_retrying_when_total_time_exceeded():
     assert mock.attempt == 1
 
 
-def test_create_http_client_returns_async_client():
+@pytest.mark.asyncio
+async def test_create_http_client_returns_async_client():
     client = create_http_client(timeout=5.0)
-    assert isinstance(client, httpx.AsyncClient)
+    try:
+        assert isinstance(client, httpx.AsyncClient)
+    finally:
+        await client.aclose()
