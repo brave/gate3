@@ -4,7 +4,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from pydantic.alias_generators import to_camel
 
 from app.api.common.models import Chain, ChainSpec, Coin, TokenInfo
-from app.api.common.utils import is_address_equal
+from app.api.common.utils import is_address_equal, validate_address
 
 # ============================================================================
 # Base Models
@@ -239,6 +239,18 @@ class SwapQuoteRequest(SwapSupportRequest):
             "FASTEST: lowest estimated time first. Ties are broken by the other priority."
         ),
     )
+
+    @model_validator(mode="after")
+    def validate_addresses(self):
+        if self.recipient and not validate_address(
+            self.recipient, self.destination_coin
+        ):
+            raise ValueError(
+                f"Invalid recipient address for {self.destination_coin.value}"
+            )
+        if not validate_address(self.refund_to, self.source_coin):
+            raise ValueError(f"Invalid refund_to address for {self.source_coin.value}")
+        return self
 
     model_config = ConfigDict(
         json_schema_extra={
