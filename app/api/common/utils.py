@@ -1,5 +1,16 @@
 import re
 
+from app.api.common.models import Coin
+
+
+def validate_address(address: str, coin: Coin) -> bool:
+    if coin == Coin.ETH:
+        return is_evm_address(address)
+    if coin == Coin.SOL:
+        return is_solana_address(address)
+    # TODO: add proper validation for BTC, ADA, ZEC, FIL address formats
+    return len(address) > 0
+
 
 def is_evm_address(address: str) -> bool:
     return bool(re.match(r"^0x[a-fA-F0-9]{40}$", address))

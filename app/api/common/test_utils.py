@@ -1,6 +1,7 @@
 import pytest
 
-from app.api.common.utils import is_evm_address, is_solana_address
+from app.api.common.models import Coin
+from app.api.common.utils import is_evm_address, is_solana_address, validate_address
 
 
 @pytest.mark.parametrize(
@@ -85,3 +86,33 @@ def test_solana_addresses(address, expected):
     assert is_solana_address(address) == expected, (
         f"Expected {expected} for {repr(address)}"
     )
+
+
+@pytest.mark.parametrize(
+    "address,coin,expected",
+    [
+        # ETH coin dispatches to is_evm_address
+        ("0x1234567890123456789012345678901234567890", Coin.ETH, True),
+        ("0x123", Coin.ETH, False),
+        ("", Coin.ETH, False),
+        # SOL coin dispatches to is_solana_address
+        ("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", Coin.SOL, True),
+        ("0x1234567890123456789012345678901234567890", Coin.SOL, False),
+        ("", Coin.SOL, False),
+        # BTC/ADA/ZEC/FIL use basic non-empty check
+        ("bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4", Coin.BTC, True),
+        ("", Coin.BTC, False),
+        (
+            "addr1qx2fxv2umyhttkxyxp8x0dlpdt3k6cwng5pxj3jhsydzer3jcu5d8ps7zex2k2xt3uqxgjqnnj83ws8lhrn648jjxtwq2ytjqp",
+            Coin.ADA,
+            True,
+        ),
+        ("", Coin.ADA, False),
+        ("t1Rv4exT7bqhZqi2j7xz8bUHDMxwosrjADU", Coin.ZEC, True),
+        ("", Coin.ZEC, False),
+        ("f1abjxfbp274xpdqcpnsexgwi", Coin.FIL, True),
+        ("", Coin.FIL, False),
+    ],
+)
+def test_validate_address(address, coin, expected):
+    assert validate_address(address, coin) == expected

@@ -584,7 +584,7 @@ async def test_get_firm_route_evm_native_eth(
         amount="1000000000000000000",
         slippage_percentage="0.5",
         swap_type=SwapType.EXACT_INPUT,
-        refund_to="0x8eekKfUAGSJbq3CdA2TmHb8tKuyzd5gtEas3MYAtXzrT",
+        refund_to="0xa92D461a9a988A7f11ec285d39783A637Fdd6ba4",
         provider=SwapProviderEnum.NEAR_INTENTS,
     )
     request.set_source_token(supported_tokens)
@@ -606,7 +606,7 @@ async def test_get_firm_route_evm_native_eth(
 
     assert (
         result.transaction_params.evm.from_address
-        == "0x8eekKfUAGSJbq3CdA2TmHb8tKuyzd5gtEas3MYAtXzrT"
+        == "0xa92D461a9a988A7f11ec285d39783A637Fdd6ba4"
     )
     assert result.transaction_params.evm.to == deposit_address
     assert result.transaction_params.evm.value == "1000000000000000000"
@@ -676,7 +676,7 @@ async def test_get_firm_route_evm_erc20_token(
         amount="1000000",
         slippage_percentage="0.5",
         swap_type=SwapType.EXACT_INPUT,
-        refund_to="0x8eekKfUAGSJbq3CdA2TmHb8tKuyzd5gtEas3MYAtXzrT",
+        refund_to="0xa92D461a9a988A7f11ec285d39783A637Fdd6ba4",
         provider=SwapProviderEnum.NEAR_INTENTS,
     )
     request.set_source_token(supported_tokens)
@@ -698,7 +698,7 @@ async def test_get_firm_route_evm_erc20_token(
 
     assert (
         result.transaction_params.evm.from_address
-        == "0x8eekKfUAGSJbq3CdA2TmHb8tKuyzd5gtEas3MYAtXzrT"
+        == "0xa92D461a9a988A7f11ec285d39783A637Fdd6ba4"
     )
     assert (
         result.transaction_params.evm.to == "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"

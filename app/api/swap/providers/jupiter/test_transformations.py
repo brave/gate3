@@ -1,6 +1,7 @@
 from unittest.mock import AsyncMock
 
 import pytest
+from pydantic import ValidationError
 
 from app.api.common.models import Chain
 from app.api.swap.models import (
@@ -67,25 +68,21 @@ async def test_raises_on_empty_taker(swap_request, token_manager):
         )
 
 
-@pytest.mark.asyncio
-async def test_raises_on_empty_refund_to(token_manager):
-    swap_request = SwapQuoteRequest(
-        source_coin=Chain.SOLANA.coin,
-        source_chain_id=Chain.SOLANA.chain_id,
-        source_token_address=None,
-        destination_coin=Chain.SOLANA.coin,
-        destination_chain_id=Chain.SOLANA.chain_id,
-        destination_token_address="EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
-        recipient="11111111111111111111111111111111",
-        amount="100000000",
-        slippage_percentage="0.5",
-        swap_type=SwapType.EXACT_INPUT,
-        refund_to="",
-        provider=SwapProviderEnum.JUPITER,
-    )
-    with pytest.raises(SwapError, match="missing refund_to address"):
-        await from_jupiter_order_to_route(
-            _jupiter_response(), swap_request, token_manager
+def test_raises_on_empty_refund_to():
+    with pytest.raises(ValidationError, match="Invalid refund_to address for SOL"):
+        SwapQuoteRequest(
+            source_coin=Chain.SOLANA.coin,
+            source_chain_id=Chain.SOLANA.chain_id,
+            source_token_address=None,
+            destination_coin=Chain.SOLANA.coin,
+            destination_chain_id=Chain.SOLANA.chain_id,
+            destination_token_address="EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+            recipient="11111111111111111111111111111111",
+            amount="100000000",
+            slippage_percentage="0.5",
+            swap_type=SwapType.EXACT_INPUT,
+            refund_to="",
+            provider=SwapProviderEnum.JUPITER,
         )
 
 

@@ -1,5 +1,6 @@
 from app.api.common.evm.gas import get_evm_gas_price
 from app.api.common.models import Chain, Coin
+from app.api.common.utils import is_evm_address
 
 from ...models import NetworkFee, SwapErrorKind, SwapQuoteRequest
 from .constants import (
@@ -30,17 +31,10 @@ def encode_erc20_transfer(to_address: str, amount: str) -> str:
     # This is the first 4 bytes of keccak256("transfer(address,uint256)")
     function_selector = "0xa9059cbb"
 
-    # Address must start with 0x prefix
-    to_address_lower = to_address.lower()
-    if not to_address_lower.startswith("0x"):
+    if not is_evm_address(to_address):
         return "0x"
 
-    # Remove 0x prefix and normalize address
-    to_address_clean = to_address_lower[2:]
-
-    # Validate address is exactly 20 bytes (40 hex characters)
-    if len(to_address_clean) != 40:
-        return "0x"
+    to_address_clean = to_address.lower()[2:]
 
     # Pad address to 32 bytes (64 hex chars) for ABI encoding
     address_padded = to_address_clean.zfill(64)
