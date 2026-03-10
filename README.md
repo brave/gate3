@@ -52,6 +52,10 @@ A FastAPI-based gateway service for web3 applications at Brave.
     poetry format
     ```
 
+### Monitoring
+
+**Grafana Dashboard:** [`gate3-swaps`](https://github.com/brave/gate3-ops/blob/main/common/resources/gate3-swaps-dashboard.yaml) (internal)
+
 ### Deployments
 
 Deployments are managed using the [generalized docker build pipeline](https://github.com/brave-intl/general-docker-build-pipeline-action). To create a new deployment, simply publish a new release on GitHub.
