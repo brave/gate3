@@ -1373,20 +1373,35 @@ async def test_get_status_error(client, mock_httpx_client, mock_supported_tokens
 
 
 @pytest.mark.asyncio
-async def test_requests_fail_without_jwt(mock_supported_tokens_cache):
-    mock_supported_tokens_cache.get.return_value = None
+async def test_create_client_with_jwt(client):
+    with patch(
+        "app.api.swap.providers.near_intents.client.create_http_client"
+    ) as mock_factory:
+        client._create_client()
+        mock_factory.assert_called_once()
+        call_kwargs = mock_factory.call_args[1]
+        assert "Authorization" in call_kwargs["headers"]
+        assert call_kwargs["headers"]["Authorization"] == "Bearer test_jwt_token"
+        assert call_kwargs["timeout"] == 10.0
 
-    with patch("app.api.swap.providers.near_intents.client.settings") as mock_settings:
+
+@pytest.mark.asyncio
+async def test_create_client_without_jwt():
+    with (
+        patch("app.api.swap.providers.near_intents.client.settings") as mock_settings,
+        patch(
+            "app.api.swap.providers.near_intents.client.create_http_client"
+        ) as mock_factory,
+    ):
         mock_settings.NEAR_INTENTS_BASE_URL = "https://1click.chaindefuser.com"
         mock_settings.NEAR_INTENTS_JWT = None
         client = NearIntentsClient()
 
-        with pytest.raises(
-            SwapError, match="NEAR Intents JWT token is not configured"
-        ) as exc_info:
-            await client.get_supported_tokens()
-
-        assert exc_info.value.kind == SwapErrorKind.UNKNOWN
+        client._create_client()
+        mock_factory.assert_called_once()
+        call_kwargs = mock_factory.call_args[1]
+        assert "Authorization" not in call_kwargs["headers"]
+        assert call_kwargs["timeout"] == 10.0
 
 
 # ============================================================================
