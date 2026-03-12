@@ -7,6 +7,7 @@ from app.api.common.utils import is_address_equal
 from app.api.swap.cache import SupportedTokensCache
 from app.api.swap.models import (
     SwapError,
+    SwapErrorKind,
     SwapProviderEnum,
     SwapQuoteRequest,
     SwapRoute,
@@ -67,13 +68,15 @@ class NearIntentsClient(BaseSwapProvider):
         self.token_manager = token_manager
 
     def _create_client(self) -> httpx.AsyncClient:
-        headers = {}
-        if self.jwt_token:
-            headers["Authorization"] = f"Bearer {self.jwt_token}"
+        if not self.jwt_token:
+            raise SwapError(
+                message="NEAR Intents JWT token is not configured",
+                kind=SwapErrorKind.UNKNOWN,
+            )
 
         return create_http_client(
             timeout=10.0,
-            headers=headers,
+            headers={"Authorization": f"Bearer {self.jwt_token}"},
         )
 
     async def get_supported_tokens(self) -> list[TokenInfo]:
