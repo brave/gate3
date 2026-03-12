@@ -8,6 +8,7 @@ import httpx
 logger = logging.getLogger(__name__)
 
 RETRYABLE_STATUS_CODES = {429, 502, 503, 504}
+RETRYABLE_EXCEPTIONS = (httpx.TimeoutException, httpx.ConnectError)
 DEFAULT_MAX_RETRIES = 3
 DEFAULT_INITIAL_DELAY = 0.5
 DEFAULT_MULTIPLIER = 2.0
@@ -41,7 +42,29 @@ class RetryTransport(httpx.AsyncBaseTransport):
         start = time.monotonic()
 
         for attempt in range(self._max_retries + 1):
-            response = await self._wrapped.handle_async_request(request)
+            try:
+                response = await self._wrapped.handle_async_request(request)
+            except RETRYABLE_EXCEPTIONS as exc:
+                elapsed = time.monotonic() - start
+                if attempt == self._max_retries or elapsed >= self._max_total_time:
+                    raise
+
+                wait = self._add_jitter(delay)
+                remaining = self._max_total_time - elapsed
+                if wait >= remaining:
+                    raise
+
+                logger.warning(
+                    "Retrying %s (attempt %d/%d, %s, waiting %.2fs)",
+                    request.url.host,
+                    attempt + 1,
+                    self._max_retries,
+                    type(exc).__name__,
+                    wait,
+                )
+                await asyncio.sleep(wait)
+                delay = min(delay * self._multiplier, self._max_delay)
+                continue
 
             if response.status_code not in RETRYABLE_STATUS_CODES:
                 return response
@@ -59,8 +82,7 @@ class RetryTransport(httpx.AsyncBaseTransport):
                     except ValueError:
                         pass
 
-            jitter = random.uniform(0, self._jitter_factor * wait)
-            wait += jitter
+            wait = self._add_jitter(wait)
 
             remaining = self._max_total_time - elapsed
             if wait >= remaining:
@@ -81,6 +103,9 @@ class RetryTransport(httpx.AsyncBaseTransport):
             delay = min(delay * self._multiplier, self._max_delay)
 
         return response
+
+    def _add_jitter(self, wait: float) -> float:
+        return wait + random.uniform(0, self._jitter_factor * wait)
 
     async def aclose(self) -> None:
         await self._wrapped.aclose()
