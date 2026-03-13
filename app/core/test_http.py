@@ -7,14 +7,16 @@ from app.core.http import RetryTransport, create_http_client
 
 
 class MockTransport(httpx.AsyncBaseTransport):
-    def __init__(self, responses: list[httpx.Response]):
+    def __init__(self, responses: list[httpx.Response | Exception]):
         self.responses = list(responses)
         self.attempt = 0
 
     async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
-        response = self.responses[min(self.attempt, len(self.responses) - 1)]
+        item = self.responses[min(self.attempt, len(self.responses) - 1)]
         self.attempt += 1
-        return response
+        if isinstance(item, Exception):
+            raise item
+        return item
 
 
 def _make_response(status_code: int, headers: dict | None = None) -> httpx.Response:
@@ -145,6 +147,81 @@ async def test_stops_retrying_when_total_time_exceeded():
     response = await transport.handle_async_request(request)
 
     assert response.status_code == 503
+    assert mock.attempt == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "exc",
+    [httpx.ReadTimeout("read timed out"), httpx.ConnectError("connection failed")],
+    ids=["ReadTimeout", "ConnectError"],
+)
+async def test_retries_on_transport_exception_then_succeeds(exc):
+    mock = MockTransport([exc, _make_response(200)])
+    transport = _make_retry_transport(mock, initial_delay=0.0, jitter_factor=0.0)
+
+    request = httpx.Request("GET", "https://example.com")
+    response = await transport.handle_async_request(request)
+
+    assert response.status_code == 200
+    assert mock.attempt == 2
+
+
+@pytest.mark.asyncio
+async def test_raises_exception_when_retries_exhausted():
+    exc = httpx.ReadTimeout("read timed out")
+    mock = MockTransport([exc, exc, exc])
+    transport = _make_retry_transport(
+        mock, max_retries=2, initial_delay=0.0, jitter_factor=0.0
+    )
+
+    request = httpx.Request("GET", "https://example.com")
+    with pytest.raises(httpx.ReadTimeout):
+        await transport.handle_async_request(request)
+
+    assert mock.attempt == 3
+
+
+@pytest.mark.asyncio
+async def test_raises_exception_when_total_time_exceeded():
+    exc = httpx.ReadTimeout("read timed out")
+    mock = MockTransport([exc])
+    transport = _make_retry_transport(
+        mock, max_retries=3, initial_delay=0.0, jitter_factor=0.0, max_total_time=0.0
+    )
+
+    request = httpx.Request("GET", "https://example.com")
+    with pytest.raises(httpx.ReadTimeout):
+        await transport.handle_async_request(request)
+
+    assert mock.attempt == 1
+
+
+@pytest.mark.asyncio
+async def test_mixed_exception_and_status_code_retries():
+    mock = MockTransport(
+        [_make_response(503), httpx.ReadTimeout("read timed out"), _make_response(200)]
+    )
+    transport = _make_retry_transport(
+        mock, max_retries=3, initial_delay=0.0, jitter_factor=0.0
+    )
+
+    request = httpx.Request("GET", "https://example.com")
+    response = await transport.handle_async_request(request)
+
+    assert response.status_code == 200
+    assert mock.attempt == 3
+
+
+@pytest.mark.asyncio
+async def test_non_retryable_exception_propagates_immediately():
+    mock = MockTransport([RuntimeError("unexpected")])
+    transport = _make_retry_transport(mock)
+
+    request = httpx.Request("GET", "https://example.com")
+    with pytest.raises(RuntimeError, match="unexpected"):
+        await transport.handle_async_request(request)
+
     assert mock.attempt == 1
 
 
