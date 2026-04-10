@@ -361,14 +361,14 @@ idna = ">=2.0.0"
 
 [[package]]
 name = "fakeredis"
-version = "2.34.0"
+version = "2.35.0"
 description = "Python implementation of redis API, can be used for testing purposes."
 optional = false
 python-versions = ">=3.7"
 groups = ["main"]
 files = [
-    {file = "fakeredis-2.34.0-py3-none-any.whl", hash = "sha256:bc45d362c6cc3a537f8287372d8ea532538dfbe7f5d635d0905d7b3464ec51d2"},
-    {file = "fakeredis-2.34.0.tar.gz", hash = "sha256:72bc51a7ab39bedf5004f0cf1b5206822619c1be8c2657fd878d1f4250256c57"},
+    {file = "fakeredis-2.35.0-py3-none-any.whl", hash = "sha256:565d337a5492e8c19be33a89e7acc078374741c65cb6d4413bd8818346b8c252"},
+    {file = "fakeredis-2.35.0.tar.gz", hash = "sha256:5d1a0192c2c559e55b2d05328d86282ddd2079c1712a91e6d1b3010e0dd45ca6"},
 ]
 
 [package.dependencies]
@@ -383,6 +383,7 @@ json = ["jsonpath-ng (>=1.6)"]
 lua = ["lupa (>=2.1)"]
 probabilistic = ["pyprobables (>=0.6)"]
 valkey = ["valkey (>=6) ; python_version >= \"3.8\""]
+vectorset = ["jsonpath-ng (>=1.6) ; python_version >= \"3.11\"", "numpy (>=2.4.0) ; python_version >= \"3.11\""]
 
 [[package]]
 name = "fastapi"
