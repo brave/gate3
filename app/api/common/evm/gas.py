@@ -5,62 +5,15 @@ import logging
 import httpx
 from cachetools import TTLCache
 
-from app.config import settings
 from app.core.http import create_http_client
 
-from ..models import Chain, Coin
+from ..models import Chain
+from .utils import get_alchemy_rpc_url, validate_evm_chain
 
 logger = logging.getLogger(__name__)
 
 # Cache gas prices for 2 minutes per chain
 _gas_price_cache: TTLCache[str, int] = TTLCache(maxsize=100, ttl=120)
-
-# Alchemy RPC URL template
-ALCHEMY_RPC_URL_TEMPLATE = "https://{network}.g.alchemy.com/v2/{api_key}"
-
-
-class NotEvmChainError(ValueError):
-    """Raised when a non-EVM chain is passed to an EVM-only function."""
-
-    def __init__(self, chain: Chain):
-        self.chain = chain
-        super().__init__(f"Chain {chain} is not an EVM chain (coin={chain.coin})")
-
-
-def _validate_evm_chain(chain: Chain) -> None:
-    """Validate that the chain is an EVM chain.
-
-    Args:
-        chain: The chain to validate
-
-    Raises:
-        NotEvmChainError: If the chain is not an EVM chain
-    """
-    if chain.coin != Coin.ETH:
-        raise NotEvmChainError(chain)
-
-
-def _get_alchemy_rpc_url(chain: Chain) -> str | None:
-    """Get Alchemy RPC URL for a given EVM chain.
-
-    Args:
-        chain: The EVM chain to get RPC URL for
-
-    Returns:
-        The Alchemy RPC URL or None if API key not configured
-
-    Raises:
-        NotEvmChainError: If the chain is not an EVM chain
-    """
-    _validate_evm_chain(chain)
-
-    if not settings.ALCHEMY_API_KEY:
-        return None
-
-    return ALCHEMY_RPC_URL_TEMPLATE.format(
-        network=chain.alchemy_id,
-        api_key=settings.ALCHEMY_API_KEY,
-    )
 
 
 async def get_gas_price(chain: Chain) -> int | None:
@@ -77,7 +30,7 @@ async def get_gas_price(chain: Chain) -> int | None:
     Raises:
         NotEvmChainError: If the chain is not an EVM chain
     """
-    rpc_url = _get_alchemy_rpc_url(chain)
+    rpc_url = get_alchemy_rpc_url(chain)
     if not rpc_url:
         return None
 
@@ -126,7 +79,7 @@ async def get_eip1559_gas_fees(chain: Chain) -> dict | None:
     Raises:
         NotEvmChainError: If the chain is not an EVM chain
     """
-    rpc_url = _get_alchemy_rpc_url(chain)
+    rpc_url = get_alchemy_rpc_url(chain)
     if not rpc_url:
         return None
 
@@ -209,7 +162,7 @@ async def estimate_gas_limit(
     Raises:
         NotEvmChainError: If the chain is not an EVM chain
     """
-    rpc_url = _get_alchemy_rpc_url(chain)
+    rpc_url = get_alchemy_rpc_url(chain)
     if not rpc_url:
         return None
 
@@ -269,7 +222,7 @@ async def get_evm_gas_price(chain: Chain) -> int | None:
     Raises:
         NotEvmChainError: If the chain is not an EVM chain
     """
-    _validate_evm_chain(chain)
+    validate_evm_chain(chain)
 
     # Check cache first
     cache_key = f"{chain.coin.value}:{chain.chain_id}"
