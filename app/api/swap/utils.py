@@ -21,6 +21,7 @@ from .providers.jupiter.client import JupiterClient
 from .providers.lifi.client import LifiClient
 from .providers.near_intents.client import NearIntentsClient
 from .providers.squid.client import SquidClient
+from .providers.zero_ex.client import ZeroExClient
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +55,7 @@ async def get_provider_client(
     if provider == SwapProviderEnum.NEAR_INTENTS:
         return NearIntentsClient(token_manager=token_manager)
     if provider == SwapProviderEnum.ZERO_EX:
-        raise NotImplementedError("0x provider not yet implemented")
+        return ZeroExClient(token_manager=token_manager)
     if provider == SwapProviderEnum.JUPITER:
         return JupiterClient(token_manager=token_manager)
     if provider == SwapProviderEnum.LIFI:
@@ -130,7 +131,9 @@ def apply_default_slippage(
         provider: The swap provider client
         request: The swap quote request to potentially modify
     """
-    if not provider.has_auto_slippage_support and request.slippage_percentage is None:
+    if not provider.has_auto_slippage_support and (
+        request.slippage_percentage is None or not request.slippage_percentage.strip()
+    ):
         request.slippage_percentage = DEFAULT_SLIPPAGE_PERCENTAGE
 
 

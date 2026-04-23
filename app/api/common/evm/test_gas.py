@@ -8,13 +8,13 @@ import pytest
 from app.api.common.models import Chain
 
 from .gas import (
-    NotEvmChainError,
     _gas_price_cache,
     estimate_gas_limit,
     get_eip1559_gas_fees,
     get_evm_gas_price,
     get_gas_price,
 )
+from .utils import NotEvmChainError
 
 # Fixtures
 
@@ -63,7 +63,7 @@ async def test_raises_for_non_evm_chain(func, chain):
 @pytest.mark.parametrize("func", [get_gas_price, get_eip1559_gas_fees])
 async def test_returns_none_without_api_key(func):
     """Should return None when API key is not configured."""
-    with patch("app.api.common.evm.gas.settings") as mock_settings:
+    with patch("app.api.common.evm.utils.settings") as mock_settings:
         mock_settings.ALCHEMY_API_KEY = None
         result = await func(Chain.ETHEREUM)
         assert result is None
@@ -75,7 +75,7 @@ async def test_returns_none_without_api_key(func):
 @pytest.mark.asyncio
 async def test_get_gas_price_returns_wei(mock_httpx_client):
     """Should return gas price converted from hex to int."""
-    with patch("app.api.common.evm.gas.settings") as mock_settings:
+    with patch("app.api.common.evm.utils.settings") as mock_settings:
         mock_settings.ALCHEMY_API_KEY = "test-api-key"
 
         mock_response = MagicMock()
@@ -93,7 +93,7 @@ async def test_get_gas_price_returns_wei(mock_httpx_client):
 @pytest.mark.asyncio
 async def test_get_gas_price_none_on_rpc_error(mock_httpx_client):
     """Should return None and log warning on RPC error."""
-    with patch("app.api.common.evm.gas.settings") as mock_settings:
+    with patch("app.api.common.evm.utils.settings") as mock_settings:
         mock_settings.ALCHEMY_API_KEY = "test-api-key"
 
         mock_response = MagicMock()
@@ -111,7 +111,7 @@ async def test_get_gas_price_none_on_rpc_error(mock_httpx_client):
 @pytest.mark.asyncio
 async def test_get_gas_price_none_on_http_error(mock_httpx_client):
     """Should return None on HTTP error."""
-    with patch("app.api.common.evm.gas.settings") as mock_settings:
+    with patch("app.api.common.evm.utils.settings") as mock_settings:
         mock_settings.ALCHEMY_API_KEY = "test-api-key"
 
         mock_httpx_client.post.side_effect = httpx.HTTPError("Connection failed")
@@ -126,7 +126,7 @@ async def test_get_gas_price_none_on_http_error(mock_httpx_client):
 @pytest.mark.asyncio
 async def test_get_eip1559_gas_fees_returns_components(mock_httpx_client):
     """Should return base fee, priority fee, and total."""
-    with patch("app.api.common.evm.gas.settings") as mock_settings:
+    with patch("app.api.common.evm.utils.settings") as mock_settings:
         mock_settings.ALCHEMY_API_KEY = "test-api-key"
 
         # Base fee: 0x3b9aca00 = 1 gwei
@@ -156,7 +156,7 @@ async def test_get_eip1559_gas_fees_returns_components(mock_httpx_client):
 @pytest.mark.asyncio
 async def test_get_eip1559_gas_fees_none_without_base_fees(mock_httpx_client):
     """Should return None when baseFeePerGas is empty."""
-    with patch("app.api.common.evm.gas.settings") as mock_settings:
+    with patch("app.api.common.evm.utils.settings") as mock_settings:
         mock_settings.ALCHEMY_API_KEY = "test-api-key"
 
         mock_response = MagicMock()
@@ -177,7 +177,7 @@ async def test_get_eip1559_gas_fees_none_without_base_fees(mock_httpx_client):
 @pytest.mark.asyncio
 async def test_get_eip1559_gas_fees_handles_zero_priority_fee(mock_httpx_client):
     """Should handle case with no priority fee rewards."""
-    with patch("app.api.common.evm.gas.settings") as mock_settings:
+    with patch("app.api.common.evm.utils.settings") as mock_settings:
         mock_settings.ALCHEMY_API_KEY = "test-api-key"
 
         mock_response = MagicMock()
@@ -332,7 +332,7 @@ async def test_estimate_gas_limit_raises_for_non_evm_chain(chain):
 @pytest.mark.asyncio
 async def test_estimate_gas_limit_returns_none_without_api_key():
     """Should return None when API key is not configured."""
-    with patch("app.api.common.evm.gas.settings") as mock_settings:
+    with patch("app.api.common.evm.utils.settings") as mock_settings:
         mock_settings.ALCHEMY_API_KEY = None
         result = await estimate_gas_limit(
             chain=Chain.ETHEREUM,
@@ -347,7 +347,7 @@ async def test_estimate_gas_limit_returns_none_without_api_key():
 @pytest.mark.asyncio
 async def test_estimate_gas_limit_none_on_rpc_error(mock_httpx_client):
     """Should return None and log warning on RPC error."""
-    with patch("app.api.common.evm.gas.settings") as mock_settings:
+    with patch("app.api.common.evm.utils.settings") as mock_settings:
         mock_settings.ALCHEMY_API_KEY = "test-api-key"
 
         mock_response = MagicMock()
@@ -371,7 +371,7 @@ async def test_estimate_gas_limit_none_on_rpc_error(mock_httpx_client):
 @pytest.mark.asyncio
 async def test_estimate_gas_limit_none_on_http_error(mock_httpx_client):
     """Should return None on HTTP error."""
-    with patch("app.api.common.evm.gas.settings") as mock_settings:
+    with patch("app.api.common.evm.utils.settings") as mock_settings:
         mock_settings.ALCHEMY_API_KEY = "test-api-key"
 
         mock_httpx_client.post.side_effect = httpx.HTTPError("Connection failed")
@@ -395,7 +395,7 @@ async def test_estimate_gas_limit_works_for_various_evm_chains(
     mock_httpx_client, chain
 ):
     """Should work for various EVM chains."""
-    with patch("app.api.common.evm.gas.settings") as mock_settings:
+    with patch("app.api.common.evm.utils.settings") as mock_settings:
         mock_settings.ALCHEMY_API_KEY = "test-api-key"
 
         mock_response = MagicMock()

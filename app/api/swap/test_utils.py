@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from app.api.common.models import Coin
+from app.api.swap.constants import DEFAULT_SLIPPAGE_PERCENTAGE
 from app.api.swap.models import (
     NetworkFee,
     RoutePriority,
@@ -17,6 +18,7 @@ from app.api.swap.models import (
     SwapType,
 )
 from app.api.swap.utils import (
+    apply_default_slippage,
     get_all_indicative_routes,
     get_provider_client_for_request,
     sort_routes,
@@ -502,3 +504,31 @@ async def test_get_provider_client_for_request_unsupported_swap_raises_swap_erro
 
         assert exc_info.value.kind == SwapErrorKind.UNSUPPORTED_TOKENS
         assert "NEAR_INTENTS" in exc_info.value.message
+
+
+@pytest.mark.parametrize(
+    "input_slippage,auto_slippage,expected",
+    [
+        # Empty/whitespace slippage is normalized to the default
+        (None, False, DEFAULT_SLIPPAGE_PERCENTAGE),
+        ("", False, DEFAULT_SLIPPAGE_PERCENTAGE),
+        ("   ", False, DEFAULT_SLIPPAGE_PERCENTAGE),
+        # A concrete value is left untouched
+        ("1.5", False, "1.5"),
+        # Auto-slippage providers skip default application entirely
+        (None, True, None),
+        ("", True, ""),
+    ],
+)
+def test_apply_default_slippage_normalizes_empty(
+    input_slippage, auto_slippage, expected
+):
+    provider = AsyncMock()
+    provider.has_auto_slippage_support = auto_slippage
+
+    request = create_mock_request()
+    request.slippage_percentage = input_slippage
+
+    apply_default_slippage(provider, request)
+
+    assert request.slippage_percentage == expected
