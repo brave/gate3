@@ -10,25 +10,22 @@ class Cache:
     _redis_client: redis.Redis | None = None
 
     @classmethod
-    async def init(cls) -> None:
-        cls._redis_client = redis.Redis(
-            host=settings.REDIS_HOST,
-            port=settings.REDIS_PORT,
-            db=settings.REDIS_DB,
-            password=settings.REDIS_PASSWORD,
-            decode_responses=True,
-        )
+    async def init(cls) -> redis.Redis:
+        if cls._redis_client is None:
+            cls._redis_client = redis.Redis(
+                host=settings.REDIS_HOST,
+                port=settings.REDIS_PORT,
+                db=settings.REDIS_DB,
+                password=settings.REDIS_PASSWORD,
+                decode_responses=True,
+            )
+        return cls._redis_client
 
     @classmethod
     @asynccontextmanager
     async def get_client(cls) -> AsyncGenerator[redis.Redis, None]:
         """Get Redis client with proper lifecycle management"""
-        if cls._redis_client is None:
-            await cls.init()
-        try:
-            yield cls._redis_client
-        except Exception as e:
-            raise e
+        yield await cls.init()
 
     @classmethod
     async def ping(cls) -> bool:
