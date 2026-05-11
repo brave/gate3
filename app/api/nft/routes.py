@@ -15,7 +15,6 @@ from app.api.nft.models import (
     SimpleHashTokenType,
     SolanaAsset,
     SolanaAssetMerkleProof,
-    SolanaAssetRawContent,
     SolanaAssetResponse,
     TraitAttribute,
 )
@@ -133,7 +132,7 @@ def _transform_alchemy_to_simplehash(
     )
 
 
-async def _transform_solana_asset_to_simplehash(asset: SolanaAsset) -> SimpleHashNFT:
+def _transform_solana_asset_to_simplehash(asset: SolanaAsset) -> SimpleHashNFT:
     # Skip burnt NFTs or assets without content
     if asset.burnt or not asset.content or not asset.content.metadata:
         return None
@@ -165,19 +164,6 @@ async def _transform_solana_asset_to_simplehash(asset: SolanaAsset) -> SimpleHas
             ),
             None,
         )
-
-    if not any([name, symbol, description, image_url]):
-        async with create_http_client() as client:
-            raw_content_response = await client.get(asset.content.json_uri)
-            raw_content_response.raise_for_status()
-            raw_content_data = SolanaAssetRawContent.model_validate(
-                raw_content_response.json()
-            )
-
-            name = name or raw_content_data.name
-            symbol = symbol or raw_content_data.symbol
-            description = description or raw_content_data.description
-            image_url = image_url or raw_content_data.image
 
     return SimpleHashNFT(
         chain=Chain.SOLANA.simplehash_id,
@@ -265,9 +251,7 @@ async def get_nfts_by_owner(
 
                 # Transform Solana assets to SimpleHash format
                 for asset in solana_response.items:
-                    if transformed_nft := await _transform_solana_asset_to_simplehash(
-                        asset
-                    ):
+                    if transformed_nft := _transform_solana_asset_to_simplehash(asset):
                         nfts.append(transformed_nft)
 
                 next_page_key = page_key + 1 if page_key else None
@@ -375,7 +359,7 @@ async def get_nfts_by_ids(
 
             # Transform Solana assets to SimpleHash format
             for solana_asset in solana_assets:
-                if transformed_nft := await _transform_solana_asset_to_simplehash(
+                if transformed_nft := _transform_solana_asset_to_simplehash(
                     solana_asset
                 ):
                     nfts.append(transformed_nft)
