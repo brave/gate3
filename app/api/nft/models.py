@@ -201,13 +201,6 @@ class SolanaAssetMerkleProof(BaseModel):
     )
 
 
-class SolanaAssetRawContent(BaseModel):
-    name: str
-    symbol: str | None = None
-    description: str | None = None
-    image: str | None = None
-
-
 class SolanaAssetContentFile(BaseModel):
     uri: str
     mime: str
