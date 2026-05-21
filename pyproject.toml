@@ -1,6 +1,6 @@
 [project]
 name = "gate3"
-version = "0.17.1"
+version = "0.18.0"
 description = "Gate API for web3 applications at Brave"
 authors = [
 ]
@@ -42,7 +42,7 @@ respx = "0.23.1"
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
-addopts = "-rvA --cov=app --cov-report=term-missing"
+addopts = "-rvA --cov=app --cov-report=term-missing --ignore=integration"
 markers = [
     "sanity: marks tests as sanity checks",
 ]

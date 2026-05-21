@@ -18,7 +18,7 @@ COPY ./app /code/app
 COPY ./data /code/data
 
 # Run the application
-CMD ["fastapi", "run", "--host", "0.0.0.0", "--port", "80"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "80"]
 
 # Expose the Prometheus port
 EXPOSE 8090
