@@ -33,6 +33,7 @@ class PingResponse(BaseModel):
 class Coin(str, Enum):
     ADA = "ADA"
     BTC = "BTC"
+    DOT = "DOT"
     ETH = "ETH"
     FIL = "FIL"
     SOL = "SOL"
@@ -214,6 +215,18 @@ class Chain(Enum):
         native_asset_name="Zcash",
         symbol="ZEC",
         decimals=8,
+    )
+    POLKADOT = _c(
+        coin=Coin.DOT,
+        chain_id="polkadot_mainnet",
+        simplehash_id="polkadot",
+        alchemy_id="polkadot-mainnet",
+        near_intents_id=None,
+        has_nft_support=False,
+        name="Polkadot",
+        native_asset_name="Polkadot",
+        symbol="DOT",
+        decimals=10,
     )
 
     def __getattr__(self, name):

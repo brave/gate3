@@ -130,6 +130,47 @@ async def test_filter_excludes_native_token_with_null_native_token_id(client):
 
 
 @pytest.mark.asyncio
+async def test_native_polkadot_resolves_to_coingecko_id(client):
+    """Native DOT (polkadot_mainnet) maps to the 'polkadot' CoinGecko id."""
+    request = TokenPriceRequest(
+        coin=Chain.POLKADOT.coin, chain_id=Chain.POLKADOT.chain_id, address=None
+    )
+
+    coingecko_id = await client._get_coingecko_id_from_request(
+        request, platform_map={}, coin_map={}
+    )
+
+    assert coingecko_id == "polkadot"
+
+
+@pytest.mark.asyncio
+async def test_filter_includes_native_polkadot(client):
+    """Native DOT is available on CoinGecko without needing platform/coin maps."""
+    batch = BatchTokenPriceRequests(
+        requests=[
+            TokenPriceRequest(
+                coin=Chain.POLKADOT.coin,
+                chain_id=Chain.POLKADOT.chain_id,
+                address=None,
+            ),
+        ],
+        vs_currency=VsCurrency.USD,
+    )
+
+    with (
+        patch.object(client, "get_platform_map") as mock_platform_map,
+        patch.object(client, "get_coin_map") as mock_coin_map,
+    ):
+        mock_platform_map.return_value = {}
+        mock_coin_map.return_value = {}
+
+        available, unavailable = await client.filter(batch)
+
+        assert available.size() == 1
+        assert unavailable.is_empty()
+
+
+@pytest.mark.asyncio
 async def test_filter_includes_native_token_when_native_token_id_present(client):
     """Test that filter marks tokens as available when platform has native_token_id."""
     batch = BatchTokenPriceRequests(
