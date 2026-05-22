@@ -176,6 +176,9 @@ class CoinGeckoClient:
         elif chain == Chain.ZCASH:
             return "zcash"
 
+        elif chain == Chain.POLKADOT:
+            return "polkadot"
+
         elif chain == Chain.SOLANA and not request.address:
             return "solana"
 
