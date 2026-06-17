@@ -10,7 +10,7 @@ import respx
 
 from app.api.common.models import Chain, Coin, TokenInfo, TokenSource, TokenType
 from app.api.tokens.contants import SPL_TOKEN_2022_PROGRAM_ID, SPL_TOKEN_PROGRAM_ID
-from app.api.tokens.manager import TokenManager
+from app.api.tokens.manager import TOKEN_SCHEMA_VERSION, TokenManager
 
 
 class AsyncFakeRedis(fakeredis.FakeAsyncRedis):
@@ -858,3 +858,76 @@ def test_token_info_token_type_defaults_to_unknown():
     )
 
     assert token.token_type == TokenType.UNKNOWN
+
+
+def _ingestion_patches():
+    return (
+        patch.object(TokenManager, "create_index"),
+        patch.object(TokenManager, "ingest_from_coingecko"),
+        patch.object(TokenManager, "ingest_from_jupiter"),
+        patch.object(TokenManager, "ingest_from_near_intents"),
+        patch.object(TokenManager, "ingest_from_lifi"),
+    )
+
+
+@pytest.mark.asyncio
+async def test_refresh_writes_schema_version(cache):
+    redis_client = cache.get_client.return_value.__aenter__.return_value
+
+    create_index, coingecko, jupiter, near_intents, lifi = _ingestion_patches()
+    with create_index, coingecko, jupiter, near_intents, lifi:
+        await TokenManager.refresh()
+
+    stored = await redis_client.get(TokenManager.schema_version_key)
+    if isinstance(stored, bytes):
+        stored = stored.decode()
+    assert stored == TOKEN_SCHEMA_VERSION
+
+
+@pytest.mark.asyncio
+async def test_refresh_if_stale_reseeds_when_empty(cache):
+    create_index, coingecko, jupiter, near_intents, lifi = _ingestion_patches()
+    with create_index, coingecko, jupiter, near_intents, lifi:
+        performed = await TokenManager.refresh_if_stale()
+
+    assert performed is True
+    assert await TokenManager.get(Chain.SOLANA.coin, Chain.SOLANA.chain_id, None)
+
+
+@pytest.mark.asyncio
+async def test_refresh_if_stale_noop_when_current(cache, sample_token_info):
+    redis_client = cache.get_client.return_value.__aenter__.return_value
+    await TokenManager.add(sample_token_info)
+    await redis_client.set(TokenManager.schema_version_key, TOKEN_SCHEMA_VERSION)
+
+    with patch.object(TokenManager, "refresh", new=AsyncMock()) as mock_refresh:
+        performed = await TokenManager.refresh_if_stale()
+
+    assert performed is False
+    mock_refresh.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_refresh_if_stale_reseeds_on_schema_bump(cache, sample_token_info):
+    redis_client = cache.get_client.return_value.__aenter__.return_value
+    await TokenManager.add(sample_token_info)
+    await redis_client.set(TokenManager.schema_version_key, "0")
+
+    with patch.object(TokenManager, "refresh", new=AsyncMock()) as mock_refresh:
+        performed = await TokenManager.refresh_if_stale()
+
+    assert performed is True
+    mock_refresh.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_refresh_if_stale_skips_when_another_replica_holds_lock(cache):
+    redis_client = cache.get_client.return_value.__aenter__.return_value
+    # Registry is empty (stale), but another replica already owns the lock.
+    await redis_client.set(TokenManager.reseed_lock_key, "1")
+
+    with patch.object(TokenManager, "refresh", new=AsyncMock()) as mock_refresh:
+        performed = await TokenManager.refresh_if_stale()
+
+    assert performed is False
+    mock_refresh.assert_not_called()

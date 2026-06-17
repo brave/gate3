@@ -16,10 +16,20 @@ logger = logging.getLogger(__name__)
 
 TokenRegistry = dict[str, dict[str, str]]
 
+# Bump whenever the stored shape of a token record changes (a new required
+# field, a renamed field, etc.) so running instances reseed the registry on
+# their next startup instead of serving records the current code can't parse.
+TOKEN_SCHEMA_VERSION = "1"
+
 
 class TokenManager:
     key_prefix = "token"
     index_name = "token_idx"
+
+    # Metadata keys live outside the "token:*" namespace so _clear_tokens and
+    # the search index never touch them.
+    schema_version_key = "token_meta:schema_version"
+    reseed_lock_key = "token_meta:reseed_lock"
 
     # Pre-computed chain lookup for O(1) access
     _chain_lookup = {chain.chain_id: chain for chain in Chain}
@@ -120,6 +130,56 @@ class TokenManager:
             # Create index and execute atomically
             await cls.create_index()
             await pipe.execute()
+
+            # Record the schema version the registry was written with.
+            await redis_client.set(cls.schema_version_key, TOKEN_SCHEMA_VERSION)
+
+    @classmethod
+    async def is_empty(cls) -> bool:
+        """Return True if the registry contains no token records."""
+        async with Cache.get_client() as redis_client:
+            cursor = 0
+            while True:
+                cursor, keys = await redis_client.scan(
+                    cursor, match=f"{cls.key_prefix}:*", count=100
+                )
+                if keys:
+                    return False
+                if cursor == 0:
+                    return True
+
+    @classmethod
+    async def _is_stale(cls) -> bool:
+        """The registry needs reseeding if it is empty or schema-outdated."""
+        if await cls.is_empty():
+            return True
+
+        async with Cache.get_client() as redis_client:
+            stored = await redis_client.get(cls.schema_version_key)
+        if isinstance(stored, bytes):
+            stored = stored.decode()
+        return stored != TOKEN_SCHEMA_VERSION
+
+    @classmethod
+    async def refresh_if_stale(cls) -> bool:
+        """Reseed the registry on cold start or after a schema bump.
+
+        Makes the registry self-healing: a fresh/wiped Redis or a schema change
+        no longer requires a manual admin refresh before swaps work. A short
+        Redis lock ensures only one replica reseeds when many boot at once.
+
+        Returns True if this instance performed the reseed.
+        """
+        if not await cls._is_stale():
+            return False
+
+        async with Cache.get_client() as redis_client:
+            acquired = await redis_client.set(cls.reseed_lock_key, "1", nx=True, ex=300)
+        if not acquired:
+            return False
+
+        await cls.refresh()
+        return True
 
     @classmethod
     async def _clear_tokens(cls, pipe) -> None:

@@ -1,3 +1,5 @@
+import asyncio
+import logging
 import subprocess
 from contextlib import asynccontextmanager
 
@@ -18,9 +20,12 @@ from app.api.oauth.routes import router as oauth_router
 from app.api.pricing.routes import router as pricing_router
 from app.api.swap.routes import router as swap_router
 from app.api.swap.routes import setup_swap_error_handler
+from app.api.tokens.manager import TokenManager
 from app.api.tokens.routes import router as tokens_router
 from app.config import settings
 from app.core.cache import Cache
+
+logger = logging.getLogger(__name__)
 
 version = subprocess.run(
     ["poetry", "version", "--short"], capture_output=True, text=True, check=True
@@ -48,9 +53,25 @@ async def lifespan_metrics(app: FastAPI):
     yield
 
 
+async def _reseed_tokens_if_stale():
+    try:
+        if await TokenManager.refresh_if_stale():
+            logger.info("Token registry was stale; reseeded on startup")
+    except Exception:
+        logger.exception("Failed to reseed token registry on startup")
+
+
+@asynccontextmanager
+async def lifespan_tokens(app: FastAPI):
+    # Reseed in the background so a cold/stale Redis neither blocks startup nor
+    # crashes the app when an upstream token source is briefly unavailable.
+    app.state.token_seed_task = asyncio.create_task(_reseed_tokens_if_stale())
+    yield
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    async with lifespan_cache(app), lifespan_metrics(app):
+    async with lifespan_cache(app), lifespan_tokens(app), lifespan_metrics(app):
         yield
 
 
