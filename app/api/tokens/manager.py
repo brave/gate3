@@ -518,18 +518,3 @@ class TokenManager:
         result = await index.search(q)
 
         return cls._as_response(result, query, offset, limit)
-
-    @staticmethod
-    async def mock_fetch_from_blockchain(
-        coin: Coin, chain_id: str, address: str
-    ) -> TokenInfo | None:
-        return TokenInfo(
-            coin=coin,
-            chain_id=chain_id.lower(),
-            address=address,
-            name="Mock Token",
-            symbol="MTK",
-            decimals=18,
-            logo="https://example.com/mock-logo.png",
-            sources=[TokenSource.UNKNOWN],
-        )

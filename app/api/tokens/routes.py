@@ -22,31 +22,12 @@ async def get_token_info(
     chain_id: str = Query(..., description=CHAIN_ID_DESCRIPTION),
     address: str | None = Query(None, description=ADDRESS_DESCRIPTION),
 ):
-    try:
-        # First try to get from Redis
-        token_info = await TokenManager.get(
-            coin=coin, chain_id=chain_id, address=address
-        )
+    token_info = await TokenManager.get(coin=coin, chain_id=chain_id, address=address)
 
-        if token_info:
-            return token_info
-
-        # If not found, try to fetch from blockchain (mock for now)
-        blockchain_token = await TokenManager.mock_fetch_from_blockchain(
-            coin, chain_id, address
-        )
-
-        if blockchain_token:
-            # Store the token in Redis for future requests
-            await TokenManager.add(blockchain_token)
-            return blockchain_token
-
-        # Token not found anywhere
+    if token_info is None:
         raise HTTPException(status_code=404, detail="Token not found")
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+    return token_info
 
 
 @router.get("/v1/list", response_model=list[TokenInfo])
