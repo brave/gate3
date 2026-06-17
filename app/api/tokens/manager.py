@@ -315,6 +315,17 @@ class TokenManager:
             logger.error("Error retrieving token: %s", e)
             return None
 
+    @staticmethod
+    def _coerce_token_type(raw: str | None) -> TokenType:
+        """Map a missing or unrecognized stored token_type to UNKNOWN."""
+        try:
+            return TokenType(raw) if raw else TokenType.UNKNOWN
+        except ValueError:
+            logger.warning(
+                "Unrecognized token_type %r in registry; defaulting to UNKNOWN", raw
+            )
+            return TokenType.UNKNOWN
+
     @classmethod
     def _build_key(cls, coin: Coin, chain_id: str, address: str | None = None) -> str:
         return ":".join(
@@ -344,8 +355,10 @@ class TokenManager:
 
         return token_data
 
-    @staticmethod
-    def _parse_token_from_redis_data(key: str, token_data: dict[str, str]) -> TokenInfo:
+    @classmethod
+    def _parse_token_from_redis_data(
+        cls, key: str, token_data: dict[str, str]
+    ) -> TokenInfo:
         # Parse the key to extract coin and chain_id (but not address, since it's lowercased in the key)
         key_parts = key.decode("utf-8") if isinstance(key, bytes) else key
         _, coin_str, chain_id, _ = key_parts.split(":", 3)
@@ -362,7 +375,7 @@ class TokenManager:
             decimals=int(token_data["decimals"]),
             logo=token_data.get("logo") or None,
             sources=json.loads(token_data.get("sources", "[]")),
-            token_type=TokenType(token_data["token_type"]),
+            token_type=cls._coerce_token_type(token_data.get("token_type")),
             near_intents_asset_id=token_data.get("near_intents_asset_id") or None,
         )
 
@@ -378,9 +391,9 @@ class TokenManager:
         except Exception as e:
             logger.error("Error adding token: %s", e)
 
-    @staticmethod
+    @classmethod
     def _as_response(
-        result, query: str, offset: int, limit: int
+        cls, result, query: str, offset: int, limit: int
     ) -> TokenSearchResponse:
         results = []
         for doc in result.docs:
@@ -396,7 +409,7 @@ class TokenManager:
                 decimals=int(doc.decimals),
                 logo=doc.logo,
                 sources=json.loads(doc.sources),
-                token_type=TokenType(doc.token_type),
+                token_type=cls._coerce_token_type(getattr(doc, "token_type", None)),
                 near_intents_asset_id=doc.near_intents_asset_id or None,
             )
 

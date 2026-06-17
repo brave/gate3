@@ -308,7 +308,7 @@ class TokenInfo(BaseModel):
     decimals: int = Field(..., description="Token decimals")
     logo: str | None = Field(None, description="Token logo URL")
     sources: list[TokenSource] = Field(..., description="Token sources")
-    token_type: TokenType = Field(..., description="Token type")
+    token_type: TokenType = Field(default=TokenType.UNKNOWN, description="Token type")
     near_intents_asset_id: str | None = Field(None, description="NEAR Intents asset ID")
 
     @property

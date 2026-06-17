@@ -789,3 +789,72 @@ async def test_refresh_with_lifi_data(cache):
     assert result.symbol == "LIFI"
     assert result.decimals == 18
     assert TokenSource.LIFI in result.sources
+
+
+@pytest.mark.asyncio
+async def test_get_token_missing_token_type_defaults_to_unknown(cache):
+    """A legacy record written before token_type existed must still parse."""
+    redis_client = cache.get_client.return_value.__aenter__.return_value
+    address = "EPeUFDgHRxs9xxEPVaL6kfGQvCon7jmAWKVUHuux1Tpz"
+    key = f"token:sol:0x65:{address.lower()}"
+
+    await redis_client.hset(
+        key,
+        mapping={
+            "coin": "SOL",
+            "chain_id": "0x65",
+            "address": address,
+            "name": "Basic Attention Token (Portal)",
+            "symbol": "BAT",
+            "decimals": "8",
+            "logo": "",
+            "sources": json.dumps([TokenSource.COINGECKO.value]),
+            # token_type intentionally absent (pre-migration record)
+        },
+    )
+
+    result = await TokenManager.get(Chain.SOLANA.coin, Chain.SOLANA.chain_id, address)
+
+    assert result is not None
+    assert result.symbol == "BAT"
+    assert result.token_type == TokenType.UNKNOWN
+
+
+@pytest.mark.asyncio
+async def test_get_token_invalid_token_type_defaults_to_unknown(cache):
+    redis_client = cache.get_client.return_value.__aenter__.return_value
+    address = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
+    key = f"token:sol:0x65:{address.lower()}"
+
+    await redis_client.hset(
+        key,
+        mapping={
+            "coin": "SOL",
+            "chain_id": "0x65",
+            "address": address,
+            "name": "USD Coin",
+            "symbol": "USDC",
+            "decimals": "6",
+            "logo": "",
+            "sources": json.dumps([TokenSource.COINGECKO.value]),
+            "token_type": "NOT_A_REAL_TYPE",
+        },
+    )
+
+    result = await TokenManager.get(Chain.SOLANA.coin, Chain.SOLANA.chain_id, address)
+
+    assert result is not None
+    assert result.token_type == TokenType.UNKNOWN
+
+
+def test_token_info_token_type_defaults_to_unknown():
+    token = TokenInfo(
+        coin=Coin.SOL,
+        chain_id="0x65",
+        name="Mock Token",
+        symbol="MTK",
+        decimals=9,
+        sources=[TokenSource.UNKNOWN],
+    )
+
+    assert token.token_type == TokenType.UNKNOWN
