@@ -22,6 +22,15 @@ from .utils import chunk_sequence
 
 logger = logging.getLogger(__name__)
 
+# CoinGecko platform ids that don't carry a numeric chain_identifier and must be
+# mapped to a specific chain. CoinGecko groups Polkadot ecosystem assets (e.g.
+# USDC, keyed by Asset Hub asset ids) under a single "polkadot" platform, so it
+# maps to Asset Hub where those assets actually live.
+_COINGECKO_PLATFORM_OVERRIDES = {
+    "solana": Chain.SOLANA,
+    "polkadot": Chain.POLKADOT_ASSET_HUB,
+}
+
 
 class CoinGeckoClient:
     def __init__(self):
@@ -176,7 +185,9 @@ class CoinGeckoClient:
         elif chain == Chain.ZCASH:
             return "zcash"
 
-        elif chain == Chain.POLKADOT:
+        elif (
+            chain in (Chain.POLKADOT, Chain.POLKADOT_ASSET_HUB) and not request.address
+        ):
             return "polkadot"
 
         elif chain == Chain.SOLANA and not request.address:
@@ -190,8 +201,11 @@ class CoinGeckoClient:
 
             return None
 
-        # EVM and Solana tokens
-        elif request.coin in [Coin.SOL, Coin.ETH] and request.address:
+        # EVM, Solana, and Polkadot Asset Hub tokens. Relay-chain Polkadot only
+        # supports native DOT, so token-by-address is limited to Asset Hub.
+        elif request.address and (
+            request.coin in [Coin.SOL, Coin.ETH] or chain == Chain.POLKADOT_ASSET_HUB
+        ):
             return coin_map.get(request.chain_id, {}).get(request.address.lower())
 
         return None
@@ -225,13 +239,21 @@ class CoinGeckoClient:
             coin_map = {}
             for item in data:
                 for platform_id, contract_address in item["platforms"].items():
-                    if platform_id in platform_map:
+                    if platform_id in platform_map and contract_address:
                         chain_id = platform_map[platform_id].chain_id
-                        if chain_id not in coin_map:
-                            coin_map[chain_id] = {}
-                        coin_map[chain_id][contract_address.lower()] = item[
-                            "id"
-                        ].lower()
+
+                        # Asset Hub assets are identified by integer asset IDs.
+                        # CoinGecko sometimes mistags EVM-style addresses under its
+                        # "polkadot" platform, so keep only numeric asset IDs there.
+                        if (
+                            chain_id == Chain.POLKADOT_ASSET_HUB.chain_id
+                            and not contract_address.isdigit()
+                        ):
+                            continue
+
+                        coin_map.setdefault(chain_id, {})[contract_address.lower()] = (
+                            item["id"].lower()
+                        )
 
             # Cache in Redis
             await CoinMapCache.set(coin_map)
@@ -251,8 +273,8 @@ class CoinGeckoClient:
             platform_map = {}
             for item in data:
                 chain_id = None
-                if item["id"] == "solana":
-                    chain_id = Chain.SOLANA.chain_id
+                if override := _COINGECKO_PLATFORM_OVERRIDES.get(item["id"]):
+                    chain_id = override.chain_id
                 elif item["chain_identifier"]:
                     chain_id = hex(item["chain_identifier"])
 

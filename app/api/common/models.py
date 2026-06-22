@@ -228,6 +228,18 @@ class Chain(Enum):
         symbol="DOT",
         decimals=10,
     )
+    POLKADOT_ASSET_HUB = _c(
+        coin=Coin.DOT,
+        chain_id="polkadot_asset_hub",
+        simplehash_id="polkadot-asset-hub",
+        alchemy_id="polkadot-asset-hub-mainnet",
+        near_intents_id=None,
+        has_nft_support=False,
+        name="Polkadot Asset Hub",
+        native_asset_name="Polkadot",
+        symbol="DOT",
+        decimals=10,
+    )
 
     def __getattr__(self, name):
         """Delegate attribute access to the chain info"""
