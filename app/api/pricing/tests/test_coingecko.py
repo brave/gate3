@@ -302,6 +302,65 @@ async def test_get_coin_map_maps_asset_hub_assets_and_skips_empty(
 
 
 @pytest.mark.asyncio
+async def test_get_coin_map_skips_platforms_without_chain_id(client, mock_httpx_client):
+    """Platforms with no resolved chain_id must not create a null key in the coin map."""
+    platform_map = {
+        "ethereum": CoingeckoPlatform(
+            id="ethereum", chain_id="0x1", native_token_id="ethereum"
+        ),
+        "near-protocol": CoingeckoPlatform(
+            id="near-protocol", chain_id=None, native_token_id="near"
+        ),
+    }
+    mock_response = AsyncMock()
+    mock_response.json = lambda: [
+        {
+            "id": "usd-coin",
+            "symbol": "usdc",
+            "platforms": {"ethereum": "0xA0b8", "near-protocol": "usdc.near"},
+        },
+    ]
+    mock_response.raise_for_status = lambda: None
+    mock_httpx_client.get.return_value = mock_response
+
+    with (
+        patch(
+            "app.api.pricing.coingecko.CoinMapCache.get",
+            new_callable=AsyncMock,
+            return_value=None,
+        ),
+        patch("app.api.pricing.coingecko.CoinMapCache.set", new_callable=AsyncMock),
+    ):
+        coin_map = await client.get_coin_map(platform_map)
+
+    assert None not in coin_map
+    assert coin_map["0x1"] == {"0xa0b8": "usd-coin"}
+
+
+@pytest.mark.asyncio
+async def test_filter_token_lookup_is_case_insensitive_on_chain_id(client):
+    """A mixed-case chain_id still resolves against the lowercase-keyed coin map."""
+    batch = BatchTokenPriceRequests(
+        requests=[
+            TokenPriceRequest(coin=Coin.ETH, chain_id="0X1", address="0xABC"),
+        ],
+        vs_currency=VsCurrency.USD,
+    )
+
+    with (
+        patch.object(client, "get_platform_map") as mock_platform_map,
+        patch.object(client, "get_coin_map") as mock_coin_map,
+    ):
+        mock_platform_map.return_value = {}
+        mock_coin_map.return_value = {"0x1": {"0xabc": "some-token"}}
+
+        available, unavailable = await client.filter(batch)
+
+        assert available.size() == 1
+        assert unavailable.is_empty()
+
+
+@pytest.mark.asyncio
 async def test_filter_excludes_relay_chain_polkadot_token(client):
     """Relay-chain Polkadot supports only native DOT; a token address is unavailable."""
     batch = BatchTokenPriceRequests(

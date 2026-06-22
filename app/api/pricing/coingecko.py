@@ -206,7 +206,9 @@ class CoinGeckoClient:
         elif request.address and (
             request.coin in [Coin.SOL, Coin.ETH] or chain == Chain.POLKADOT_ASSET_HUB
         ):
-            return coin_map.get(request.chain_id, {}).get(request.address.lower())
+            return coin_map.get(request.chain_id.lower(), {}).get(
+                request.address.lower()
+            )
 
         return None
 
@@ -241,6 +243,8 @@ class CoinGeckoClient:
                 for platform_id, contract_address in item["platforms"].items():
                     if platform_id in platform_map and contract_address:
                         chain_id = platform_map[platform_id].chain_id
+                        if chain_id is None:
+                            continue
 
                         # Asset Hub assets are identified by integer asset IDs.
                         # CoinGecko sometimes mistags EVM-style addresses under its
