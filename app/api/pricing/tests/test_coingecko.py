@@ -171,6 +171,261 @@ async def test_filter_includes_native_polkadot(client):
 
 
 @pytest.mark.asyncio
+async def test_filter_includes_native_polkadot_asset_hub(client):
+    """Native DOT on Polkadot Asset Hub is available on CoinGecko without platform/coin maps."""
+    batch = BatchTokenPriceRequests(
+        requests=[
+            TokenPriceRequest(
+                coin=Chain.POLKADOT_ASSET_HUB.coin,
+                chain_id=Chain.POLKADOT_ASSET_HUB.chain_id,
+                address=None,
+            ),
+        ],
+        vs_currency=VsCurrency.USD,
+    )
+
+    with (
+        patch.object(client, "get_platform_map") as mock_platform_map,
+        patch.object(client, "get_coin_map") as mock_coin_map,
+    ):
+        mock_platform_map.return_value = {}
+        mock_coin_map.return_value = {}
+
+        available, unavailable = await client.filter(batch)
+
+        assert available.size() == 1
+        assert unavailable.is_empty()
+
+
+@pytest.mark.asyncio
+async def test_get_prices_native_polkadot_asset_hub(client, mock_httpx_client):
+    """Native DOT on Polkadot Asset Hub is priced via the 'polkadot' CoinGecko id."""
+    batch = BatchTokenPriceRequests(
+        requests=[
+            TokenPriceRequest(
+                coin=Chain.POLKADOT_ASSET_HUB.coin,
+                chain_id=Chain.POLKADOT_ASSET_HUB.chain_id,
+                address=None,
+            ),
+        ],
+        vs_currency=VsCurrency.USD,
+    )
+
+    with (
+        patch("app.api.pricing.coingecko.CoingeckoPriceCache.get") as mock_cache,
+        patch(
+            "app.api.pricing.coingecko.CoingeckoPriceCache.set", new_callable=AsyncMock
+        ),
+        patch.object(client, "get_platform_map") as mock_platform_map,
+        patch.object(client, "get_coin_map") as mock_coin_map,
+    ):
+        mock_cache.return_value = ([], batch)
+        mock_platform_map.return_value = {}
+        mock_coin_map.return_value = {}
+
+        mock_response = AsyncMock()
+        mock_response.json = lambda: {"polkadot": {"usd": 4.2, "usd_24h_change": 1.5}}
+        mock_response.raise_for_status = lambda: None
+        mock_httpx_client.get.return_value = mock_response
+
+        results = await client.get_prices(batch)
+
+    assert len(results) == 1
+    assert results[0].price == 4.2
+    assert results[0].coin == Chain.POLKADOT_ASSET_HUB.coin
+    assert results[0].chain_id == Chain.POLKADOT_ASSET_HUB.chain_id
+    assert results[0].source == "coingecko"
+
+
+@pytest.mark.asyncio
+async def test_get_platform_map_maps_polkadot_to_asset_hub(client, mock_httpx_client):
+    """CoinGecko's 'polkadot' platform is mapped to our Asset Hub chain."""
+    mock_response = AsyncMock()
+    mock_response.json = lambda: [
+        {"id": "polkadot", "chain_identifier": None, "native_coin_id": "polkadot"},
+        {"id": "ethereum", "chain_identifier": 1, "native_coin_id": "ethereum"},
+    ]
+    mock_response.raise_for_status = lambda: None
+    mock_httpx_client.get.return_value = mock_response
+
+    with (
+        patch(
+            "app.api.pricing.coingecko.PlatformMapCache.get",
+            new_callable=AsyncMock,
+            return_value=None,
+        ),
+        patch("app.api.pricing.coingecko.PlatformMapCache.set", new_callable=AsyncMock),
+    ):
+        platform_map = await client.get_platform_map()
+
+    assert platform_map["polkadot"].chain_id == Chain.POLKADOT_ASSET_HUB.chain_id
+    assert platform_map["polkadot"].native_token_id == "polkadot"
+
+
+@pytest.mark.asyncio
+async def test_get_coin_map_maps_asset_hub_assets_and_skips_empty(
+    client, mock_httpx_client
+):
+    """Asset Hub keeps numeric asset IDs only; empty and mistagged EVM addresses are skipped."""
+    platform_map = {
+        "polkadot": CoingeckoPlatform(
+            id="polkadot",
+            chain_id=Chain.POLKADOT_ASSET_HUB.chain_id,
+            native_token_id="polkadot",
+        ),
+    }
+    evm_address = "0xef3a930e1ffffacd2fc13434ac81bd278b0ecc8d"
+    mock_response = AsyncMock()
+    mock_response.json = lambda: [
+        {"id": "usd-coin", "symbol": "usdc", "platforms": {"polkadot": "1337"}},
+        {"id": "acala", "symbol": "aca", "platforms": {"polkadot": ""}},
+        # CoinGecko occasionally mistags an EVM address under the polkadot platform.
+        {"id": "stafi", "symbol": "fis", "platforms": {"polkadot": evm_address}},
+    ]
+    mock_response.raise_for_status = lambda: None
+    mock_httpx_client.get.return_value = mock_response
+
+    with (
+        patch(
+            "app.api.pricing.coingecko.CoinMapCache.get",
+            new_callable=AsyncMock,
+            return_value=None,
+        ),
+        patch("app.api.pricing.coingecko.CoinMapCache.set", new_callable=AsyncMock),
+    ):
+        coin_map = await client.get_coin_map(platform_map)
+
+    asset_hub = Chain.POLKADOT_ASSET_HUB.chain_id
+    assert coin_map[asset_hub] == {"1337": "usd-coin"}
+    assert "" not in coin_map[asset_hub]
+    assert evm_address not in coin_map[asset_hub]
+
+
+@pytest.mark.asyncio
+async def test_get_coin_map_skips_platforms_without_chain_id(client, mock_httpx_client):
+    """Platforms with no resolved chain_id must not create a null key in the coin map."""
+    platform_map = {
+        "ethereum": CoingeckoPlatform(
+            id="ethereum", chain_id="0x1", native_token_id="ethereum"
+        ),
+        "near-protocol": CoingeckoPlatform(
+            id="near-protocol", chain_id=None, native_token_id="near"
+        ),
+    }
+    mock_response = AsyncMock()
+    mock_response.json = lambda: [
+        {
+            "id": "usd-coin",
+            "symbol": "usdc",
+            "platforms": {"ethereum": "0xA0b8", "near-protocol": "usdc.near"},
+        },
+    ]
+    mock_response.raise_for_status = lambda: None
+    mock_httpx_client.get.return_value = mock_response
+
+    with (
+        patch(
+            "app.api.pricing.coingecko.CoinMapCache.get",
+            new_callable=AsyncMock,
+            return_value=None,
+        ),
+        patch("app.api.pricing.coingecko.CoinMapCache.set", new_callable=AsyncMock),
+    ):
+        coin_map = await client.get_coin_map(platform_map)
+
+    assert None not in coin_map
+    assert coin_map["0x1"] == {"0xa0b8": "usd-coin"}
+
+
+@pytest.mark.asyncio
+async def test_filter_token_lookup_is_case_insensitive_on_chain_id(client):
+    """A mixed-case chain_id still resolves against the lowercase-keyed coin map."""
+    batch = BatchTokenPriceRequests(
+        requests=[
+            TokenPriceRequest(coin=Coin.ETH, chain_id="0X1", address="0xABC"),
+        ],
+        vs_currency=VsCurrency.USD,
+    )
+
+    with (
+        patch.object(client, "get_platform_map") as mock_platform_map,
+        patch.object(client, "get_coin_map") as mock_coin_map,
+    ):
+        mock_platform_map.return_value = {}
+        mock_coin_map.return_value = {"0x1": {"0xabc": "some-token"}}
+
+        available, unavailable = await client.filter(batch)
+
+        assert available.size() == 1
+        assert unavailable.is_empty()
+
+
+@pytest.mark.asyncio
+async def test_filter_excludes_relay_chain_polkadot_token(client):
+    """Relay-chain Polkadot supports only native DOT; a token address is unavailable."""
+    batch = BatchTokenPriceRequests(
+        requests=[
+            TokenPriceRequest(
+                coin=Chain.POLKADOT.coin,
+                chain_id=Chain.POLKADOT.chain_id,
+                address="1337",
+            ),
+        ],
+        vs_currency=VsCurrency.USD,
+    )
+
+    with (
+        patch.object(client, "get_platform_map") as mock_platform_map,
+        patch.object(client, "get_coin_map") as mock_coin_map,
+    ):
+        mock_platform_map.return_value = {}
+        # Even if a coin map existed for the relay chain, it must not be consulted.
+        mock_coin_map.return_value = {Chain.POLKADOT.chain_id: {"1337": "usd-coin"}}
+
+        available, unavailable = await client.filter(batch)
+
+        assert available.is_empty()
+        assert unavailable.size() == 1
+
+
+@pytest.mark.asyncio
+async def test_get_prices_polkadot_asset_hub_token(client, mock_httpx_client):
+    """A non-native Asset Hub asset (USDC, id 1337) is priced via its CoinGecko id."""
+    asset_hub = Chain.POLKADOT_ASSET_HUB.chain_id
+    batch = BatchTokenPriceRequests(
+        requests=[
+            TokenPriceRequest(coin=Coin.DOT, chain_id=asset_hub, address="1337"),
+        ],
+        vs_currency=VsCurrency.USD,
+    )
+
+    with (
+        patch("app.api.pricing.coingecko.CoingeckoPriceCache.get") as mock_cache,
+        patch(
+            "app.api.pricing.coingecko.CoingeckoPriceCache.set", new_callable=AsyncMock
+        ),
+        patch.object(client, "get_platform_map") as mock_platform_map,
+        patch.object(client, "get_coin_map") as mock_coin_map,
+    ):
+        mock_cache.return_value = ([], batch)
+        mock_platform_map.return_value = {}
+        mock_coin_map.return_value = {asset_hub: {"1337": "usd-coin"}}
+
+        mock_response = AsyncMock()
+        mock_response.json = lambda: {"usd-coin": {"usd": 1.0, "usd_24h_change": 0.1}}
+        mock_response.raise_for_status = lambda: None
+        mock_httpx_client.get.return_value = mock_response
+
+        results = await client.get_prices(batch)
+
+    assert len(results) == 1
+    assert results[0].price == 1.0
+    assert results[0].address == "1337"
+    assert results[0].chain_id == asset_hub
+    assert results[0].source == "coingecko"
+
+
+@pytest.mark.asyncio
 async def test_filter_includes_native_token_when_native_token_id_present(client):
     """Test that filter marks tokens as available when platform has native_token_id."""
     batch = BatchTokenPriceRequests(

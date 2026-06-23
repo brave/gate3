@@ -337,6 +337,46 @@ async def test_refresh_with_coingecko_data(cache):
 
 @pytest.mark.asyncio
 @respx.mock
+async def test_refresh_ingests_polkadot_asset_hub_token(cache):
+    """Asset Hub assets (keyed by integer asset ID) are ingested as DOT tokens."""
+    coingecko_data = {
+        Chain.POLKADOT_ASSET_HUB.chain_id: {
+            "1337": {
+                "name": "USD Coin",
+                "symbol": "USDC",
+                "decimals": 6,
+                "logo": "https://example.com/usdc.png",
+            }
+        }
+    }
+    respx.get(
+        "https://raw.githubusercontent.com/brave/token-lists/refs/heads/main/data/v1/coingecko.json"
+    ).mock(return_value=httpx.Response(200, json=coingecko_data))
+
+    with (
+        patch.object(TokenManager, "create_index"),
+        patch.object(TokenManager, "ingest_from_jupiter"),
+        patch.object(TokenManager, "ingest_from_near_intents"),
+        patch.object(TokenManager, "ingest_from_lifi"),
+    ):
+        await TokenManager.refresh()
+
+        result = await TokenManager.get(
+            Chain.POLKADOT_ASSET_HUB.coin, Chain.POLKADOT_ASSET_HUB.chain_id, "1337"
+        )
+
+    assert result is not None
+    assert result.coin == Coin.DOT
+    assert result.chain_id == Chain.POLKADOT_ASSET_HUB.chain_id
+    assert result.address == "1337"
+    assert result.symbol == "USDC"
+    assert result.decimals == 6
+    assert result.token_type == TokenType.UNKNOWN
+    assert TokenSource.COINGECKO in result.sources
+
+
+@pytest.mark.asyncio
+@respx.mock
 async def test_refresh_with_jupiter_data(cache):
     # Mock the Jupiter API responses
     jupiter_verified_data = [
