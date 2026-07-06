@@ -24,8 +24,12 @@ from app.api.tokens.manager import TokenManager
 from app.api.tokens.routes import router as tokens_router
 from app.config import settings
 from app.core.cache import Cache
+from app.core.logging import install_access_log_sanitizer
 
 logger = logging.getLogger(__name__)
+
+# Keep full wallet addresses and other PII out of uvicorn access logs.
+install_access_log_sanitizer()
 
 version = subprocess.run(
     ["poetry", "version", "--short"], capture_output=True, text=True, check=True
