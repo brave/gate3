@@ -34,7 +34,7 @@ poethepoet = { version = "~0.38.0", extras = ["poetry_plugin"]}
 
 [tool.poetry.group.dev.dependencies]
 ruff = "0.15.20"
-ty = "0.0.44"
+ty = "0.0.55"
 pytest = "9.1.1"
 pytest-asyncio = "1.4.0"
 pytest-cov = "7.1.0"
@@ -79,4 +79,6 @@ poetry_command = ""
 
 [tool.poe.tasks]
 format = { shell = "ruff check --select I --fix . && ruff check --fix . && ruff format" }
-typecheck = { shell = "ty check" }
+# --exit-zero-on-warning: ty 0.0.52 made error-on-warning the default; the
+# warn-level rules above are intentionally non-blocking
+typecheck = { shell = "ty check --exit-zero-on-warning" }
