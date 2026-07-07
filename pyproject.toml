@@ -79,4 +79,6 @@ poetry_command = ""
 
 [tool.poe.tasks]
 format = { shell = "ruff check --select I --fix . && ruff check --fix . && ruff format" }
-typecheck = { shell = "ty check" }
+# --exit-zero-on-warning: ty 0.0.52 made error-on-warning the default; the
+# warn-level rules above are intentionally non-blocking
+typecheck = { shell = "ty check --exit-zero-on-warning" }
