@@ -11,7 +11,6 @@ dependencies = [
     "fastapi[standard] (>=0.138.2,<0.139.0)",
     "pydantic-settings (>=2.14.2,<3.0.0)",
     "redis[hiredis] (>=8.0.1,<8.1.0)",
-    "orjson (>=3.10.15,<4.0.0)",
     "httpx (>=0.28.1,<0.29.0)",
     "prometheus-client (>=0.25.0,<0.26.0)",
     "prometheus-fastapi-instrumentator (>=8.0.0,<8.1.0)",
