@@ -1,5 +1,4 @@
 from fastapi import APIRouter, HTTPException, Query
-from fastapi.responses import ORJSONResponse as JSONResponse
 
 from app.api.common.annotations import (
     ADDRESS_DESCRIPTION,
@@ -70,12 +69,10 @@ async def search_tokens(
 async def admin_refresh_all_tokens():
     try:
         await TokenManager.refresh()
-        return JSONResponse(
-            content={
-                "status": "success",
-                "message": "All tokens refreshed successfully",
-            }
-        )
+        return {
+            "status": "success",
+            "message": "All tokens refreshed successfully",
+        }
     except Exception as e:
         raise HTTPException(
             status_code=500, detail=f"Failed to refresh tokens: {str(e)}"

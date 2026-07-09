@@ -5,7 +5,6 @@ from contextlib import asynccontextmanager
 
 import sentry_sdk
 from fastapi import FastAPI
-from fastapi.responses import ORJSONResponse
 from prometheus_client import start_http_server
 from prometheus_fastapi_instrumentator import Instrumentator
 
@@ -79,7 +78,7 @@ async def lifespan(app: FastAPI):
         yield
 
 
-app = FastAPI(lifespan=lifespan, default_response_class=ORJSONResponse)
+app = FastAPI(lifespan=lifespan)
 Instrumentator().instrument(app)
 
 # API routers
