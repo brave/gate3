@@ -16,6 +16,8 @@ from app.api.nft.routes import (
     simplehash_router as simplehash_nfts_router,
 )
 from app.api.oauth.routes import router as oauth_router
+from app.api.phishing.manager import PhishingManager
+from app.api.phishing.routes import router as phishing_router
 from app.api.pricing.routes import router as pricing_router
 from app.api.swap.routes import router as swap_router
 from app.api.swap.routes import setup_swap_error_handler
@@ -64,17 +66,52 @@ async def _reseed_tokens_if_stale():
         logger.exception("Failed to reseed token registry on startup")
 
 
+async def _reseed_phishing_if_stale():
+    try:
+        if await PhishingManager.refresh_if_stale():
+            logger.info("Phishing hash index was stale; reseeded on startup")
+    except Exception:
+        logger.exception("Failed to reseed phishing hash index on startup")
+
+
+async def _cancel_background_task(task: asyncio.Task | None) -> None:
+    if task is None:
+        return
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
+
+
 @asynccontextmanager
 async def lifespan_tokens(app: FastAPI):
     # Reseed in the background so a cold/stale Redis neither blocks startup nor
     # crashes the app when an upstream token source is briefly unavailable.
     app.state.token_seed_task = asyncio.create_task(_reseed_tokens_if_stale())
-    yield
+    try:
+        yield
+    finally:
+        await _cancel_background_task(app.state.token_seed_task)
+
+
+@asynccontextmanager
+async def lifespan_phishing(app: FastAPI):
+    app.state.phishing_seed_task = asyncio.create_task(_reseed_phishing_if_stale())
+    try:
+        yield
+    finally:
+        await _cancel_background_task(app.state.phishing_seed_task)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    async with lifespan_cache(app), lifespan_tokens(app), lifespan_metrics(app):
+    async with (
+        lifespan_cache(app),
+        lifespan_tokens(app),
+        lifespan_phishing(app),
+        lifespan_metrics(app),
+    ):
         yield
 
 
@@ -86,6 +123,7 @@ app.include_router(base_router)
 app.include_router(pricing_router)
 app.include_router(nfts_router)
 app.include_router(tokens_router)
+app.include_router(phishing_router)
 app.include_router(oauth_router)
 app.include_router(swap_router)
 
