@@ -59,7 +59,7 @@ async def lookup_hashes(
             "Comma-separated 8-hex-char SHA-256 prefixes "
             "(first 4 bytes of each candidate hash)"
         ),
-        examples=["ab12cd34,ef567890"],
+        example="ab12cd34,ef567890",
     ),
 ):
     """Return all full hashes sharing each submitted prefix (k-anonymity lookup)."""
@@ -77,7 +77,7 @@ async def lookup_hashes(
     except Exception as e:
         status = "error"
         raise HTTPException(
-            status_code=500, detail=f"Failed to lookup phishing hashes: {e}"
+            status_code=500, detail=f"Failed to lookup phishing hashes: {str(e)}"
         ) from e
     finally:
         phishing_lookup_requests_total.labels(status=status).inc()
@@ -86,6 +86,8 @@ async def lookup_hashes(
 
 @router.get("/v1/_admin/refresh", response_model=PhishingRefreshResponse)
 async def admin_refresh_phishing_list():
+    # Same pattern as /api/tokens/v1/_admin/refresh: no in-app auth; access is
+    # gated by the Brave Services Key at the edge.
     try:
         result = await PhishingManager.refresh()
         return PhishingRefreshResponse(
@@ -97,5 +99,5 @@ async def admin_refresh_phishing_list():
         )
     except Exception as e:
         raise HTTPException(
-            status_code=500, detail=f"Failed to refresh phishing list: {e}"
+            status_code=500, detail=f"Failed to refresh phishing list: {str(e)}"
         ) from e

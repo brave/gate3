@@ -74,18 +74,34 @@ async def _reseed_phishing_if_stale():
         logger.exception("Failed to reseed phishing hash index on startup")
 
 
+async def _cancel_background_task(task: asyncio.Task | None) -> None:
+    if task is None:
+        return
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
+
+
 @asynccontextmanager
 async def lifespan_tokens(app: FastAPI):
     # Reseed in the background so a cold/stale Redis neither blocks startup nor
     # crashes the app when an upstream token source is briefly unavailable.
     app.state.token_seed_task = asyncio.create_task(_reseed_tokens_if_stale())
-    yield
+    try:
+        yield
+    finally:
+        await _cancel_background_task(app.state.token_seed_task)
 
 
 @asynccontextmanager
 async def lifespan_phishing(app: FastAPI):
     app.state.phishing_seed_task = asyncio.create_task(_reseed_phishing_if_stale())
-    yield
+    try:
+        yield
+    finally:
+        await _cancel_background_task(app.state.phishing_seed_task)
 
 
 @asynccontextmanager
