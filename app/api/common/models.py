@@ -21,6 +21,7 @@ class Tags(str, Enum):
     HEALTH = "Health"
     NFT = "NFT"
     OAUTH = "OAuth Proxy"
+    PHISHING = "Phishing"
     PRICING = "Pricing"
     SWAP = "Swap"
     TOKENS = "Tokens"
