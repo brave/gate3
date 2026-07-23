@@ -33,7 +33,7 @@ poethepoet = { version = "~0.38.0", extras = ["poetry_plugin"]}
 
 [tool.poetry.group.dev.dependencies]
 ruff = "0.15.20"
-ty = "0.0.55"
+ty = "0.0.60"
 pytest = "9.1.1"
 pytest-asyncio = "1.4.0"
 pytest-cov = "7.1.0"
