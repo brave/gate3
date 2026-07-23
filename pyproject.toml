@@ -32,7 +32,7 @@ package-mode = false
 poethepoet = { version = "~0.38.0", extras = ["poetry_plugin"]}
 
 [tool.poetry.group.dev.dependencies]
-ruff = "0.15.20"
+ruff = "0.15.22"
 ty = "0.0.55"
 pytest = "9.1.1"
 pytest-asyncio = "1.4.0"
