@@ -137,6 +137,7 @@ MOCK_QUOTE_REQUEST = {
     "recipient": "bc1qpjqsdj3qvfl4hzfa49p28ns9xkpl73cyg9exzn",
     "recipientType": "DESTINATION_CHAIN",
     "deadline": "2025-12-11T13:48:50.883000Z",
+    "confidentiality": "basic",
     "referral": "brave",
     "quoteWaitingTimeMs": 0,
 }

@@ -22,6 +22,12 @@ class NearIntentsDepositMode(str, Enum):
     MEMO = "MEMO"
 
 
+class NearIntentsConfidentiality(str, Enum):
+    PUBLIC = "public"
+    BASIC = "basic"
+    ADVANCED = "advanced"
+
+
 class NearIntentsQuoteRequestBody(BaseModel):
     dry: bool = Field(default=False, description="Dry run flag")
     deposit_mode: NearIntentsDepositMode
@@ -38,6 +44,11 @@ class NearIntentsQuoteRequestBody(BaseModel):
     recipient: str
     recipient_type: str = Field(default="DESTINATION_CHAIN")
     deadline: str
+    # Default to BASIC confidentiality; "public" (transparent) swaps are deprecated.
+    confidentiality: NearIntentsConfidentiality = Field(
+        default=NearIntentsConfidentiality.BASIC,
+        description="Requested intent confidentiality level (defaults to BASIC).",
+    )
     referral: str = Field(default="brave")
     quote_waiting_time_ms: int = Field(default=0)
 

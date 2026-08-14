@@ -317,6 +317,8 @@ async def test_get_indicative_route_success(
     call_args = mock_httpx_client.post.call_args
     assert call_args[0][0] == "https://1click.chaindefuser.com/v0/quote"
     assert call_args[1]["json"]["dry"] is True
+    # Transparent swaps are deprecated; every quote must be confidential
+    assert call_args[1]["json"]["confidentiality"] == "basic"
 
     # Verify response is a list with one route
     assert len(routes) == 1
