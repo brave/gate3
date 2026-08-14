@@ -44,8 +44,11 @@ class NearIntentsQuoteRequestBody(BaseModel):
     recipient: str
     recipient_type: str = Field(default="DESTINATION_CHAIN")
     deadline: str
-    # Only confidential intents are supported; transparent swaps are deprecated.
-    confidentiality: NearIntentsConfidentiality = NearIntentsConfidentiality.BASIC
+    # Default to BASIC confidentiality; "public" (transparent) swaps are deprecated.
+    confidentiality: NearIntentsConfidentiality = Field(
+        default=NearIntentsConfidentiality.BASIC,
+        description="Requested intent confidentiality level (defaults to BASIC).",
+    )
     referral: str = Field(default="brave")
     quote_waiting_time_ms: int = Field(default=0)
 
