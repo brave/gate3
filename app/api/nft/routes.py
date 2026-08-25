@@ -333,6 +333,36 @@ async def get_nfts_by_owner(
     return SimpleHashNFTResponse(next_cursor=next_page_key, nfts=nfts)
 
 
+async def _get_solana_assets(
+    client: httpx.AsyncClient, semaphore: asyncio.Semaphore, asset_ids: list[str]
+) -> list[SimpleHashNFT]:
+    """Fetch and transform Solana assets by id via Alchemy's DAS getAssets."""
+    url = (
+        f"https://{Chain.SOLANA.alchemy_id}.g.alchemy.com/v2/{settings.ALCHEMY_API_KEY}"
+    )
+    params = {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "getAssets",
+        "params": {"ids": asset_ids},
+    }
+    async with semaphore:
+        json_response = await _alchemy_json(
+            client.post(url, json=params), chain=Chain.SOLANA, method="getAssets"
+        )
+    if "error" in json_response:
+        raise ValueError(f"Alchemy API error: {json_response['error']}")
+
+    nfts = []
+    for nft_data in json_response["result"]:
+        if not nft_data:
+            continue
+        asset = SolanaAsset.model_validate(nft_data)
+        if transformed_nft := _transform_solana_asset_to_simplehash(asset):
+            nfts.append(transformed_nft)
+    return nfts
+
+
 async def _get_nft_metadata_batch(
     client: httpx.AsyncClient,
     semaphore: asyncio.Semaphore,
@@ -377,7 +407,6 @@ async def get_nfts_by_ids(
 
     nft_ids_list = ids.split(",")
 
-    nfts = []
     solana_nfts = []
     other_nfts = []
 
@@ -412,69 +441,38 @@ async def get_nfts_by_ids(
     if not solana_nfts and not other_nfts:
         return SimpleHashNFTResponse(next_cursor=None, nfts=[])
 
+    # Group EVM NFTs by chain
+    chain_nfts: dict[Chain, list[tuple[str, str]]] = {}
+    for nft_id in other_nfts:
+        parts = [part.strip() for part in nft_id.split(".") if part.strip()]
+
+        # Skip malformed EVM IDs that don't have exactly 4 parts
+        if len(parts) != 4:
+            continue
+
+        coin, chain_id, contract_address, token_id = parts
+
+        chain = Chain.get(coin, chain_id)
+        if not chain:
+            continue
+
+        chain_nfts.setdefault(chain, []).append((contract_address, token_id))
+
+    # Fetch Solana assets and each chain's metadata batches concurrently.
+    # gather preserves input order: Solana first, then chains in request order.
     async with create_http_client() as client:
-        # Handle Solana NFTs
+        semaphore = asyncio.Semaphore(ALCHEMY_NFT_METADATA_MAX_CONCURRENT_REQUESTS)
+        fetches = []
         if solana_nfts:
-            url = f"https://{Chain.SOLANA.alchemy_id}.g.alchemy.com/v2/{settings.ALCHEMY_API_KEY}"
-            params = {
-                "jsonrpc": "2.0",
-                "id": 1,
-                "method": "getAssets",
-                "params": {"ids": solana_nfts},
-            }
+            fetches.append(_get_solana_assets(client, semaphore, solana_nfts))
+        fetches.extend(
+            _get_nft_metadata_batch(client, semaphore, chain, batch)
+            for chain, nft_list in chain_nfts.items()
+            for batch in batched(nft_list, ALCHEMY_NFT_METADATA_BATCH_LIMIT)
+        )
+        results = await asyncio.gather(*fetches)
 
-            json_response = await _alchemy_json(
-                client.post(url, json=params),
-                chain=Chain.SOLANA,
-                method="getAssets",
-            )
-            if "error" in json_response:
-                raise ValueError(f"Alchemy API error: {json_response['error']}")
-
-            solana_assets = []
-            for nft_data in json_response["result"]:
-                if not nft_data:
-                    continue
-                solana_assets.append(SolanaAsset.model_validate(nft_data))
-
-            # Transform Solana assets to SimpleHash format
-            for solana_asset in solana_assets:
-                if transformed_nft := _transform_solana_asset_to_simplehash(
-                    solana_asset
-                ):
-                    nfts.append(transformed_nft)
-
-        # Handle other chain NFTs
-        if other_nfts:
-            # Group NFTs by chain
-            chain_nfts: dict[Chain, list[tuple[str, str]]] = {}
-            for nft_id in other_nfts:
-                parts = [part.strip() for part in nft_id.split(".") if part.strip()]
-
-                # Skip malformed EVM IDs that don't have exactly 4 parts
-                if len(parts) != 4:
-                    continue
-
-                coin, chain_id, contract_address, token_id = parts
-
-                chain = Chain.get(coin, chain_id)
-                if not chain:
-                    continue
-
-                chain_nfts.setdefault(chain, []).append((contract_address, token_id))
-
-            # Fetch each chain's NFTs in batches Alchemy accepts, concurrently
-            semaphore = asyncio.Semaphore(ALCHEMY_NFT_METADATA_MAX_CONCURRENT_REQUESTS)
-            batch_results = await asyncio.gather(
-                *(
-                    _get_nft_metadata_batch(client, semaphore, chain, batch)
-                    for chain, nft_list in chain_nfts.items()
-                    for batch in batched(nft_list, ALCHEMY_NFT_METADATA_BATCH_LIMIT)
-                )
-            )
-            for batch_nfts in batch_results:
-                nfts.extend(batch_nfts)
-
+    nfts = [nft for result in results for nft in result]
     return SimpleHashNFTResponse(next_cursor=None, nfts=nfts)
 
 
