@@ -849,3 +849,26 @@ def test_get_nfts_by_owner_upstream_transport_error_is_502_without_key(
     assert "test_key" not in response.text
     assert "test_key" not in caplog.text
     assert "getNFTsForOwner on eth-mainnet failed: ConnectError" in caplog.text
+
+
+def test_get_nfts_by_ids_chunks_metadata_batches_to_alchemy_limit(
+    mock_httpx_client, mock_settings
+):
+    captured_batches: list[list[dict]] = []
+    mock_httpx_client.post.side_effect = _create_mock_post_side_effect(
+        {"nfts": [MOCK_NFT_ALCHEMY_RESPONSE]}, None, captured_batches
+    )
+
+    ids = ",".join(f"eth.0x89.0x789.{token_id}" for token_id in range(150))
+    response = client.get(f"/api/nft/v1/getNFTsByIds?ids={ids}")
+    assert response.status_code == 200
+
+    # 150 ids on one chain -> two upstream calls of 100 and 50 tokens. The
+    # batches are issued concurrently, so order them by first token id.
+    batches = sorted(captured_batches, key=lambda batch: int(batch[0]["tokenId"]))
+    assert [len(batch) for batch in batches] == [100, 50]
+    assert [batch[0]["tokenId"] for batch in batches] == ["0", "100"]
+
+    # One NFT per upstream call -> both batches' results are concatenated
+    sh_response = SimpleHashNFTResponse.model_validate(response.json())
+    assert len(sh_response.nfts) == 2
