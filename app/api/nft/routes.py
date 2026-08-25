@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import logging
 from collections.abc import Awaitable, Iterable
 from itertools import batched
@@ -30,23 +31,32 @@ logger = logging.getLogger(__name__)
 
 # Alchemy rejects getNFTMetadataBatch requests with more than 100 tokens.
 ALCHEMY_NFT_METADATA_BATCH_LIMIT = 100
-ALCHEMY_NFT_METADATA_MAX_CONCURRENT_REQUESTS = 4
+# Per-request bound on concurrent Alchemy calls. It caps the fan-out of a
+# single large request; it does not bound the pod's total upstream
+# concurrency, which Alchemy rate-limits per app.
+ALCHEMY_NFT_MAX_CONCURRENT_REQUESTS = 4
 
 router = APIRouter(prefix="/api/nft", tags=[Tags.NFT])
 simplehash_router = APIRouter(prefix="/simplehash/api/v0", tags=[Tags.NFT])
 
 
 async def _alchemy_json(
-    request: Awaitable[httpx.Response], *, chain: Chain, method: str
+    request: Awaitable[httpx.Response],
+    *,
+    chain: Chain,
+    method: str,
+    semaphore: asyncio.Semaphore | None = None,
 ) -> dict:
     """Await an Alchemy request and return its JSON body.
 
     Upstream failures are logged by network/method/status only and surfaced
     as 502s, so the request URL (which carries the API key) never reaches
-    logs, error trackers, or clients.
+    logs, error trackers, or clients. When a semaphore is given, the request
+    is awaited while holding it, so concurrent fan-outs stay bounded.
     """
     try:
-        response = await request
+        async with semaphore if semaphore else contextlib.nullcontext():
+            response = await request
         response.raise_for_status()
     except httpx.HTTPStatusError as exc:
         logger.warning(
@@ -239,6 +249,90 @@ def _transform_solana_asset_to_simplehash(asset: SolanaAsset) -> SimpleHashNFT:
     )
 
 
+async def _solana_rpc(
+    client: httpx.AsyncClient,
+    method: str,
+    params: dict | list,
+    *,
+    semaphore: asyncio.Semaphore | None = None,
+) -> dict | list:
+    """Call a Solana DAS JSON-RPC method on Alchemy and return its result."""
+    url = (
+        f"https://{Chain.SOLANA.alchemy_id}.g.alchemy.com/v2/{settings.ALCHEMY_API_KEY}"
+    )
+    body = {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}
+    json_response = await _alchemy_json(
+        client.post(url, json=body),
+        chain=Chain.SOLANA,
+        method=method,
+        semaphore=semaphore,
+    )
+    if error := json_response.get("error"):
+        raise ValueError(f"Alchemy API error: {error}")
+    return json_response["result"]
+
+
+def _transform_solana_assets(assets: Iterable[SolanaAsset]) -> list[SimpleHashNFT]:
+    return [
+        nft for asset in assets if (nft := _transform_solana_asset_to_simplehash(asset))
+    ]
+
+
+async def _get_solana_assets_by_owner(
+    client: httpx.AsyncClient,
+    semaphore: asyncio.Semaphore,
+    wallet_address: str,
+    page_key: str | None,
+    page_size: int,
+) -> tuple[list[SimpleHashNFT], str | None]:
+    """Fetch one page of a wallet's Solana assets via Alchemy's DAS getAssetsByOwner."""
+    params = {
+        "ownerAddress": wallet_address,
+        "limit": page_size,
+        "options": {
+            "showUnverifiedCollections": False,
+            "showCollectionMetadata": True,
+        },
+    }
+    if page_key:
+        params["page"] = page_key
+
+    result = await _solana_rpc(client, "getAssetsByOwner", params, semaphore=semaphore)
+    solana_response = SolanaAssetResponse.model_validate(result)
+    nfts = _transform_solana_assets(solana_response.items)
+    return nfts, page_key + 1 if page_key else None
+
+
+async def _get_nfts_for_owner(
+    client: httpx.AsyncClient,
+    semaphore: asyncio.Semaphore,
+    chain: Chain,
+    wallet_address: str,
+    page_key: str | None,
+    page_size: int,
+) -> tuple[list[SimpleHashNFT], str | None]:
+    """Fetch one page of a wallet's NFTs on an EVM chain via Alchemy's getNFTsForOwner."""
+    url = f"https://{chain.alchemy_id}.g.alchemy.com/nft/v3/{settings.ALCHEMY_API_KEY}/getNFTsForOwner"
+    params = httpx.QueryParams(
+        owner=wallet_address,
+        pageSize=page_size,
+        withMetadata=True,
+    )
+    if page_key:
+        params = params.set("pageKey", page_key)
+
+    json_response = await _alchemy_json(
+        client.get(url, params=params),
+        chain=chain,
+        method="getNFTsForOwner",
+        semaphore=semaphore,
+    )
+    data = AlchemyNFTResponse.model_validate(json_response)
+
+    nfts = [_transform_alchemy_to_simplehash(nft, chain) for nft in data.owned_nfts]
+    return nfts, data.page_key
+
+
 @router.get("/v1/getNFTsForOwner", response_model=SimpleHashNFTResponse)
 async def get_nfts_by_owner(
     wallet_address: str = Query(
@@ -257,78 +351,37 @@ async def get_nfts_by_owner(
     if not settings.ALCHEMY_API_KEY:
         raise ValueError("ALCHEMY_API_KEY is not configured")
 
+    requested_chains = []
+    for chain_str in chains:
+        coin, chain_id = chain_str.split(".")
+        chain = Chain.get(coin, chain_id)
+        if chain and chain.has_nft_support:
+            requested_chains.append(chain)
+
+    # Fetch every chain's page concurrently; gather keeps request order
+    async with create_http_client() as client:
+        semaphore = asyncio.Semaphore(ALCHEMY_NFT_MAX_CONCURRENT_REQUESTS)
+        fetches = []
+        for chain in requested_chains:
+            if chain == Chain.SOLANA:
+                fetch = _get_solana_assets_by_owner(
+                    client, semaphore, wallet_address, page_key, page_size
+                )
+            else:
+                fetch = _get_nfts_for_owner(
+                    client, semaphore, chain, wallet_address, page_key, page_size
+                )
+            fetches.append(fetch)
+        results = await asyncio.gather(*fetches)
+
     nfts = []
     next_page_key = None
-
-    async with create_http_client() as client:
-        for chain_str in chains:
-            coin, chain_id = chain_str.split(".")
-            chain = Chain.get(coin, chain_id)
-            if not chain or not chain.has_nft_support:
-                continue
-
-            if chain == Chain.SOLANA:
-                # Handle Solana NFTs differently
-                url = f"https://{Chain.SOLANA.alchemy_id}.g.alchemy.com/v2/{settings.ALCHEMY_API_KEY}"
-                params = {
-                    "jsonrpc": "2.0",
-                    "id": 1,
-                    "method": "getAssetsByOwner",
-                    "params": {
-                        "ownerAddress": wallet_address,
-                        "limit": page_size,
-                        "options": {
-                            "showUnverifiedCollections": False,
-                            "showCollectionMetadata": True,
-                        },
-                    },
-                }
-                if page_key:
-                    params["params"]["page"] = page_key
-
-                json_response = await _alchemy_json(
-                    client.post(url, json=params),
-                    chain=chain,
-                    method="getAssetsByOwner",
-                )
-                if "error" in json_response:
-                    raise ValueError(f"Alchemy API error: {json_response['error']}")
-
-                solana_response = SolanaAssetResponse.model_validate(
-                    json_response["result"]
-                )
-
-                # Transform Solana assets to SimpleHash format
-                for asset in solana_response.items:
-                    if transformed_nft := _transform_solana_asset_to_simplehash(asset):
-                        nfts.append(transformed_nft)
-
-                next_page_key = page_key + 1 if page_key else None
-            else:
-                # Handle other chains as before
-                url = f"https://{chain.alchemy_id}.g.alchemy.com/nft/v3/{settings.ALCHEMY_API_KEY}/getNFTsForOwner"
-                params = httpx.QueryParams(
-                    owner=wallet_address,
-                    pageSize=page_size,
-                    withMetadata=True,
-                )
-                if page_key:
-                    params = params.set("pageKey", page_key)
-
-                json_response = await _alchemy_json(
-                    client.get(url, params=params),
-                    chain=chain,
-                    method="getNFTsForOwner",
-                )
-                data = AlchemyNFTResponse.model_validate(json_response)
-
-                # Transform NFTs
-                for nft in data.owned_nfts:
-                    nfts.append(_transform_alchemy_to_simplehash(nft, chain))
-
-                # Update next page key
-                if data.page_key:
-                    next_page_key = data.page_key
+    for chain, (chain_nfts, chain_page_key) in zip(requested_chains, results):
+        nfts.extend(chain_nfts)
+        # One cursor is shared across chains: the last chain with a page key
+        # wins, and Solana always sets it. Per-chain cursors are a follow-up.
+        if chain == Chain.SOLANA or chain_page_key:
+            next_page_key = chain_page_key
 
     return SimpleHashNFTResponse(next_cursor=next_page_key, nfts=nfts)
 
@@ -337,30 +390,13 @@ async def _get_solana_assets(
     client: httpx.AsyncClient, semaphore: asyncio.Semaphore, asset_ids: list[str]
 ) -> list[SimpleHashNFT]:
     """Fetch and transform Solana assets by id via Alchemy's DAS getAssets."""
-    url = (
-        f"https://{Chain.SOLANA.alchemy_id}.g.alchemy.com/v2/{settings.ALCHEMY_API_KEY}"
+    result = await _solana_rpc(
+        client, "getAssets", {"ids": asset_ids}, semaphore=semaphore
     )
-    params = {
-        "jsonrpc": "2.0",
-        "id": 1,
-        "method": "getAssets",
-        "params": {"ids": asset_ids},
-    }
-    async with semaphore:
-        json_response = await _alchemy_json(
-            client.post(url, json=params), chain=Chain.SOLANA, method="getAssets"
-        )
-    if "error" in json_response:
-        raise ValueError(f"Alchemy API error: {json_response['error']}")
-
-    nfts = []
-    for nft_data in json_response["result"]:
-        if not nft_data:
-            continue
-        asset = SolanaAsset.model_validate(nft_data)
-        if transformed_nft := _transform_solana_asset_to_simplehash(asset):
-            nfts.append(transformed_nft)
-    return nfts
+    # Unknown ids come back as null entries
+    return _transform_solana_assets(
+        SolanaAsset.model_validate(nft_data) for nft_data in result if nft_data
+    )
 
 
 async def _get_nft_metadata_batch(
@@ -378,12 +414,12 @@ async def _get_nft_metadata_batch(
         {"contractAddress": contract_address, "tokenId": token_id}
         for contract_address, token_id in batch
     ]
-    async with semaphore:
-        json_response = await _alchemy_json(
-            client.post(url, json={"tokens": tokens}),
-            chain=chain,
-            method="getNFTMetadataBatch",
-        )
+    json_response = await _alchemy_json(
+        client.post(url, json={"tokens": tokens}),
+        chain=chain,
+        method="getNFTMetadataBatch",
+        semaphore=semaphore,
+    )
     return [
         _transform_alchemy_to_simplehash(AlchemyNFT.model_validate(nft_data), chain)
         for nft_data in json_response["nfts"]
@@ -461,7 +497,7 @@ async def get_nfts_by_ids(
     # Fetch Solana assets and each chain's metadata batches concurrently.
     # gather preserves input order: Solana first, then chains in request order.
     async with create_http_client() as client:
-        semaphore = asyncio.Semaphore(ALCHEMY_NFT_METADATA_MAX_CONCURRENT_REQUESTS)
+        semaphore = asyncio.Semaphore(ALCHEMY_NFT_MAX_CONCURRENT_REQUESTS)
         fetches = []
         if solana_nfts:
             fetches.append(_get_solana_assets(client, semaphore, solana_nfts))
@@ -483,23 +519,8 @@ async def get_solana_asset_proof(
     ),
 ) -> SolanaAssetMerkleProof:
     async with create_http_client() as client:
-        url = f"https://{Chain.SOLANA.alchemy_id}.g.alchemy.com/v2/{settings.ALCHEMY_API_KEY}"
-        params = {
-            "jsonrpc": "2.0",
-            "method": "getAssetProof",
-            "params": [token_address],
-            "id": 1,
-        }
-        json_response = await _alchemy_json(
-            client.post(url, json=params),
-            chain=Chain.SOLANA,
-            method="getAssetProof",
-        )
-
-        if error := json_response.get("error"):
-            raise ValueError(f"Alchemy API error: {error}")
-
-        return SolanaAssetMerkleProof.model_validate(json_response["result"])
+        result = await _solana_rpc(client, "getAssetProof", [token_address])
+    return SolanaAssetMerkleProof.model_validate(result)
 
 
 @simplehash_router.get("/nfts/owners", response_model=SimpleHashNFTResponse)
