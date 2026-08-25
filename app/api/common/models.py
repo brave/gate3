@@ -46,6 +46,9 @@ class _c(BaseModel):
     simplehash_id: str
     alchemy_id: str
     near_intents_id: str | None = None
+    # Block explorer transaction URL template with a {tx_hash} placeholder.
+    # Mirrors the explorers used by Brave Wallet.
+    explorer_tx_url: str | None = None
     has_nft_support: bool
 
     # Network metadata
@@ -76,6 +79,7 @@ class Chain(Enum):
         simplehash_id="ethereum",
         alchemy_id="eth-mainnet",
         near_intents_id="eth",
+        explorer_tx_url="https://etherscan.io/tx/{tx_hash}",
         has_nft_support=True,
         name="Ethereum",
         native_asset_name="Ether",
@@ -88,6 +92,7 @@ class Chain(Enum):
         simplehash_id="arbitrum",
         alchemy_id="arb-mainnet",
         near_intents_id="arb",
+        explorer_tx_url="https://arbiscan.io/tx/{tx_hash}",
         has_nft_support=True,
         name="Arbitrum",
         native_asset_name="Ether",
@@ -100,6 +105,7 @@ class Chain(Enum):
         simplehash_id="avalanche",
         alchemy_id="avax-mainnet",
         near_intents_id="avax",
+        explorer_tx_url="https://snowtrace.io/tx/{tx_hash}",
         has_nft_support=True,
         name="Avalanche",
         native_asset_name="Avalanche",
@@ -112,6 +118,7 @@ class Chain(Enum):
         simplehash_id="base",
         alchemy_id="base-mainnet",
         near_intents_id="base",
+        explorer_tx_url="https://basescan.org/tx/{tx_hash}",
         has_nft_support=True,
         name="Base",
         native_asset_name="Ether",
@@ -124,6 +131,7 @@ class Chain(Enum):
         simplehash_id="bsc",
         alchemy_id="bnb-mainnet",
         near_intents_id="bsc",
+        explorer_tx_url="https://bscscan.com/tx/{tx_hash}",
         has_nft_support=False,
         name="BNB Smart Chain",
         native_asset_name="BNB",
@@ -136,6 +144,7 @@ class Chain(Enum):
         simplehash_id="optimism",
         alchemy_id="opt-mainnet",
         near_intents_id="op",
+        explorer_tx_url="https://optimistic.etherscan.io/tx/{tx_hash}",
         has_nft_support=True,
         name="Optimism",
         native_asset_name="Ether",
@@ -148,6 +157,7 @@ class Chain(Enum):
         simplehash_id="polygon",
         alchemy_id="polygon-mainnet",
         near_intents_id="pol",
+        explorer_tx_url="https://polygonscan.com/tx/{tx_hash}",
         has_nft_support=True,
         name="Polygon",
         native_asset_name="POL",
@@ -162,6 +172,7 @@ class Chain(Enum):
         simplehash_id="bitcoin",
         alchemy_id="bitcoin-mainnet",
         near_intents_id="btc",
+        explorer_tx_url="https://www.blockchain.com/explorer/transactions/btc/{tx_hash}",
         has_nft_support=False,
         name="Bitcoin",
         native_asset_name="Bitcoin",
@@ -174,6 +185,7 @@ class Chain(Enum):
         simplehash_id="solana",
         alchemy_id="solana-mainnet",
         near_intents_id="sol",
+        explorer_tx_url="https://explorer.solana.com/tx/{tx_hash}",
         has_nft_support=True,
         name="Solana",
         native_asset_name="Solana",
@@ -198,6 +210,7 @@ class Chain(Enum):
         simplehash_id="cardano",
         alchemy_id="cardano-mainnet",
         near_intents_id="cardano",
+        explorer_tx_url="https://cexplorer.io/tx/{tx_hash}",
         has_nft_support=False,
         name="Cardano",
         native_asset_name="Cardano",
@@ -210,6 +223,7 @@ class Chain(Enum):
         simplehash_id="zcash",
         alchemy_id="zcash-mainnet",
         near_intents_id="zec",
+        explorer_tx_url="https://3xpl.com/zcash/transaction/{tx_hash}",
         has_nft_support=False,
         name="Zcash",
         native_asset_name="Zcash",
@@ -250,6 +264,7 @@ class Chain(Enum):
             "simplehash_id",
             "alchemy_id",
             "near_intents_id",
+            "explorer_tx_url",
             "has_nft_support",
             "name",
             "native_asset_name",
@@ -259,6 +274,11 @@ class Chain(Enum):
             return getattr(self.value, name)
 
         return super().__getattr__(name)
+
+    def tx_explorer_url(self, tx_hash: str) -> str | None:
+        if self.explorer_tx_url is None:
+            return None
+        return self.explorer_tx_url.format(tx_hash=tx_hash)
 
     @classmethod
     def get(cls, coin: str, chain_id: str):

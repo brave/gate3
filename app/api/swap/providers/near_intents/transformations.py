@@ -383,13 +383,17 @@ def from_near_intents_status(
     response: NearIntentsStatusResponse,
     request: SwapStatusRequest,
 ) -> SwapStatusResponse:
-    # Generate explorer URL for NEAR Intents using deposit address
+    # Swaps are requested with confidentiality enabled, so they are not visible
+    # on the public NEAR Intents explorer. Link to the destination chain payout
+    # transaction instead; until it lands, leave the URL unset so clients fall
+    # back to the source chain explorer for the deposit transaction.
     explorer_url = None
-    deposit_address = request.deposit_address
-    if deposit_address:
+    if txs := response.swap_details.destination_chain_tx_hashes:
+        tx = txs[0]
+        chain = Chain.get(request.destination_coin.value, request.destination_chain_id)
         explorer_url = (
-            f"https://explorer.near-intents.org/transactions/{deposit_address}"
-        )
+            chain.tx_explorer_url(tx.hash) if chain else None
+        ) or tx.explorer_url
 
     return SwapStatusResponse(
         status=normalize_near_intents_status(response.status),

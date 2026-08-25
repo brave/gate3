@@ -29,7 +29,6 @@ from app.core.http import create_http_client
 from .constants import (
     ZERO_EX_API_VERSION,
     ZERO_EX_BASE_URL,
-    ZERO_EX_EXPLORER_URLS,
     ZERO_EX_SUPPORTED_CHAINS,
 )
 from .models import ZeroExError, ZeroExQuoteResponse
@@ -216,9 +215,7 @@ class ZeroExClient(BaseSwapProvider):
             if chain in ZERO_EX_SUPPORTED_CHAINS:
                 receipt_status = await get_evm_tx_receipt_status(chain, request.tx_hash)
                 status = _RECEIPT_STATUS_TO_SWAP_STATUS[receipt_status]
-            explorer_base = ZERO_EX_EXPLORER_URLS.get(chain.chain_id)
-            if explorer_base:
-                explorer_url = f"{explorer_base}/tx/{request.tx_hash}"
+            explorer_url = chain.tx_explorer_url(request.tx_hash)
 
         return SwapStatusResponse(
             status=status,
