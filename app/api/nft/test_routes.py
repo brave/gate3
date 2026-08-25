@@ -777,3 +777,28 @@ def test_get_simplehash_nfts_by_owner_no_wallet_addresses(
     sh_response = SimpleHashNFTResponse.model_validate(data)
 
     assert len(sh_response.nfts) == 3
+
+
+def test_get_nfts_by_ids_transforms_each_chain_with_its_own_chain(
+    mock_httpx_client, mock_settings
+):
+    # Same upstream payload for every chain; only the chain grouping differs.
+    mock_httpx_client.post.return_value.json.return_value = {
+        "nfts": [MOCK_NFT_ALCHEMY_RESPONSE]
+    }
+
+    response = client.get(
+        "/api/nft/v1/getNFTsByIds?ids=eth.0x1.0x123.456,eth.0x89.0x789.101112"
+    )
+    assert response.status_code == 200
+    sh_response = SimpleHashNFTResponse.model_validate(response.json())
+
+    # One upstream batch per chain, hitting that chain's Alchemy host
+    hosts = [
+        call.args[0].split("/")[2] for call in mock_httpx_client.post.call_args_list
+    ]
+    assert hosts == ["eth-mainnet.g.alchemy.com", "polygon-mainnet.g.alchemy.com"]
+
+    # Each NFT must be tagged with the chain it was fetched from, not the last
+    # chain seen while parsing the ids.
+    assert [nft.chain for nft in sh_response.nfts] == ["ethereum", "polygon"]
