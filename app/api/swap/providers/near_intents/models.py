@@ -86,8 +86,22 @@ class NearIntentsQuoteResponse(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
 
+class NearIntentsTxHash(BaseModel):
+    hash: str
+    explorer_url: str | None = None
+
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
+
+class NearIntentsSwapDetails(BaseModel):
+    destination_chain_tx_hashes: list[NearIntentsTxHash] = Field(default_factory=list)
+
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
+
 class NearIntentsStatusResponse(BaseModel):
     status: str
+    swap_details: NearIntentsSwapDetails = Field(default_factory=NearIntentsSwapDetails)
 
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 

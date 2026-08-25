@@ -15,13 +15,3 @@ ZERO_EX_SUPPORTED_CHAINS: tuple[Chain, ...] = (
     Chain.OPTIMISM,
     Chain.POLYGON,
 )
-
-ZERO_EX_EXPLORER_URLS: dict[str, str] = {
-    Chain.ETHEREUM.chain_id: "https://etherscan.io",
-    Chain.ARBITRUM.chain_id: "https://arbiscan.io",
-    Chain.AVALANCHE.chain_id: "https://snowtrace.io",
-    Chain.BASE.chain_id: "https://basescan.org",
-    Chain.BNB_CHAIN.chain_id: "https://bscscan.com",
-    Chain.OPTIMISM.chain_id: "https://optimistic.etherscan.io",
-    Chain.POLYGON.chain_id: "https://polygonscan.com",
-}

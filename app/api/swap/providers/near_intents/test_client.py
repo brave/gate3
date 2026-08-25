@@ -1090,10 +1090,7 @@ async def test_get_status_success(
     # Verify response
     assert result.status == SwapStatus.SUCCESS
     assert result.internal_status == "SUCCESS"
-    assert (
-        result.explorer_url
-        == "https://explorer.near-intents.org/transactions/4Rqnz7SPU4EqSUravxbKTSBti4RNf1XGaqvBmnLfvH83"
-    )
+    assert result.explorer_url is None
 
 
 @pytest.mark.asyncio
