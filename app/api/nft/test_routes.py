@@ -878,19 +878,14 @@ def test_get_nfts_by_ids_chunks_metadata_batches_to_alchemy_limit(
 def test_get_nfts_by_ids_fetches_chains_and_batches_concurrently(
     mock_httpx_client, mock_settings
 ):
-    # Solana + two EVM chains, one needing two batches -> 4 upstream calls
-    expected_calls = 4
-    started = 0
-    all_started = asyncio.Event()
+    # Solana + two EVM chains, one needing two batches -> 4 upstream calls.
+    # Each mocked call waits until all of them have been issued. A serial
+    # implementation never issues the next call while one is pending, so it
+    # times out and the request fails.
+    barrier = asyncio.Barrier(4)
 
     async def post(url, json):
-        nonlocal started
-        started += 1
-        if started == expected_calls:
-            all_started.set()
-        # Block until every call has been issued. A serial implementation
-        # never issues the next call while this one is pending, so it times out.
-        await asyncio.wait_for(all_started.wait(), timeout=1)
+        await asyncio.wait_for(barrier.wait(), timeout=1)
         if "solana-mainnet" in url:
             return _create_mock_response(
                 json_data={"result": [MOCK_SOLANA_ASSET_RESPONSE]}
@@ -906,7 +901,7 @@ def test_get_nfts_by_ids_fetches_chains_and_batches_concurrently(
     )
     response = client.get(f"/api/nft/v1/getNFTsByIds?ids={ids}")
     assert response.status_code == 200
-    assert started == expected_calls
+    assert mock_httpx_client.post.call_count == 4
 
     # One NFT per upstream call, returned as Solana first, then chains in
     # request order, regardless of which call resolved first
@@ -917,3 +912,73 @@ def test_get_nfts_by_ids_fetches_chains_and_batches_concurrently(
         "ethereum",
         "polygon",
     ]
+
+
+def test_get_nfts_by_owner_fetches_chains_concurrently(
+    mock_httpx_client, mock_settings
+):
+    # Two EVM chains (GET) and Solana (POST) -> 3 upstream calls, each of
+    # which waits until all of them have been issued (see the getNFTsByIds
+    # concurrency test above)
+    barrier = asyncio.Barrier(3)
+
+    async def get(url, params):
+        await asyncio.wait_for(barrier.wait(), timeout=1)
+        return _create_mock_response(
+            json_data={
+                "ownedNfts": [MOCK_NFT_ALCHEMY_RESPONSE],
+                "totalCount": 1,
+                "pageKey": None,
+            }
+        )
+
+    async def post(url, json):
+        await asyncio.wait_for(barrier.wait(), timeout=1)
+        return _create_mock_response(
+            json_data={
+                "result": {
+                    "items": [MOCK_SOLANA_ASSET_RESPONSE],
+                    "total": 1,
+                    "limit": 50,
+                }
+            }
+        )
+
+    mock_httpx_client.get.side_effect = get
+    mock_httpx_client.post.side_effect = post
+
+    response = client.get(
+        "/api/nft/v1/getNFTsForOwner?wallet_address=0x123"
+        "&chains=eth.0x1&chains=eth.0x89&chains=sol.0x65"
+    )
+    assert response.status_code == 200
+    assert mock_httpx_client.get.call_count == 2
+    assert mock_httpx_client.post.call_count == 1
+
+    # Results follow the requested chain order regardless of which call
+    # resolved first
+    sh_response = SimpleHashNFTResponse.model_validate(response.json())
+    assert [nft.chain for nft in sh_response.nfts] == ["ethereum", "polygon", "solana"]
+
+
+def test_get_nfts_by_owner_next_cursor_is_last_chain_with_page_key(
+    mock_httpx_client, mock_settings
+):
+    def get(url, params):
+        network = url.split("//")[1].split(".")[0]
+        return _create_mock_response(
+            json_data={
+                "ownedNfts": [MOCK_NFT_ALCHEMY_RESPONSE],
+                "totalCount": 1,
+                "pageKey": f"{network}_next",
+            }
+        )
+
+    mock_httpx_client.get.side_effect = get
+
+    response = client.get(
+        "/api/nft/v1/getNFTsForOwner?wallet_address=0x123"
+        "&chains=eth.0x1&chains=eth.0x89"
+    )
+    assert response.status_code == 200
+    assert response.json()["next_cursor"] == "polygon-mainnet_next"
