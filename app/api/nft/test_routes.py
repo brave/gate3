@@ -982,3 +982,48 @@ def test_get_nfts_by_owner_next_cursor_is_last_chain_with_page_key(
     )
     assert response.status_code == 200
     assert response.json()["next_cursor"] == "polygon-mainnet_next"
+
+
+def test_get_simplehash_nfts_by_owner_requests_full_evm_pages(
+    mock_httpx_client, mock_settings
+):
+    evm_params = []
+    solana_bodies = []
+
+    def get(url, params):
+        evm_params.append(dict(params))
+        return _create_mock_response(
+            json_data={
+                "ownedNfts": [MOCK_NFT_ALCHEMY_RESPONSE],
+                "totalCount": 1,
+                "pageKey": None,
+            }
+        )
+
+    def post(url, json):
+        solana_bodies.append(json)
+        return _create_mock_response(
+            json_data={
+                "result": {
+                    "items": [MOCK_SOLANA_ASSET_RESPONSE],
+                    "total": 1,
+                    "limit": 50,
+                }
+            }
+        )
+
+    mock_httpx_client.get.side_effect = get
+    mock_httpx_client.post.side_effect = post
+
+    response = client.get(
+        "/simplehash/api/v0/nfts/owners?wallet_addresses=0x123&chains=ethereum,polygon"
+    )
+    assert response.status_code == 200
+    assert [p["pageSize"] for p in evm_params] == ["100", "100"]
+
+    response = client.get(
+        "/simplehash/api/v0/nfts/owners?wallet_addresses=mint123&chains=solana"
+    )
+    assert response.status_code == 200
+    # Solana pages stay at 50: some wallets carry megabytes of metadata per asset
+    assert solana_bodies[0]["params"]["limit"] == 50

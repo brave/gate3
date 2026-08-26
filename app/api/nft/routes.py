@@ -31,6 +31,13 @@ logger = logging.getLogger(__name__)
 
 # Alchemy rejects getNFTMetadataBatch requests with more than 100 tokens.
 ALCHEMY_NFT_METADATA_BATCH_LIMIT = 100
+# Largest page Alchemy's getNFTsForOwner serves. Bigger pages mean fewer billed
+# calls to walk a wallet.
+ALCHEMY_NFT_OWNER_PAGE_SIZE = 100
+# DAS getAssetsByOwner allows up to 1000, but some wallets hold assets with
+# megabytes of metadata each, so a larger page can take minutes to stream.
+# Keep Solana pages small until upstream responses are size/time bounded.
+ALCHEMY_SOLANA_OWNER_PAGE_SIZE = 50
 # Per-request bound on concurrent Alchemy calls. It caps the fan-out of a
 # single large request; it does not bound the pod's total upstream
 # concurrency, which Alchemy rate-limits per app.
@@ -342,7 +349,9 @@ async def get_nfts_by_owner(
         ..., description="List of chains to fetch NFTs from in format coin.chain_id"
     ),
     page_key: str | None = Query(None, description="Page key for pagination"),
-    page_size: int = Query(50, description="Number of NFTs to fetch per page"),
+    page_size: int = Query(
+        ALCHEMY_NFT_OWNER_PAGE_SIZE, description="Number of NFTs to fetch per page"
+    ),
 ) -> SimpleHashNFTResponse:
     """
     Fetch NFTs owned by a wallet address across multiple chains using Alchemy API.
@@ -365,7 +374,11 @@ async def get_nfts_by_owner(
         for chain in requested_chains:
             if chain == Chain.SOLANA:
                 fetch = _get_solana_assets_by_owner(
-                    client, semaphore, wallet_address, page_key, page_size
+                    client,
+                    semaphore,
+                    wallet_address,
+                    page_key,
+                    min(page_size, ALCHEMY_SOLANA_OWNER_PAGE_SIZE),
                 )
             else:
                 fetch = _get_nfts_for_owner(
@@ -555,7 +568,7 @@ async def get_simplehash_nfts_by_owner(
         wallet_address=wallet_address,
         chains=internal_chains_ids,
         page_key=cursor,
-        page_size=50,  # Use default page size
+        page_size=ALCHEMY_NFT_OWNER_PAGE_SIZE,
     )
 
 
