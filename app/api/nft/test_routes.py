@@ -1,5 +1,6 @@
 from unittest.mock import AsyncMock, MagicMock, Mock
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 
@@ -802,3 +803,49 @@ def test_get_nfts_by_ids_transforms_each_chain_with_its_own_chain(
     # Each NFT must be tagged with the chain it was fetched from, not the last
     # chain seen while parsing the ids.
     assert [nft.chain for nft in sh_response.nfts] == ["ethereum", "polygon"]
+
+
+def _http_status_error(url: str, status_code: int) -> httpx.HTTPStatusError:
+    request = httpx.Request("POST", url)
+    return httpx.HTTPStatusError(
+        f"Client error '{status_code}' for url '{url}'",
+        request=request,
+        response=httpx.Response(status_code, request=request),
+    )
+
+
+def test_get_nfts_by_ids_upstream_http_error_is_502_without_key(
+    mock_httpx_client, mock_settings, caplog
+):
+    url = "https://polygon-mainnet.g.alchemy.com/nft/v3/test_key/getNFTMetadataBatch"
+    mock_httpx_client.post.return_value = _create_mock_response(400)
+    mock_httpx_client.post.return_value.raise_for_status.side_effect = (
+        _http_status_error(url, 400)
+    )
+
+    with caplog.at_level("WARNING"):
+        response = client.get("/api/nft/v1/getNFTsByIds?ids=eth.0x89.0x789.101112")
+
+    assert response.status_code == 502
+    assert "test_key" not in response.text
+    assert "test_key" not in caplog.text
+    assert "getNFTMetadataBatch on polygon-mainnet failed with HTTP 400" in caplog.text
+
+
+def test_get_nfts_by_owner_upstream_transport_error_is_502_without_key(
+    mock_httpx_client, mock_settings, caplog
+):
+    url = "https://eth-mainnet.g.alchemy.com/nft/v3/test_key/getNFTsForOwner"
+    mock_httpx_client.get.side_effect = httpx.ConnectError(
+        "connection refused", request=httpx.Request("GET", url)
+    )
+
+    with caplog.at_level("WARNING"):
+        response = client.get(
+            "/api/nft/v1/getNFTsForOwner?wallet_address=0x123&chains=eth.0x1"
+        )
+
+    assert response.status_code == 502
+    assert "test_key" not in response.text
+    assert "test_key" not in caplog.text
+    assert "getNFTsForOwner on eth-mainnet failed: ConnectError" in caplog.text

@@ -1,5 +1,8 @@
+import logging
+from collections.abc import Awaitable
+
 import httpx
-from fastapi import APIRouter, Path, Query
+from fastapi import APIRouter, HTTPException, Path, Query
 
 from app.api.common.models import Chain, Coin, Tags
 from app.api.common.utils import is_evm_address, is_solana_address
@@ -21,8 +24,46 @@ from app.api.nft.models import (
 from app.config import settings
 from app.core.http import create_http_client
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/api/nft", tags=[Tags.NFT])
 simplehash_router = APIRouter(prefix="/simplehash/api/v0", tags=[Tags.NFT])
+
+
+async def _alchemy_json(
+    request: Awaitable[httpx.Response], *, chain: Chain, method: str
+) -> dict:
+    """Await an Alchemy request and return its JSON body.
+
+    Upstream failures are logged by network/method/status only and surfaced
+    as 502s, so the request URL (which carries the API key) never reaches
+    logs, error trackers, or clients.
+    """
+    try:
+        response = await request
+        response.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        logger.warning(
+            "Alchemy %s on %s failed with HTTP %d",
+            method,
+            chain.alchemy_id,
+            exc.response.status_code,
+        )
+        raise HTTPException(
+            status_code=502, detail="Upstream NFT provider error"
+        ) from None
+    except httpx.HTTPError as exc:
+        logger.warning(
+            "Alchemy %s on %s failed: %s",
+            method,
+            chain.alchemy_id,
+            type(exc).__name__,
+        )
+        raise HTTPException(
+            status_code=502, detail="Upstream NFT provider error"
+        ) from None
+    return response.json()
+
 
 # Chain mapping dictionaries
 _SIMPLEHASH_TO_CHAIN = {chain.simplehash_id: chain for chain in Chain}
@@ -239,9 +280,11 @@ async def get_nfts_by_owner(
                 if page_key:
                     params["params"]["page"] = page_key
 
-                response = await client.post(url, json=params)
-                response.raise_for_status()
-                json_response = response.json()
+                json_response = await _alchemy_json(
+                    client.post(url, json=params),
+                    chain=chain,
+                    method="getAssetsByOwner",
+                )
                 if "error" in json_response:
                     raise ValueError(f"Alchemy API error: {json_response['error']}")
 
@@ -266,10 +309,11 @@ async def get_nfts_by_owner(
                 if page_key:
                     params = params.set("pageKey", page_key)
 
-                response = await client.get(url, params=params)
-                response.raise_for_status()
-
-                json_response = response.json()
+                json_response = await _alchemy_json(
+                    client.get(url, params=params),
+                    chain=chain,
+                    method="getNFTsForOwner",
+                )
                 data = AlchemyNFTResponse.model_validate(json_response)
 
                 # Transform NFTs
@@ -345,9 +389,11 @@ async def get_nfts_by_ids(
                 "params": {"ids": solana_nfts},
             }
 
-            response = await client.post(url, json=params)
-            response.raise_for_status()
-            json_response = response.json()
+            json_response = await _alchemy_json(
+                client.post(url, json=params),
+                chain=Chain.SOLANA,
+                method="getAssets",
+            )
             if "error" in json_response:
                 raise ValueError(f"Alchemy API error: {json_response['error']}")
 
@@ -393,10 +439,11 @@ async def get_nfts_by_ids(
                     for contract_address, token_id in nft_list
                 ]
 
-                response = await client.post(url, json={"tokens": tokens})
-                response.raise_for_status()
-
-                json_response = response.json()
+                json_response = await _alchemy_json(
+                    client.post(url, json={"tokens": tokens}),
+                    chain=chain,
+                    method="getNFTMetadataBatch",
+                )
 
                 for nft_data in json_response["nfts"]:
                     if not nft_data:
@@ -421,9 +468,11 @@ async def get_solana_asset_proof(
             "params": [token_address],
             "id": 1,
         }
-        response = await client.post(url, json=params)
-        response.raise_for_status()
-        json_response = response.json()
+        json_response = await _alchemy_json(
+            client.post(url, json=params),
+            chain=Chain.SOLANA,
+            method="getAssetProof",
+        )
 
         if error := json_response.get("error"):
             raise ValueError(f"Alchemy API error: {error}")
