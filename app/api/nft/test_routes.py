@@ -1,3 +1,4 @@
+import asyncio
 from unittest.mock import AsyncMock, MagicMock, Mock
 
 import httpx
@@ -872,3 +873,47 @@ def test_get_nfts_by_ids_chunks_metadata_batches_to_alchemy_limit(
     # One NFT per upstream call -> both batches' results are concatenated
     sh_response = SimpleHashNFTResponse.model_validate(response.json())
     assert len(sh_response.nfts) == 2
+
+
+def test_get_nfts_by_ids_fetches_chains_and_batches_concurrently(
+    mock_httpx_client, mock_settings
+):
+    # Solana + two EVM chains, one needing two batches -> 4 upstream calls
+    expected_calls = 4
+    started = 0
+    all_started = asyncio.Event()
+
+    async def post(url, json):
+        nonlocal started
+        started += 1
+        if started == expected_calls:
+            all_started.set()
+        # Block until every call has been issued. A serial implementation
+        # never issues the next call while this one is pending, so it times out.
+        await asyncio.wait_for(all_started.wait(), timeout=1)
+        if "solana-mainnet" in url:
+            return _create_mock_response(
+                json_data={"result": [MOCK_SOLANA_ASSET_RESPONSE]}
+            )
+        return _create_mock_response(json_data={"nfts": [MOCK_NFT_ALCHEMY_RESPONSE]})
+
+    mock_httpx_client.post.side_effect = post
+
+    ids = ",".join(
+        ["sol.0x65.0xdef123"]
+        + [f"eth.0x1.0x123.{token_id}" for token_id in range(101)]
+        + ["eth.0x89.0x789.1"]
+    )
+    response = client.get(f"/api/nft/v1/getNFTsByIds?ids={ids}")
+    assert response.status_code == 200
+    assert started == expected_calls
+
+    # One NFT per upstream call, returned as Solana first, then chains in
+    # request order, regardless of which call resolved first
+    sh_response = SimpleHashNFTResponse.model_validate(response.json())
+    assert [nft.chain for nft in sh_response.nfts] == [
+        "solana",
+        "ethereum",
+        "ethereum",
+        "polygon",
+    ]
