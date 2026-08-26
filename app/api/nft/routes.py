@@ -1,5 +1,7 @@
+import asyncio
 import logging
-from collections.abc import Awaitable
+from collections.abc import Awaitable, Iterable
+from itertools import batched
 
 import httpx
 from fastapi import APIRouter, HTTPException, Path, Query
@@ -25,6 +27,10 @@ from app.config import settings
 from app.core.http import create_http_client
 
 logger = logging.getLogger(__name__)
+
+# Alchemy rejects getNFTMetadataBatch requests with more than 100 tokens.
+ALCHEMY_NFT_METADATA_BATCH_LIMIT = 100
+ALCHEMY_NFT_METADATA_MAX_CONCURRENT_REQUESTS = 4
 
 router = APIRouter(prefix="/api/nft", tags=[Tags.NFT])
 simplehash_router = APIRouter(prefix="/simplehash/api/v0", tags=[Tags.NFT])
@@ -327,6 +333,34 @@ async def get_nfts_by_owner(
     return SimpleHashNFTResponse(next_cursor=next_page_key, nfts=nfts)
 
 
+async def _get_nft_metadata_batch(
+    client: httpx.AsyncClient,
+    semaphore: asyncio.Semaphore,
+    chain: Chain,
+    batch: Iterable[tuple[str, str]],
+) -> list[SimpleHashNFT]:
+    """Fetch and transform one getNFTMetadataBatch request for a chain.
+
+    `batch` must hold at most ALCHEMY_NFT_METADATA_BATCH_LIMIT tokens.
+    """
+    url = f"https://{chain.alchemy_id}.g.alchemy.com/nft/v3/{settings.ALCHEMY_API_KEY}/getNFTMetadataBatch"
+    tokens = [
+        {"contractAddress": contract_address, "tokenId": token_id}
+        for contract_address, token_id in batch
+    ]
+    async with semaphore:
+        json_response = await _alchemy_json(
+            client.post(url, json={"tokens": tokens}),
+            chain=chain,
+            method="getNFTMetadataBatch",
+        )
+    return [
+        _transform_alchemy_to_simplehash(AlchemyNFT.model_validate(nft_data), chain)
+        for nft_data in json_response["nfts"]
+        if nft_data
+    ]
+
+
 @router.get("/v1/getNFTsByIds", response_model=SimpleHashNFTResponse)
 async def get_nfts_by_ids(
     ids: str = Query(
@@ -429,27 +463,17 @@ async def get_nfts_by_ids(
 
                 chain_nfts.setdefault(chain, []).append((contract_address, token_id))
 
-            # Fetch NFTs for each chain
-            for chain, nft_list in chain_nfts.items():
-                url = f"https://{chain.alchemy_id}.g.alchemy.com/nft/v3/{settings.ALCHEMY_API_KEY}/getNFTMetadataBatch"
-
-                # Prepare batch request
-                tokens = [
-                    {"contractAddress": contract_address, "tokenId": token_id}
-                    for contract_address, token_id in nft_list
-                ]
-
-                json_response = await _alchemy_json(
-                    client.post(url, json={"tokens": tokens}),
-                    chain=chain,
-                    method="getNFTMetadataBatch",
+            # Fetch each chain's NFTs in batches Alchemy accepts, concurrently
+            semaphore = asyncio.Semaphore(ALCHEMY_NFT_METADATA_MAX_CONCURRENT_REQUESTS)
+            batch_results = await asyncio.gather(
+                *(
+                    _get_nft_metadata_batch(client, semaphore, chain, batch)
+                    for chain, nft_list in chain_nfts.items()
+                    for batch in batched(nft_list, ALCHEMY_NFT_METADATA_BATCH_LIMIT)
                 )
-
-                for nft_data in json_response["nfts"]:
-                    if not nft_data:
-                        continue
-                    alchemy_nft = AlchemyNFT.model_validate(nft_data)
-                    nfts.append(_transform_alchemy_to_simplehash(alchemy_nft, chain))
+            )
+            for batch_nfts in batch_results:
+                nfts.extend(batch_nfts)
 
     return SimpleHashNFTResponse(next_cursor=None, nfts=nfts)
 
