@@ -232,3 +232,29 @@ async def test_create_http_client_returns_async_client():
         assert isinstance(client, httpx.AsyncClient)
     finally:
         await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_retries_are_counted_by_host_and_reason(metric_value):
+    def retries(reason):
+        return metric_value(
+            "http_client_retries_total", host="example.com", reason=reason
+        )
+
+    before_429, before_timeout = retries("429"), retries("ReadTimeout")
+    mock = MockTransport(
+        [
+            _make_response(429, headers={"retry-after": "0.0"}),
+            httpx.ReadTimeout("slow"),
+            _make_response(200),
+        ]
+    )
+    transport = _make_retry_transport(mock, initial_delay=0.0)
+
+    response = await transport.handle_async_request(
+        httpx.Request("GET", "https://example.com")
+    )
+
+    assert response.status_code == 200
+    assert retries("429") == before_429 + 1
+    assert retries("ReadTimeout") == before_timeout + 1

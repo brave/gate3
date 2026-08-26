@@ -4,6 +4,7 @@ import random
 import time
 
 import httpx
+from prometheus_client import Counter
 
 logger = logging.getLogger(__name__)
 
@@ -15,6 +16,14 @@ DEFAULT_MULTIPLIER = 2.0
 DEFAULT_MAX_DELAY = 4.0
 DEFAULT_JITTER_FACTOR = 0.5
 DEFAULT_MAX_TOTAL_TIME = 30.0
+
+# One increment per retried attempt, labelled by upstream host and the status
+# code or exception class that triggered the retry.
+http_client_retries_total = Counter(
+    "http_client_retries_total",
+    "Total number of retried outbound HTTP requests",
+    labelnames=["host", "reason"],
+)
 
 
 class RetryTransport(httpx.AsyncBaseTransport):
@@ -62,6 +71,9 @@ class RetryTransport(httpx.AsyncBaseTransport):
                     type(exc).__name__,
                     wait,
                 )
+                http_client_retries_total.labels(
+                    host=request.url.host, reason=type(exc).__name__
+                ).inc()
                 await asyncio.sleep(wait)
                 delay = min(delay * self._multiplier, self._max_delay)
                 continue
@@ -96,6 +108,9 @@ class RetryTransport(httpx.AsyncBaseTransport):
                 response.status_code,
                 wait,
             )
+            http_client_retries_total.labels(
+                host=request.url.host, reason=str(response.status_code)
+            ).inc()
 
             await response.aclose()
             await asyncio.sleep(wait)
