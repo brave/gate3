@@ -367,7 +367,7 @@ async def get_nfts_by_ids(
         # Handle other chain NFTs
         if other_nfts:
             # Group NFTs by chain
-            chain_nfts = {}
+            chain_nfts: dict[Chain, list[tuple[str, str]]] = {}
             for nft_id in other_nfts:
                 parts = [part.strip() for part in nft_id.split(".") if part.strip()]
 
@@ -381,13 +381,11 @@ async def get_nfts_by_ids(
                 if not chain:
                     continue
 
-                if chain.alchemy_id not in chain_nfts:
-                    chain_nfts[chain.alchemy_id] = []
-                chain_nfts[chain.alchemy_id].append((contract_address, token_id))
+                chain_nfts.setdefault(chain, []).append((contract_address, token_id))
 
             # Fetch NFTs for each chain
-            for alchemy_id, nft_list in chain_nfts.items():
-                url = f"https://{alchemy_id}.g.alchemy.com/nft/v3/{settings.ALCHEMY_API_KEY}/getNFTMetadataBatch"
+            for chain, nft_list in chain_nfts.items():
+                url = f"https://{chain.alchemy_id}.g.alchemy.com/nft/v3/{settings.ALCHEMY_API_KEY}/getNFTMetadataBatch"
 
                 # Prepare batch request
                 tokens = [

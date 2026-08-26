@@ -305,6 +305,9 @@ class Chain(Enum):
             return False
         return self.coin == other.coin and self.chain_id == other.chain_id
 
+    def __hash__(self) -> int:
+        return hash((self.coin, self.chain_id))
+
     def __str__(self):
         return f"<{self.__class__.__name__}.{self.name}: coin={self.coin.value} chain_id={self.chain_id}>"
 
