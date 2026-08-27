@@ -1189,3 +1189,74 @@ def test_solana_owners_are_unknown_unless_single_owner(
     response = client.get("/simplehash/api/v0/nfts/assets?nft_ids=solana.mint123")
     assert response.status_code == 200
     assert response.json()["nfts"][0]["owners"] == expected
+
+
+@pytest.mark.parametrize(
+    ("spam_query", "upstream_filter", "expected_spam_scores"),
+    [
+        ("", None, [0, 1]),  # param omitted: everything, no upstream filter
+        ("&spam=all", None, [0, 1]),
+        ("&spam=exclude", "SPAM", [0]),
+        ("&spam=only", None, [1]),
+    ],
+)
+def test_get_simplehash_nfts_by_owner_spam_filter(
+    mock_httpx_client, mock_settings, spam_query, upstream_filter, expected_spam_scores
+):
+    spam_nft: dict[str, Any] = copy.deepcopy(MOCK_NFT_ALCHEMY_RESPONSE)
+    spam_nft["contract"]["isSpam"] = True
+    mock_httpx_client.get.side_effect = _create_mock_get_side_effect(
+        {
+            "ownedNfts": [MOCK_NFT_ALCHEMY_RESPONSE, spam_nft],
+            "totalCount": 2,
+            "pageKey": None,
+        }
+    )
+    response = client.get(
+        f"/simplehash/api/v0/nfts/owners?wallet_addresses=0x123&chains=ethereum{spam_query}"
+    )
+    assert response.status_code == 200
+    params = mock_httpx_client.get.call_args.kwargs["params"]
+    assert params.get("excludeFilters[]") == upstream_filter
+    sh_response = SimpleHashNFTResponse.model_validate(response.json())
+    assert [
+        nft.collection.spam_score for nft in sh_response.nfts
+    ] == expected_spam_scores
+
+
+def test_get_nfts_by_owner_spam_filter_applies_to_solana_heuristic(
+    mock_httpx_client, mock_settings
+):
+    airdrop = {
+        **MOCK_SOLANA_ASSET_RESPONSE,
+        "grouping": [
+            {
+                "group_key": "collection",
+                "group_value": "spamcoll",
+                "collection_metadata": {"name": "Free Airdrop Box"},
+            }
+        ],
+    }
+    mock_httpx_client.post.side_effect = _create_mock_post_side_effect(
+        None,
+        {
+            "result": {
+                "items": [MOCK_SOLANA_ASSET_RESPONSE, airdrop],
+                "total": 2,
+                "limit": 50,
+            }
+        },
+    )
+    response = client.get(
+        "/api/nft/v1/getNFTsForOwner?wallet_address=mint123&chains=sol.0x65&spam=only"
+    )
+    assert response.status_code == 200
+    sh_response = SimpleHashNFTResponse.model_validate(response.json())
+    assert [nft.collection.name for nft in sh_response.nfts] == ["Free Airdrop Box"]
+
+
+def test_get_nfts_by_owner_rejects_unknown_spam_filter(mock_settings):
+    response = client.get(
+        "/api/nft/v1/getNFTsForOwner?wallet_address=0x123&chains=eth.0x1&spam=maybe"
+    )
+    assert response.status_code == 422

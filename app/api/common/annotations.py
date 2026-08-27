@@ -4,3 +4,4 @@ ADDRESS_DESCRIPTION = "0x-prefixed contract address of the token in case of EVM 
 VS_CURRENCY_DESCRIPTION = (
     "The target fiat currency to get the price in (e.g. 'USD', 'EUR')"
 )
+SPAM_FILTER_DESCRIPTION = "Return all NFTs, exclude spam, or only spam"

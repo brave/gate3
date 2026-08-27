@@ -9,12 +9,14 @@ from itertools import batched
 import httpx
 from fastapi import APIRouter, HTTPException, Path, Query
 
+from app.api.common.annotations import SPAM_FILTER_DESCRIPTION
 from app.api.common.models import Chain, Coin, Tags
 from app.api.common.utils import is_evm_address, is_solana_address
 from app.api.nft.models import (
     AlchemyNFT,
     AlchemyNFTResponse,
     AlchemyTokenType,
+    NFTSpamFilter,
     SimpleHashCollection,
     SimpleHashContract,
     SimpleHashExtraMetadata,
@@ -403,8 +405,12 @@ async def _get_nfts_for_owner(
     wallet_address: str,
     page_key: str | int | None,
     page_size: int,
+    exclude_spam: bool,
 ) -> tuple[list[SimpleHashNFT], str | None]:
-    """Fetch one page of a wallet's NFTs on an EVM chain via Alchemy's getNFTsForOwner."""
+    """Fetch one page of a wallet's NFTs on an EVM chain via Alchemy's getNFTsForOwner.
+
+    With exclude_spam, Alchemy drops spam upstream so the page never carries it.
+    """
     url = f"https://{chain.alchemy_id}.g.alchemy.com/nft/v3/{settings.ALCHEMY_API_KEY}/getNFTsForOwner"
     params = httpx.QueryParams(
         owner=wallet_address,
@@ -413,6 +419,8 @@ async def _get_nfts_for_owner(
     )
     if page_key:
         params = params.set("pageKey", str(page_key))
+    if exclude_spam:
+        params = params.set("excludeFilters[]", "SPAM")
 
     json_response = await _alchemy_json(
         client.get(url, params=params),
@@ -440,6 +448,7 @@ async def get_nfts_by_owner(
     page_size: int = Query(
         ALCHEMY_NFT_OWNER_PAGE_SIZE, description="Number of NFTs to fetch per page"
     ),
+    spam: NFTSpamFilter = Query(NFTSpamFilter.ALL, description=SPAM_FILTER_DESCRIPTION),
 ) -> SimpleHashNFTResponse:
     """
     Fetch NFTs owned by a wallet address across multiple chains using Alchemy API.
@@ -474,12 +483,24 @@ async def get_nfts_by_owner(
                 )
             else:
                 fetch = _get_nfts_for_owner(
-                    client, semaphore, chain, wallet_address, chain_page_key, page_size
+                    client,
+                    semaphore,
+                    chain,
+                    wallet_address,
+                    chain_page_key,
+                    page_size,
+                    spam == NFTSpamFilter.EXCLUDE,
                 )
             fetches.append(fetch)
         results = await asyncio.gather(*fetches)
 
     nfts = [nft for chain_nfts, _ in results for nft in chain_nfts]
+    if spam != NFTSpamFilter.ALL:
+        # Filter on gate3's own verdict: Solana spam is a gate3 heuristic, and
+        # Alchemy's documented includeFilters[]=SPAM returned unfiltered pages
+        # when tried, so "only spam" cannot be pushed upstream either.
+        keep_spam = spam == NFTSpamFilter.ONLY
+        nfts = [nft for nft in nfts if bool(nft.collection.spam_score) == keep_spam]
     next_page_keys = {chain: key for chain, (_, key) in zip(page_keys, results) if key}
     return SimpleHashNFTResponse(
         next_cursor=_encode_owner_cursor(next_page_keys), nfts=nfts
@@ -632,6 +653,7 @@ async def get_simplehash_nfts_by_owner(
         ..., description="List of chains to fetch NFTs from"
     ),
     cursor: str | None = Query(None, description="Cursor for pagination"),
+    spam: NFTSpamFilter = Query(NFTSpamFilter.ALL, description=SPAM_FILTER_DESCRIPTION),
 ) -> SimpleHashNFTResponse:
     filtered_chains = {
         chain_str for chain_raw in (chains or []) for chain_str in chain_raw.split(",")
@@ -656,6 +678,7 @@ async def get_simplehash_nfts_by_owner(
         chains=internal_chains_ids,
         page_key=cursor,
         page_size=ALCHEMY_NFT_OWNER_PAGE_SIZE,
+        spam=spam,
     )
 
 
