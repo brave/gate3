@@ -273,7 +273,7 @@ def test_get_solana_asset_proof(mock_httpx_client, mock_settings):
     assert sh_response.proof == ["hash1", "hash2", "hash3"]
 
 
-def test_get_solana_asset_proof_error(mock_httpx_client):
+def test_get_solana_asset_proof_error(mock_httpx_client, mock_settings, caplog):
     mock_response = {
         "error": "Token not found",
     }
@@ -283,10 +283,15 @@ def test_get_solana_asset_proof_error(mock_httpx_client):
         raise_for_status=Mock(return_value=None),
     )
 
-    with pytest.raises(ValueError) as e:
-        client.get("/api/nft/v1/getSolanaAssetProof?token_address=invalid_token")
+    with caplog.at_level("WARNING"):
+        response = client.get(
+            "/api/nft/v1/getSolanaAssetProof?token_address=invalid_token"
+        )
 
-    assert str(e.value) == "Alchemy API error: Token not found"
+    # A JSON-RPC error is an upstream failure like any other
+    assert response.status_code == 502
+    assert "Alchemy getAssetProof on solana-mainnet returned error" in caplog.text
+    assert "test_key" not in caplog.text
 
 
 def test_get_simplehash_nfts_by_owner(mock_httpx_client, mock_settings):
@@ -1260,3 +1265,71 @@ def test_get_nfts_by_owner_rejects_unknown_spam_filter(mock_settings):
         "/api/nft/v1/getNFTsForOwner?wallet_address=0x123&chains=eth.0x1&spam=maybe"
     )
     assert response.status_code == 422
+
+
+def _owner_page_or_error(failing_networks, page_key=None):
+    def get(url, params):
+        network = _network(url)
+        if network in failing_networks:
+            raise _http_status_error(url, 502)
+        return _create_mock_response(json_data=_owner_page(page_key))
+
+    return get
+
+
+def test_get_nfts_by_owner_skips_a_failed_chain(mock_httpx_client, mock_settings):
+    mock_httpx_client.get.side_effect = _owner_page_or_error(
+        {"polygon-mainnet"}, page_key="more"
+    )
+    response = client.get(
+        "/api/nft/v1/getNFTsForOwner?wallet_address=0x123"
+        "&chains=eth.0x1&chains=eth.0x89&chains=eth.0xa"
+    )
+    assert response.status_code == 200
+    sh_response = SimpleHashNFTResponse.model_validate(response.json())
+    assert [nft.chain for nft in sh_response.nfts] == ["ethereum", "optimism"]
+    # The failed chain is not in the cursor either, so it is not retried
+    assert sh_response.next_cursor is not None
+    assert _decode_owner_cursor(sh_response.next_cursor) == {
+        "eth-mainnet": "more",
+        "opt-mainnet": "more",
+    }
+
+
+def test_get_nfts_by_owner_fails_when_every_chain_fails(
+    mock_httpx_client, mock_settings
+):
+    mock_httpx_client.get.side_effect = _owner_page_or_error(
+        {"eth-mainnet", "polygon-mainnet"}
+    )
+    response = client.get(
+        "/api/nft/v1/getNFTsForOwner?wallet_address=0x123&chains=eth.0x1&chains=eth.0x89"
+    )
+    assert response.status_code == 502
+
+
+def test_get_nfts_by_owner_does_not_swallow_unexpected_errors(
+    mock_httpx_client, mock_settings
+):
+    mock_httpx_client.get.side_effect = RuntimeError("bug")
+    with pytest.raises(RuntimeError):
+        client.get("/api/nft/v1/getNFTsForOwner?wallet_address=0x123&chains=eth.0x1")
+
+
+def test_alchemy_call_times_out_as_502_without_key(
+    mock_httpx_client, mock_settings, caplog, monkeypatch
+):
+    monkeypatch.setattr("app.api.nft.routes.ALCHEMY_NFT_CALL_TIMEOUT", 0.05)
+
+    async def slow_get(url, params):
+        await asyncio.sleep(0.5)
+        return _create_mock_response(json_data=_owner_page())
+
+    mock_httpx_client.get.side_effect = slow_get
+    with caplog.at_level("WARNING"):
+        response = client.get(
+            "/api/nft/v1/getNFTsForOwner?wallet_address=0x123&chains=eth.0x1"
+        )
+    assert response.status_code == 502
+    assert "Alchemy getNFTsForOwner on eth-mainnet timed out after 0s" in caplog.text
+    assert "test_key" not in caplog.text
