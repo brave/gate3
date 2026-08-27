@@ -136,6 +136,12 @@ class AlchemyNFTResponse(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel)
 
 
+class NFTSpamFilter(str, Enum):
+    ALL = "all"
+    EXCLUDE = "exclude"
+    ONLY = "only"
+
+
 class SimpleHashTokenType(str, Enum):
     ERC721 = "ERC721"
     ERC1155 = "ERC1155"
