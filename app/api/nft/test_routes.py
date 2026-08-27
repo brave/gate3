@@ -1,15 +1,19 @@
 import asyncio
+import copy
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, Mock
 
 import httpx
 import pytest
 from fastapi.testclient import TestClient
 
+from app.api.common.models import Chain
 from app.api.nft.models import (
     SimpleHashNFTResponse,
     SolanaAssetContentLink,
     SolanaAssetMerkleProof,
 )
+from app.api.nft.routes import _decode_owner_cursor, _encode_owner_cursor
 from app.main import app
 
 client = TestClient(app)
@@ -356,7 +360,10 @@ def test_get_simplehash_nfts_by_owner_with_cursor(mock_httpx_client, mock_settin
     data = response.json()
     sh_response = SimpleHashNFTResponse.model_validate(data)
     assert len(sh_response.nfts) == 1
-    assert sh_response.next_cursor == "next_page_key"
+    assert sh_response.next_cursor is not None
+    assert _decode_owner_cursor(sh_response.next_cursor) == {
+        "eth-mainnet": "next_page_key"
+    }
 
 
 def test_get_simplehash_compressed_nft_proof(mock_httpx_client, mock_settings):
@@ -961,27 +968,137 @@ def test_get_nfts_by_owner_fetches_chains_concurrently(
     assert [nft.chain for nft in sh_response.nfts] == ["ethereum", "polygon", "solana"]
 
 
-def test_get_nfts_by_owner_next_cursor_is_last_chain_with_page_key(
+def _owner_page(page_key=None):
+    return {
+        "ownedNfts": [MOCK_NFT_ALCHEMY_RESPONSE],
+        "totalCount": 1,
+        "pageKey": page_key,
+    }
+
+
+def _network(url):
+    return url.split("//")[1].split(".")[0]
+
+
+def test_get_nfts_by_owner_paginates_each_chain_on_its_own(
     mock_httpx_client, mock_settings
 ):
-    def get(url, params):
-        network = url.split("//")[1].split(".")[0]
+    # Page 1: ethereum and polygon have more pages, optimism does not
+    more = {"eth-mainnet": "eth_page2", "polygon-mainnet": "polygon_page2"}
+    mock_httpx_client.get.side_effect = lambda url, params: _create_mock_response(
+        json_data=_owner_page(more.get(_network(url)))
+    )
+    response = client.get(
+        "/api/nft/v1/getNFTsForOwner?wallet_address=0x123"
+        "&chains=eth.0x1&chains=eth.0x89&chains=eth.0xa"
+    )
+    assert response.status_code == 200
+    cursor = response.json()["next_cursor"]
+    assert _decode_owner_cursor(cursor) == more
+
+    # Page 2: only the chains in the cursor are queried, each with its own key
+    mock_httpx_client.get.reset_mock()
+    mock_httpx_client.get.side_effect = _create_mock_get_side_effect(_owner_page())
+    response = client.get(
+        "/api/nft/v1/getNFTsForOwner?wallet_address=0x123"
+        f"&chains=eth.0x1&chains=eth.0x89&chains=eth.0xa&page_key={cursor}"
+    )
+    assert response.status_code == 200
+    sent = {
+        _network(call.args[0]): call.kwargs["params"]["pageKey"]
+        for call in mock_httpx_client.get.call_args_list
+    }
+    assert sent == more
+    sh_response = SimpleHashNFTResponse.model_validate(response.json())
+    assert [nft.chain for nft in sh_response.nfts] == ["ethereum", "polygon"]
+    assert sh_response.next_cursor is None
+
+
+def test_get_nfts_by_owner_walks_solana_pages(mock_httpx_client, mock_settings):
+    def post(url, json):
+        page = json["params"]["page"]
+        # Page 1 is full (50 = the Solana page size); page 2 is short
+        items = [MOCK_SOLANA_ASSET_RESPONSE] * (50 if page == 1 else 3)
         return _create_mock_response(
-            json_data={
-                "ownedNfts": [MOCK_NFT_ALCHEMY_RESPONSE],
-                "totalCount": 1,
-                "pageKey": f"{network}_next",
-            }
+            json_data={"result": {"items": items, "total": len(items), "limit": 50}}
         )
 
-    mock_httpx_client.get.side_effect = get
+    mock_httpx_client.post.side_effect = post
+
+    response = client.get(
+        "/api/nft/v1/getNFTsForOwner?wallet_address=mint123&chains=sol.0x65"
+    )
+    assert response.status_code == 200
+    assert len(response.json()["nfts"]) == 50
+    cursor = response.json()["next_cursor"]
+    assert _decode_owner_cursor(cursor) == {"solana-mainnet": 2}
+
+    response = client.get(
+        f"/api/nft/v1/getNFTsForOwner?wallet_address=mint123&chains=sol.0x65&page_key={cursor}"
+    )
+    assert response.status_code == 200
+    assert mock_httpx_client.post.call_args.kwargs["json"]["params"]["page"] == 2
+    assert len(response.json()["nfts"]) == 3
+    assert response.json()["next_cursor"] is None
+
+
+@pytest.mark.parametrize(
+    "cursor",
+    [
+        "not-a-cursor",  # valid base64 that is not JSON
+        "abc",  # invalid base64 padding
+        "e03eb4a0-0442-4b6c-9ab7-2c1f0d1c8f11",  # a raw Alchemy pageKey
+    ],
+)
+def test_get_nfts_by_owner_treats_undecodable_cursor_as_legacy_page_key(
+    mock_httpx_client, mock_settings, cursor
+):
+    mock_httpx_client.get.side_effect = _create_mock_get_side_effect(_owner_page())
+    mock_httpx_client.post.side_effect = _create_mock_post_side_effect(
+        None,
+        {"result": {"items": [MOCK_SOLANA_ASSET_RESPONSE], "total": 1, "limit": 50}},
+    )
 
     response = client.get(
         "/api/nft/v1/getNFTsForOwner?wallet_address=0x123"
-        "&chains=eth.0x1&chains=eth.0x89"
+        f"&chains=eth.0x1&chains=eth.0x89&chains=sol.0x65&page_key={cursor}"
     )
     assert response.status_code == 200
-    assert response.json()["next_cursor"] == "polygon-mainnet_next"
+    # Every EVM chain gets the raw key; Solana pages are integers so it is skipped
+    assert [
+        call.kwargs["params"]["pageKey"]
+        for call in mock_httpx_client.get.call_args_list
+    ] == [cursor, cursor]
+    mock_httpx_client.post.assert_not_called()
+
+
+def test_get_nfts_by_owner_rejects_non_numeric_solana_page(
+    mock_httpx_client, mock_settings
+):
+    cursor = _encode_owner_cursor({Chain.SOLANA: "later"})
+    response = client.get(
+        f"/api/nft/v1/getNFTsForOwner?wallet_address=mint123&chains=sol.0x65&page_key={cursor}"
+    )
+    assert response.status_code == 400
+    mock_httpx_client.post.assert_not_called()
+
+
+def test_solana_asset_without_metadata_name_is_still_returned(
+    mock_httpx_client, mock_settings
+):
+    nameless: dict[str, Any] = copy.deepcopy(MOCK_SOLANA_ASSET_RESPONSE)
+    nameless["content"]["metadata"] = {}
+    mock_httpx_client.post.side_effect = _create_mock_post_side_effect(
+        None, {"result": {"items": [nameless], "total": 1, "limit": 50}}
+    )
+
+    response = client.get(
+        "/api/nft/v1/getNFTsForOwner?wallet_address=mint123&chains=sol.0x65"
+    )
+    assert response.status_code == 200
+    sh_response = SimpleHashNFTResponse.model_validate(response.json())
+    assert len(sh_response.nfts) == 1
+    assert sh_response.nfts[0].name is None
 
 
 def test_get_simplehash_nfts_by_owner_requests_full_evm_pages(
@@ -1027,3 +1144,9 @@ def test_get_simplehash_nfts_by_owner_requests_full_evm_pages(
     assert response.status_code == 200
     # Solana pages stay at 50: some wallets carry megabytes of metadata per asset
     assert solana_bodies[0]["params"]["limit"] == 50
+
+
+def test_owner_cursor_decodes_without_base64_padding():
+    cursor = _encode_owner_cursor({Chain.SOLANA: 2, Chain.ETHEREUM: "abc"})
+    assert cursor is not None and cursor.endswith("=")
+    assert _decode_owner_cursor(cursor.rstrip("=")) == _decode_owner_cursor(cursor)
