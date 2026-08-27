@@ -96,6 +96,10 @@ MOCK_SOLANA_ASSET_RESPONSE = {
         "json_uri": "https://example.com/metadata/solana.json",
     },
     "grouping": [],
+    "ownership": {
+        "ownership_model": "single",
+        "owner": "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM",
+    },
     "mutable": False,
     "burnt": False,
 }
@@ -407,6 +411,7 @@ def test_get_simplehash_nfts_by_ids_solana(mock_httpx_client, mock_settings):
 
 
 def test_get_simplehash_nfts_by_ids(mock_httpx_client, mock_settings):
+    # EVM NFTs carry no ownership; brave-core skips a null owners list
     mock_response = {
         "nfts": [MOCK_NFT_ALCHEMY_RESPONSE],
     }
@@ -421,6 +426,7 @@ def test_get_simplehash_nfts_by_ids(mock_httpx_client, mock_settings):
     sh_response = SimpleHashNFTResponse.model_validate(data)
     # Should get 2 NFTs - one from Ethereum and one from Polygon
     assert len(sh_response.nfts) == 2
+    assert all(nft.owners is None for nft in sh_response.nfts)
 
 
 def test_get_simplehash_nfts_by_ids_handles_invalid_input(
@@ -1150,3 +1156,36 @@ def test_owner_cursor_decodes_without_base64_padding():
     cursor = _encode_owner_cursor({Chain.SOLANA: 2, Chain.ETHEREUM: "abc"})
     assert cursor is not None and cursor.endswith("=")
     assert _decode_owner_cursor(cursor.rstrip("=")) == _decode_owner_cursor(cursor)
+
+
+def test_solana_nfts_carry_their_owner(mock_httpx_client, mock_settings):
+    mock_httpx_client.post.side_effect = _create_mock_post_side_effect(
+        None, {"result": [MOCK_SOLANA_ASSET_RESPONSE]}
+    )
+    response = client.get("/simplehash/api/v0/nfts/assets?nft_ids=solana.mint123")
+    assert response.status_code == 200
+    nft = SimpleHashNFTResponse.model_validate(response.json()).nfts[0]
+    assert nft.owners is not None
+    assert [(o.owner_address, o.quantity) for o in nft.owners] == [
+        ("9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM", 1)
+    ]
+
+
+@pytest.mark.parametrize(
+    ("ownership", "expected"),
+    [
+        (None, None),
+        ({"ownership_model": "token", "owner": "9WzD"}, None),
+        ({"ownership_model": "single", "owner": None}, None),
+    ],
+)
+def test_solana_owners_are_unknown_unless_single_owner(
+    mock_httpx_client, mock_settings, ownership, expected
+):
+    asset = {**MOCK_SOLANA_ASSET_RESPONSE, "ownership": ownership}
+    mock_httpx_client.post.side_effect = _create_mock_post_side_effect(
+        None, {"result": [asset]}
+    )
+    response = client.get("/simplehash/api/v0/nfts/assets?nft_ids=solana.mint123")
+    assert response.status_code == 200
+    assert response.json()["nfts"][0]["owners"] == expected

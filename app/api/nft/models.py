@@ -163,6 +163,11 @@ class SimpleHashExtraMetadata(BaseModel):
     metadata_original_url: str | None = None
 
 
+class SimpleHashOwner(BaseModel):
+    owner_address: str
+    quantity: int
+
+
 class SimpleHashNFT(BaseModel):
     chain: str
     contract_address: str
@@ -175,6 +180,9 @@ class SimpleHashNFT(BaseModel):
     contract: SimpleHashContract
     collection: SimpleHashCollection
     extra_metadata: SimpleHashExtraMetadata
+    # Current holders. Only known for Solana, where Alchemy's DAS reports
+    # ownership; EVM metadata carries none, so it stays None there.
+    owners: list[SimpleHashOwner] | None = None
 
     @field_validator("image_url")
     @classmethod
@@ -268,11 +276,22 @@ class SolanaAssetGrouping(BaseModel):
     collection_metadata: SolanaAssetGroupingCollectionMetadata | None = None
 
 
+class SolanaOwnershipModel(str, Enum):
+    SINGLE = "single"
+    TOKEN = "token"
+
+
+class SolanaAssetOwnership(BaseModel):
+    owner: str | None = None
+    ownership_model: SolanaOwnershipModel | str | None = None
+
+
 class SolanaAsset(BaseModel):
     interface: str
     id: str
     content: SolanaAssetContent | None = None
     grouping: list[SolanaAssetGrouping] = Field(default_factory=list)
+    ownership: SolanaAssetOwnership | None = None
     mutable: bool
     burnt: bool
 
