@@ -1,5 +1,7 @@
 import asyncio
+import base64
 import contextlib
+import json
 import logging
 from collections.abc import Awaitable, Iterable
 from itertools import batched
@@ -285,29 +287,89 @@ def _transform_solana_assets(assets: Iterable[SolanaAsset]) -> list[SimpleHashNF
     ]
 
 
+def _encode_owner_cursor(page_keys: dict[Chain, str | int]) -> str | None:
+    """Pack each chain's page key into one opaque cursor, keyed by network id.
+
+    Returns None when no chain has a further page, which ends pagination.
+    """
+    if not page_keys:
+        return None
+    by_network = {chain.alchemy_id: key for chain, key in page_keys.items()}
+    raw = json.dumps(by_network, separators=(",", ":"), sort_keys=True).encode()
+    return base64.urlsafe_b64encode(raw).decode()
+
+
+def _decode_owner_cursor(cursor: str) -> dict[str, str | int] | None:
+    """Unpack a cursor produced by _encode_owner_cursor, or None if it is not one."""
+    padded = cursor + "=" * (-len(cursor) % 4)  # tolerate stripped padding
+    try:
+        page_keys = json.loads(base64.urlsafe_b64decode(padded.encode()))
+    except ValueError:  # includes binascii.Error and JSONDecodeError
+        return None
+    if not isinstance(page_keys, dict):
+        return None
+    return page_keys
+
+
+def _resolve_owner_page_keys(
+    cursor: str | None, requested_chains: list[Chain]
+) -> dict[Chain, str | int | None]:
+    """Decide which chains an owner lookup queries, and with which page key.
+
+    A fresh lookup queries every requested chain from its first page. A
+    cursor from a previous response narrows that to the chains that still
+    have pages, each with its own key: an Alchemy pageKey for EVM chains and
+    a 1-based page number for Solana.
+    """
+    if cursor is None:
+        return dict.fromkeys(requested_chains)
+
+    decoded = _decode_owner_cursor(cursor)
+    if decoded is None:
+        # A raw Alchemy page key from before per-chain cursors: apply it to
+        # every EVM chain as the old shared cursor did. Solana pages are
+        # integers, so it cannot apply there. Drop once no client can still
+        # hold a cursor issued before this shipped.
+        return {chain: cursor for chain in requested_chains if chain != Chain.SOLANA}
+
+    page_keys: dict[Chain, str | int | None] = {}
+    for chain in requested_chains:
+        if chain.alchemy_id not in decoded:
+            continue
+        key = decoded[chain.alchemy_id]
+        try:
+            page_keys[chain] = int(key) if chain == Chain.SOLANA else str(key)
+        except TypeError, ValueError:
+            raise HTTPException(status_code=400, detail="Invalid cursor") from None
+    return page_keys
+
+
 async def _get_solana_assets_by_owner(
     client: httpx.AsyncClient,
     semaphore: asyncio.Semaphore,
     wallet_address: str,
-    page_key: str | None,
+    page_key: str | int | None,
     page_size: int,
-) -> tuple[list[SimpleHashNFT], str | None]:
-    """Fetch one page of a wallet's Solana assets via Alchemy's DAS getAssetsByOwner."""
+) -> tuple[list[SimpleHashNFT], int | None]:
+    """Fetch one page of a wallet's Solana assets via Alchemy's DAS getAssetsByOwner.
+
+    DAS pages are 1-based integers; a full page means there may be another.
+    """
+    page = int(page_key) if page_key else 1
     params = {
         "ownerAddress": wallet_address,
+        "page": page,
         "limit": page_size,
         "options": {
             "showUnverifiedCollections": False,
             "showCollectionMetadata": True,
         },
     }
-    if page_key:
-        params["page"] = page_key
-
     result = await _solana_rpc(client, "getAssetsByOwner", params, semaphore=semaphore)
     solana_response = SolanaAssetResponse.model_validate(result)
     nfts = _transform_solana_assets(solana_response.items)
-    return nfts, page_key + 1 if page_key else None
+    next_page = page + 1 if len(solana_response.items) >= page_size else None
+    return nfts, next_page
 
 
 async def _get_nfts_for_owner(
@@ -315,7 +377,7 @@ async def _get_nfts_for_owner(
     semaphore: asyncio.Semaphore,
     chain: Chain,
     wallet_address: str,
-    page_key: str | None,
+    page_key: str | int | None,
     page_size: int,
 ) -> tuple[list[SimpleHashNFT], str | None]:
     """Fetch one page of a wallet's NFTs on an EVM chain via Alchemy's getNFTsForOwner."""
@@ -326,7 +388,7 @@ async def _get_nfts_for_owner(
         withMetadata=True,
     )
     if page_key:
-        params = params.set("pageKey", page_key)
+        params = params.set("pageKey", str(page_key))
 
     json_response = await _alchemy_json(
         client.get(url, params=params),
@@ -348,7 +410,9 @@ async def get_nfts_by_owner(
     chains: list[str] = Query(
         ..., description="List of chains to fetch NFTs from in format coin.chain_id"
     ),
-    page_key: str | None = Query(None, description="Page key for pagination"),
+    page_key: str | None = Query(
+        None, description="Cursor from a previous response, to fetch the next page"
+    ),
     page_size: int = Query(
         ALCHEMY_NFT_OWNER_PAGE_SIZE, description="Number of NFTs to fetch per page"
     ),
@@ -367,36 +431,35 @@ async def get_nfts_by_owner(
         if chain and chain.has_nft_support:
             requested_chains.append(chain)
 
+    # Each chain paginates on its own; a cursor narrows the lookup to the
+    # chains that still have pages
+    page_keys = _resolve_owner_page_keys(page_key, requested_chains)
+
     # Fetch every chain's page concurrently; gather keeps request order
     async with create_http_client() as client:
         semaphore = asyncio.Semaphore(ALCHEMY_NFT_MAX_CONCURRENT_REQUESTS)
         fetches = []
-        for chain in requested_chains:
+        for chain, chain_page_key in page_keys.items():
             if chain == Chain.SOLANA:
                 fetch = _get_solana_assets_by_owner(
                     client,
                     semaphore,
                     wallet_address,
-                    page_key,
+                    chain_page_key,
                     min(page_size, ALCHEMY_SOLANA_OWNER_PAGE_SIZE),
                 )
             else:
                 fetch = _get_nfts_for_owner(
-                    client, semaphore, chain, wallet_address, page_key, page_size
+                    client, semaphore, chain, wallet_address, chain_page_key, page_size
                 )
             fetches.append(fetch)
         results = await asyncio.gather(*fetches)
 
-    nfts = []
-    next_page_key = None
-    for chain, (chain_nfts, chain_page_key) in zip(requested_chains, results):
-        nfts.extend(chain_nfts)
-        # One cursor is shared across chains: the last chain with a page key
-        # wins, and Solana always sets it. Per-chain cursors are a follow-up.
-        if chain == Chain.SOLANA or chain_page_key:
-            next_page_key = chain_page_key
-
-    return SimpleHashNFTResponse(next_cursor=next_page_key, nfts=nfts)
+    nfts = [nft for chain_nfts, _ in results for nft in chain_nfts]
+    next_page_keys = {chain: key for chain, (_, key) in zip(page_keys, results) if key}
+    return SimpleHashNFTResponse(
+        next_cursor=_encode_owner_cursor(next_page_keys), nfts=nfts
+    )
 
 
 async def _get_solana_assets(

@@ -231,7 +231,7 @@ class SolanaAssetContentLink(BaseModel):
 
 
 class SolanaAssetContentMetadata(BaseModel, AttributesValidationMixin):
-    name: str
+    name: str | None = None
     symbol: str | None = None
     description: str | None = None
     attributes: list[TraitAttribute] = Field(default_factory=list)
