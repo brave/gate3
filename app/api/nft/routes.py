@@ -20,10 +20,13 @@ from app.api.nft.models import (
     SimpleHashExtraMetadata,
     SimpleHashNFT,
     SimpleHashNFTResponse,
+    SimpleHashOwner,
     SimpleHashTokenType,
     SolanaAsset,
     SolanaAssetMerkleProof,
+    SolanaAssetOwnership,
     SolanaAssetResponse,
+    SolanaOwnershipModel,
     TraitAttribute,
 )
 from app.config import settings
@@ -195,7 +198,27 @@ def _transform_alchemy_to_simplehash(
         contract=contract_info,
         collection=collection,
         extra_metadata=extra_metadata,
+        # Alchemy's EVM metadata carries no ownership
+        owners=None,
     )
+
+
+def _solana_owners(
+    ownership: SolanaAssetOwnership | None,
+) -> list[SimpleHashOwner] | None:
+    """Current holders of a Solana asset, in the SimpleHash owners shape.
+
+    DAS names one owner for the "single" ownership model. Other models
+    (token editions) carry no per-holder amounts, so holders are unknown
+    and the result is None, which consumers treat as "skip" rather than 0.
+    """
+    if (
+        ownership
+        and ownership.ownership_model == SolanaOwnershipModel.SINGLE
+        and ownership.owner
+    ):
+        return [SimpleHashOwner(owner_address=ownership.owner, quantity=1)]
+    return None
 
 
 def _transform_solana_asset_to_simplehash(asset: SolanaAsset) -> SimpleHashNFT:
@@ -255,6 +278,7 @@ def _transform_solana_asset_to_simplehash(asset: SolanaAsset) -> SimpleHashNFT:
             animation_original_url=None,
             metadata_original_url=asset.content.json_uri,
         ),
+        owners=_solana_owners(asset.ownership),
     )
 
 
