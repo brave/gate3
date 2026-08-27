@@ -3,9 +3,10 @@ import base64
 import contextlib
 import json
 import logging
+import time
 from collections.abc import Awaitable, Iterable
-from typing import NoReturn
 from itertools import batched
+from typing import NoReturn
 
 import httpx
 from fastapi import APIRouter, HTTPException, Path, Query
@@ -13,6 +14,11 @@ from fastapi import APIRouter, HTTPException, Path, Query
 from app.api.common.annotations import SPAM_FILTER_DESCRIPTION
 from app.api.common.models import Chain, Coin, Tags
 from app.api.common.utils import is_evm_address, is_solana_address
+from app.api.nft.metrics import (
+    record_batch_size,
+    record_owner_page,
+    record_upstream_request,
+)
 from app.api.nft.models import (
     AlchemyNFT,
     AlchemyNFTResponse,
@@ -73,10 +79,19 @@ async def _alchemy_json(
     logs, error trackers, or clients. When a semaphore is given, the request
     is awaited while holding it, so concurrent fan-outs stay bounded. Each
     call gets ALCHEMY_NFT_CALL_TIMEOUT of wall-clock time, counted after the
-    semaphore is acquired.
+    semaphore is acquired, and is recorded in the Alchemy upstream metrics.
     """
 
-    def fail(reason: str) -> NoReturn:
+    def record(status: str) -> None:
+        record_upstream_request(
+            method=method,
+            network=chain.alchemy_id,
+            status=status,
+            duration=time.monotonic() - started,
+        )
+
+    def fail(status: str, reason: str) -> NoReturn:
+        record(status)
         logger.warning("Alchemy %s on %s %s", method, chain.alchemy_id, reason)
         raise HTTPException(
             status_code=502, detail="Upstream NFT provider error"
@@ -84,15 +99,21 @@ async def _alchemy_json(
 
     try:
         async with semaphore if semaphore else contextlib.nullcontext():
+            # Time the upstream call only, not the wait for a semaphore slot
+            started = time.monotonic()
             async with asyncio.timeout(ALCHEMY_NFT_CALL_TIMEOUT):
                 response = await request
         response.raise_for_status()
     except TimeoutError:
-        fail(f"timed out after {ALCHEMY_NFT_CALL_TIMEOUT:.0f}s")
+        fail("TimeoutError", f"timed out after {ALCHEMY_NFT_CALL_TIMEOUT:.0f}s")
     except httpx.HTTPStatusError as exc:
-        fail(f"failed with HTTP {exc.response.status_code}")
+        fail(
+            str(exc.response.status_code),
+            f"failed with HTTP {exc.response.status_code}",
+        )
     except httpx.HTTPError as exc:
-        fail(f"failed: {type(exc).__name__}")
+        fail(type(exc).__name__, f"failed: {type(exc).__name__}")
+    record(str(response.status_code))
     return response.json()
 
 
@@ -498,6 +519,8 @@ async def get_nfts_by_owner(
         results = await asyncio.gather(*fetches, return_exceptions=True)
 
     pages = _skip_failed_chains(page_keys, results)
+    for chain, (chain_nfts, _) in pages.items():
+        record_owner_page(network=chain.alchemy_id, nfts=chain_nfts)
     nfts = [nft for chain_nfts, _ in pages.values() for nft in chain_nfts]
     if spam != NFTSpamFilter.ALL:
         # Filter on gate3's own verdict: Solana spam is a gate3 heuristic, and
@@ -539,6 +562,9 @@ async def _get_solana_assets(
     client: httpx.AsyncClient, semaphore: asyncio.Semaphore, asset_ids: list[str]
 ) -> list[SimpleHashNFT]:
     """Fetch and transform Solana assets by id via Alchemy's DAS getAssets."""
+    record_batch_size(
+        method="getAssets", network=Chain.SOLANA.alchemy_id, size=len(asset_ids)
+    )
     result = await _solana_rpc(
         client, "getAssets", {"ids": asset_ids}, semaphore=semaphore
     )
@@ -563,6 +589,9 @@ async def _get_nft_metadata_batch(
         {"contractAddress": contract_address, "tokenId": token_id}
         for contract_address, token_id in batch
     ]
+    record_batch_size(
+        method="getNFTMetadataBatch", network=chain.alchemy_id, size=len(tokens)
+    )
     json_response = await _alchemy_json(
         client.post(url, json={"tokens": tokens}),
         chain=chain,

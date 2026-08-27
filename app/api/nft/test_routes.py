@@ -1333,3 +1333,95 @@ def test_alchemy_call_times_out_as_502_without_key(
     assert response.status_code == 502
     assert "Alchemy getNFTsForOwner on eth-mainnet timed out after 0s" in caplog.text
     assert "test_key" not in caplog.text
+
+
+def test_alchemy_upstream_metrics_record_success_and_batch_size(
+    mock_httpx_client, mock_settings, metric_value
+):
+    labels = {"method": "getNFTMetadataBatch", "network": "polygon-mainnet"}
+
+    def snapshot():
+        return (
+            metric_value("alchemy_nft_upstream_requests_total", **labels, status="200"),
+            metric_value("alchemy_nft_upstream_duration_seconds_count", **labels),
+            metric_value("alchemy_nft_batch_size_count", **labels),
+            metric_value("alchemy_nft_batch_size_sum", **labels),
+        )
+
+    ok, durations, batches, batch_sum = snapshot()
+    mock_httpx_client.post.side_effect = _create_mock_post_side_effect(
+        {"nfts": [MOCK_NFT_ALCHEMY_RESPONSE]}, None
+    )
+    ids = ",".join(f"eth.0x89.0x789.{token_id}" for token_id in range(150))
+    response = client.get(f"/api/nft/v1/getNFTsByIds?ids={ids}")
+    assert response.status_code == 200
+
+    # Two batches (100 + 50) -> two successful timed calls, 150 tokens in total
+    assert snapshot() == (ok + 2, durations + 2, batches + 2, batch_sum + 150)
+
+
+def test_alchemy_upstream_metrics_record_http_and_transport_failures(
+    mock_httpx_client, mock_settings, metric_value
+):
+    def requests(status):
+        return metric_value(
+            "alchemy_nft_upstream_requests_total",
+            method="getNFTsForOwner",
+            network="eth-mainnet",
+            status=status,
+        )
+
+    before_400, before_connect = requests("400"), requests("ConnectError")
+
+    url = "https://eth-mainnet.g.alchemy.com/nft/v3/test_key/getNFTsForOwner"
+    mock_httpx_client.get.return_value = _create_mock_response(status_code=400)
+    mock_httpx_client.get.return_value.raise_for_status.side_effect = (
+        _http_status_error(url, 400)
+    )
+    response = client.get(
+        "/api/nft/v1/getNFTsForOwner?wallet_address=0x123&chains=eth.0x1"
+    )
+    assert response.status_code == 502
+    assert requests("400") == before_400 + 1
+
+    mock_httpx_client.get.side_effect = httpx.ConnectError("boom")
+    response = client.get(
+        "/api/nft/v1/getNFTsForOwner?wallet_address=0x123&chains=eth.0x1"
+    )
+    assert response.status_code == 502
+    assert requests("ConnectError") == before_connect + 1
+
+
+def test_owner_page_metrics_split_spam_from_real_nfts(
+    mock_httpx_client, mock_settings, metric_value
+):
+    def page(spam):
+        return (
+            metric_value("nft_owner_page_nfts_count", network="eth-mainnet", spam=spam),
+            metric_value("nft_owner_page_nfts_sum", network="eth-mainnet", spam=spam),
+        )
+
+    real_pages, real_sum = page("false")
+    spam_pages, spam_sum = page("true")
+
+    spam_nft: dict[str, Any] = copy.deepcopy(MOCK_NFT_ALCHEMY_RESPONSE)
+    spam_nft["contract"]["isSpam"] = True
+    mock_httpx_client.get.return_value = _create_mock_response(
+        json_data={
+            "ownedNfts": [
+                MOCK_NFT_ALCHEMY_RESPONSE,
+                MOCK_NFT_ALCHEMY_RESPONSE,
+                spam_nft,
+            ],
+            "totalCount": 3,
+            "pageKey": None,
+        }
+    )
+    response = client.get(
+        "/api/nft/v1/getNFTsForOwner?wallet_address=0x123&chains=eth.0x1"
+    )
+    assert response.status_code == 200
+
+    # One page observed on each series: 2 real NFTs, 1 spam
+    assert page("false") == (real_pages + 1, real_sum + 2)
+    assert page("true") == (spam_pages + 1, spam_sum + 1)
