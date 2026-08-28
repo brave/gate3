@@ -644,8 +644,10 @@ async def get_nfts_by_ids(
             continue
 
         if chain == Chain.SOLANA:  # Solana chain ID
-            # Skip malformed Solana IDs that don't have exactly 3 parts
-            if len(parts) != 3:
+            # Skip malformed Solana IDs that don't have exactly 3 parts, and
+            # addresses that aren't base58 pubkeys: Alchemy rejects the whole
+            # getAssets batch with "Pubkey Validation Err" (Sentry GATE3-3Q)
+            if len(parts) != 3 or not is_solana_address(parts[-1]):
                 continue
             solana_nfts.append(parts[-1])
         else:
