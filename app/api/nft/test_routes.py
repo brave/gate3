@@ -415,6 +415,21 @@ def test_get_simplehash_nfts_by_ids_solana(mock_httpx_client, mock_settings):
     assert len(sh_response.nfts) == 1
 
 
+def test_get_simplehash_nfts_by_ids_solana_without_metadata_name(
+    mock_httpx_client, mock_settings
+):
+    # Sentry GATE3-3P: DAS returns content.metadata as {} for some assets
+    nameless: dict[str, Any] = copy.deepcopy(MOCK_SOLANA_ASSET_RESPONSE)
+    nameless["content"]["metadata"] = {}
+    mock_httpx_client.post.return_value.json.return_value = {"result": [nameless]}
+
+    response = client.get("/simplehash/api/v0/nfts/assets?nft_ids=solana.mint123")
+    assert response.status_code == 200
+    sh_response = SimpleHashNFTResponse.model_validate(response.json())
+    assert len(sh_response.nfts) == 1
+    assert sh_response.nfts[0].name is None
+
+
 def test_get_simplehash_nfts_by_ids(mock_httpx_client, mock_settings):
     # EVM NFTs carry no ownership; brave-core skips a null owners list
     mock_response = {
