@@ -408,7 +408,9 @@ def test_get_simplehash_nfts_by_ids_solana(mock_httpx_client, mock_settings):
 
     mock_httpx_client.post.return_value.json.return_value = mock_response
 
-    response = client.get("/simplehash/api/v0/nfts/assets?nft_ids=solana.mint123")
+    response = client.get(
+        f"/simplehash/api/v0/nfts/assets?nft_ids=solana.{MOCK_SPL_TOKEN_MINT_ADDRESS}"
+    )
     assert response.status_code == 200
     data = response.json()
     sh_response = SimpleHashNFTResponse.model_validate(data)
@@ -423,11 +425,42 @@ def test_get_simplehash_nfts_by_ids_solana_without_metadata_name(
     nameless["content"]["metadata"] = {}
     mock_httpx_client.post.return_value.json.return_value = {"result": [nameless]}
 
-    response = client.get("/simplehash/api/v0/nfts/assets?nft_ids=solana.mint123")
+    response = client.get(
+        f"/simplehash/api/v0/nfts/assets?nft_ids=solana.{MOCK_SPL_TOKEN_MINT_ADDRESS}"
+    )
     assert response.status_code == 200
     sh_response = SimpleHashNFTResponse.model_validate(response.json())
     assert len(sh_response.nfts) == 1
     assert sh_response.nfts[0].name is None
+
+
+def test_get_simplehash_nfts_by_ids_skips_non_base58_solana_ids(
+    mock_httpx_client, mock_settings
+):
+    # Sentry GATE3-3Q: Alchemy rejects the whole getAssets batch with
+    # "Pubkey Validation Err" when any id is not a base58 pubkey
+    bad_id = (
+        "0x1668E0FB0Dd39e54fE33f80a9F37c4dBF172E1b"
+        "0x1668E0FB0Dd39e54fE33f80a9F37c4dBF172E1b11"
+    )
+    mock_httpx_client.post.return_value.json.return_value = {
+        "result": [MOCK_SOLANA_ASSET_RESPONSE]
+    }
+
+    response = client.get(f"/simplehash/api/v0/nfts/assets?nft_ids=solana.{bad_id}")
+    assert response.status_code == 200
+    assert response.json()["nfts"] == []
+    mock_httpx_client.post.assert_not_called()
+
+    response = client.get(
+        "/simplehash/api/v0/nfts/assets"
+        f"?nft_ids=solana.{bad_id},solana.{MOCK_SPL_TOKEN_MINT_ADDRESS}"
+    )
+    assert response.status_code == 200
+    assert len(response.json()["nfts"]) == 1
+    assert mock_httpx_client.post.call_args.kwargs["json"]["params"] == {
+        "ids": [MOCK_SPL_TOKEN_MINT_ADDRESS]
+    }
 
 
 def test_get_simplehash_nfts_by_ids(mock_httpx_client, mock_settings):
@@ -490,20 +523,23 @@ def test_get_nfts_by_ids_handles_malformed_input_gracefully(
     # - Missing token_id: eth.0x1.0xabc. (should be skipped)
     # - Empty string: (empty) (should be skipped)
     # - Invalid chain ID: eth.0x999.0xinvalid (should be skipped)
-    # - Valid Solana ID: sol.0x65.0xdef123 (should be processed as valid)
+    # - Valid Solana ID: sol.0x65.<mint> (should be processed as valid)
     # - Malformed Solana ID: sol.0x65. (missing address, should be skipped)
-    # - Malformed Solana ID: sol.0x65.0xdef123.extra (too many parts, should be skipped)
-    # - Invalid Solana chain ID: sol.0x999.0xdef123 (invalid chain ID, should be skipped)
+    # - Malformed Solana ID: sol.0x65.<mint>.extra (too many parts, should be skipped)
+    # - Invalid Solana chain ID: sol.0x999.<mint> (invalid chain ID, should be skipped)
+    # - Non-base58 Solana address: sol.0x65.0xdef123 (should be skipped)
+    mint = MOCK_SPL_TOKEN_MINT_ADDRESS
     response = client.get(
         "/api/nft/v1/getNFTsByIds?ids="
         "eth.0x1.0x123.456,"
         "eth.0x1.0x789.101112,"
         "eth.0x1.0xabc.,"
         "eth.0x999.0xinvalid,"
-        "sol.0x65.0xdef123,"
+        f"sol.0x65.{mint},"
         "sol.0x65.,"
-        "sol.0x65.0xdef123.extra,"
-        "sol.0x999.0xdef123"
+        f"sol.0x65.{mint}.extra,"
+        f"sol.0x999.{mint},"
+        "sol.0x65.0xdef123"
     )
 
     # Should not crash - should return 200 with valid NFTs
@@ -670,7 +706,7 @@ def test_get_nfts_by_ids_handles_none_values_in_response(
     )
 
     response = client.get(
-        "/simplehash/api/v0/nfts/assets?nft_ids=solana.mint123,ethereum.0x123.456"
+        f"/simplehash/api/v0/nfts/assets?nft_ids=solana.{MOCK_SPL_TOKEN_MINT_ADDRESS},ethereum.0x123.456"
     )
     assert response.status_code == 200
     data = response.json()
@@ -928,7 +964,7 @@ def test_get_nfts_by_ids_fetches_chains_and_batches_concurrently(
     mock_httpx_client.post.side_effect = post
 
     ids = ",".join(
-        ["sol.0x65.0xdef123"]
+        [f"sol.0x65.{MOCK_SPL_TOKEN_MINT_ADDRESS}"]
         + [f"eth.0x1.0x123.{token_id}" for token_id in range(101)]
         + ["eth.0x89.0x789.1"]
     )
@@ -1182,7 +1218,9 @@ def test_solana_nfts_carry_their_owner(mock_httpx_client, mock_settings):
     mock_httpx_client.post.side_effect = _create_mock_post_side_effect(
         None, {"result": [MOCK_SOLANA_ASSET_RESPONSE]}
     )
-    response = client.get("/simplehash/api/v0/nfts/assets?nft_ids=solana.mint123")
+    response = client.get(
+        f"/simplehash/api/v0/nfts/assets?nft_ids=solana.{MOCK_SPL_TOKEN_MINT_ADDRESS}"
+    )
     assert response.status_code == 200
     nft = SimpleHashNFTResponse.model_validate(response.json()).nfts[0]
     assert nft.owners is not None
@@ -1206,7 +1244,9 @@ def test_solana_owners_are_unknown_unless_single_owner(
     mock_httpx_client.post.side_effect = _create_mock_post_side_effect(
         None, {"result": [asset]}
     )
-    response = client.get("/simplehash/api/v0/nfts/assets?nft_ids=solana.mint123")
+    response = client.get(
+        f"/simplehash/api/v0/nfts/assets?nft_ids=solana.{MOCK_SPL_TOKEN_MINT_ADDRESS}"
+    )
     assert response.status_code == 200
     assert response.json()["nfts"][0]["owners"] == expected
 
