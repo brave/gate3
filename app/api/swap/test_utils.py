@@ -463,6 +463,28 @@ async def test_get_all_indicative_routes_raises_swap_error_when_no_clients():
 
 
 @pytest.mark.asyncio
+async def test_get_all_indicative_routes_raises_unsupported_network_for_disabled_chain():
+    """An empty client list caused by the kill switch must not be reported as
+    UNSUPPORTED_TOKENS: that message tells the user to check their token pair,
+    which is misleading when the real reason is that we disabled the network.
+    """
+    request = create_mock_request()
+    request.destination_coin = Chain.ZCASH.coin
+    request.destination_chain_id = Chain.ZCASH.chain_id
+
+    with patch(
+        "app.api.swap.utils.get_supported_provider_clients",
+        new_callable=AsyncMock,
+        return_value=[],  # As returned for a disabled chain
+    ):
+        with pytest.raises(SwapError) as exc_info:
+            await get_all_indicative_routes(request, token_manager=None)
+
+    assert exc_info.value.kind == SwapErrorKind.UNSUPPORTED_NETWORK
+    assert "temporarily unavailable" in exc_info.value.message
+
+
+@pytest.mark.asyncio
 async def test_get_all_indicative_routes_raises_swap_error_when_empty_routes_no_exceptions():
     """When clients return empty routes with no exceptions, raise SwapError with UNSUPPORTED_TOKENS."""
     mock_client = AsyncMock()

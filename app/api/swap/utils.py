@@ -220,6 +220,11 @@ async def get_all_indicative_routes(
     clients = await get_supported_provider_clients(request, token_manager)
 
     if not clients:
+        if is_swap_disabled_chain(request):
+            raise SwapError(
+                message="Swaps are temporarily unavailable for this network",
+                kind=SwapErrorKind.UNSUPPORTED_NETWORK,
+            )
         raise SwapError(
             message="No provider supports this swap. Please check your token pair and chains.",
             kind=SwapErrorKind.UNSUPPORTED_TOKENS,
