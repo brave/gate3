@@ -81,6 +81,12 @@ class BaseSwapProvider(ABC):
     async def has_support(self, request: SwapSupportRequest) -> bool:
         """Check if provider supports the requested swap parameters.
 
+        Note: this is a capability check only. It does not account for
+        app/api/swap/utils.py::is_swap_disabled_chain, the chain-level kill
+        switch. Callers should go through get_provider_client_for_request or
+        get_supported_provider_clients rather than calling this directly, so
+        a disabled chain can't slip through.
+
         Args:
             request: The swap support request
 
