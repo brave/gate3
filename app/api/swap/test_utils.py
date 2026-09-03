@@ -2,7 +2,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from app.api.common.models import Coin
+from app.api.common.models import Chain, Coin
 from app.api.swap.constants import DEFAULT_SLIPPAGE_PERCENTAGE
 from app.api.swap.models import (
     NetworkFee,
@@ -15,12 +15,15 @@ from app.api.swap.models import (
     SwapRouteStep,
     SwapStepToken,
     SwapTool,
+    SwapSupportRequest,
     SwapType,
 )
 from app.api.swap.utils import (
     apply_default_slippage,
     get_all_indicative_routes,
     get_provider_client_for_request,
+    get_supported_provider_clients,
+    is_swap_disabled_chain,
     sort_routes,
 )
 
@@ -532,3 +535,71 @@ def test_apply_default_slippage_normalizes_empty(
     apply_default_slippage(provider, request)
 
     assert request.slippage_percentage == expected
+
+
+def create_support_request(
+    source_chain: Chain = Chain.ETHEREUM,
+    destination_chain: Chain = Chain.SOLANA,
+) -> SwapSupportRequest:
+    return SwapSupportRequest(
+        source_coin=source_chain.coin,
+        source_chain_id=source_chain.chain_id,
+        source_token_address=None,
+        destination_coin=destination_chain.coin,
+        destination_chain_id=destination_chain.chain_id,
+        destination_token_address=None,
+    )
+
+
+@pytest.mark.parametrize(
+    "source_chain,destination_chain,expected",
+    [
+        # Zcash is currently in SWAP_DISABLED_CHAINS; either side tripping it
+        # is enough, checked independently
+        (Chain.ETHEREUM, Chain.ZCASH, True),
+        (Chain.ZCASH, Chain.ETHEREUM, True),
+        # Everything else is unaffected
+        (Chain.ETHEREUM, Chain.SOLANA, False),
+    ],
+)
+def test_is_swap_disabled_chain(source_chain, destination_chain, expected):
+    request = create_support_request(source_chain, destination_chain)
+    assert is_swap_disabled_chain(request) == expected
+
+
+@pytest.mark.asyncio
+async def test_no_providers_returned_for_disabled_chain():
+    """The support endpoint must offer nothing at all for a disabled chain."""
+    request = create_support_request(Chain.ETHEREUM, Chain.ZCASH)
+
+    with patch("app.api.swap.utils.get_provider_client") as mock_get_client:
+        clients = await get_supported_provider_clients(request, AsyncMock())
+
+    assert clients == []
+    # Short-circuits before any provider is even instantiated
+    mock_get_client.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_explicit_provider_quote_rejected_for_disabled_chain():
+    """An explicit-provider quote must fail even if the provider supports it."""
+    request = create_mock_request()
+    request.provider = SwapProviderEnum.NEAR_INTENTS
+    request.destination_coin = Chain.ZCASH.coin
+    request.destination_chain_id = Chain.ZCASH.chain_id
+
+    mock_client = AsyncMock()
+    mock_client.has_support = AsyncMock(return_value=True)
+
+    with (
+        patch(
+            "app.api.swap.utils.get_provider_client",
+            AsyncMock(return_value=mock_client),
+        ),
+        pytest.raises(SwapError) as exc_info,
+    ):
+        await get_provider_client_for_request(request, AsyncMock())
+
+    assert exc_info.value.kind == SwapErrorKind.UNSUPPORTED_NETWORK
+    # The kill switch wins over the provider's own capability check
+    mock_client.has_support.assert_not_called()

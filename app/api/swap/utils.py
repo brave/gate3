@@ -4,7 +4,7 @@ import time
 
 from app.api.tokens.manager import TokenManager
 
-from .constants import DEFAULT_SLIPPAGE_PERCENTAGE
+from .constants import DEFAULT_SLIPPAGE_PERCENTAGE, SWAP_DISABLED_CHAINS
 from .metrics import record_provider_error, record_quote_metrics
 from .models import (
     RoutePriority,
@@ -24,6 +24,18 @@ from .providers.squid.client import SquidClient
 from .providers.zero_ex.client import ZeroExClient
 
 logger = logging.getLogger(__name__)
+
+
+def is_swap_disabled_chain(request: SwapSupportRequest) -> bool:
+    """Whether either side of the swap touches a chain we have turned off.
+
+    This is a kill switch, not a capability check: the providers may well
+    support the pair. See SWAP_DISABLED_CHAINS for why a chain is listed.
+    """
+    return (
+        request.source_chain in SWAP_DISABLED_CHAINS
+        or request.destination_chain in SWAP_DISABLED_CHAINS
+    )
 
 
 async def get_provider_client(
@@ -110,6 +122,11 @@ async def get_provider_client_for_request(
         destination_token_address=request.destination_token_address,
         recipient=request.recipient,
     )
+    if is_swap_disabled_chain(support_request):
+        raise SwapError(
+            message="Swaps are temporarily unavailable for this network",
+            kind=SwapErrorKind.UNSUPPORTED_NETWORK,
+        )
     if not await client.has_support(support_request):
         raise SwapError(
             message=f"Provider {request.provider.value} does not support this swap",
@@ -155,6 +172,9 @@ async def get_supported_provider_clients(
 
     """
     supported_clients: list[BaseSwapProvider] = []
+
+    if is_swap_disabled_chain(request):
+        return supported_clients
 
     for provider in SwapProviderEnum:
         if provider == SwapProviderEnum.AUTO:
