@@ -6,7 +6,7 @@ import logging
 import time
 from collections.abc import Awaitable, Iterable
 from itertools import batched
-from typing import NoReturn
+from typing import Any, NoReturn
 
 import httpx
 from fastapi import APIRouter, HTTPException, Path, Query
@@ -349,7 +349,7 @@ def _encode_owner_cursor(page_keys: dict[Chain, str | int]) -> str | None:
     return base64.urlsafe_b64encode(raw).decode()
 
 
-def _decode_owner_cursor(cursor: str) -> dict[str, str | int] | None:
+def _decode_owner_cursor(cursor: str) -> dict[str, Any] | None:
     """Unpack a cursor produced by _encode_owner_cursor, or None if it is not one."""
     padded = cursor + "=" * (-len(cursor) % 4)  # tolerate stripped padding
     try:
@@ -387,10 +387,15 @@ def _resolve_owner_page_keys(
         if chain.alchemy_id not in decoded:
             continue
         key = decoded[chain.alchemy_id]
-        try:
-            page_keys[chain] = int(key) if chain == Chain.SOLANA else str(key)
-        except TypeError, ValueError:
-            raise HTTPException(status_code=400, detail="Invalid cursor") from None
+        if chain == Chain.SOLANA:
+            try:
+                key = int(key)
+            except TypeError, ValueError, OverflowError:  # OverflowError: 1e1000
+                raise HTTPException(status_code=400, detail="Invalid cursor") from None
+        elif not isinstance(key, str):
+            # Alchemy page keys are strings; str({}) == "{}" would 400 upstream
+            raise HTTPException(status_code=400, detail="Invalid cursor")
+        page_keys[chain] = key
     return page_keys
 
 

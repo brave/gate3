@@ -1146,15 +1146,28 @@ def test_get_nfts_by_owner_treats_undecodable_cursor_as_legacy_page_key(
     mock_httpx_client.post.assert_not_called()
 
 
+@pytest.mark.parametrize("page", ["later", float("inf")])
 def test_get_nfts_by_owner_rejects_non_numeric_solana_page(
-    mock_httpx_client, mock_settings
+    mock_httpx_client, mock_settings, page
 ):
-    cursor = _encode_owner_cursor({Chain.SOLANA: "later"})
+    cursor = _encode_owner_cursor({Chain.SOLANA: page})
     response = client.get(
         f"/api/nft/v1/getNFTsForOwner?wallet_address=mint123&chains=sol.0x65&page_key={cursor}"
     )
     assert response.status_code == 400
     mock_httpx_client.post.assert_not_called()
+
+
+@pytest.mark.parametrize("key", [{}, [], 123, None])
+def test_get_nfts_by_owner_rejects_non_string_evm_page_key(
+    mock_httpx_client, mock_settings, key
+):
+    cursor = _encode_owner_cursor({Chain.ETHEREUM: key})
+    response = client.get(
+        f"/api/nft/v1/getNFTsForOwner?wallet_address=0x123&chains=eth.0x1&page_key={cursor}"
+    )
+    assert response.status_code == 400
+    mock_httpx_client.get.assert_not_called()
 
 
 def test_solana_asset_without_metadata_name_is_still_returned(
