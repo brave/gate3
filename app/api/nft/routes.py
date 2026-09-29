@@ -483,7 +483,8 @@ async def get_nfts_by_owner(
 
     requested_chains = []
     for chain_str in chains:
-        coin, chain_id = chain_str.split(".")
+        # Malformed ids (no dot, extra parts) match no chain and are skipped
+        coin, _, chain_id = chain_str.partition(".")
         chain = Chain.get(coin, chain_id)
         if chain and chain.has_nft_support:
             requested_chains.append(chain)

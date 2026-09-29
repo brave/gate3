@@ -235,6 +235,18 @@ def test_get_nfts_by_owner_invalid_chain(mock_settings):
     assert len(data["nfts"]) == 0
 
 
+@pytest.mark.parametrize("chains", ["eth.0x1.x", "eth", ""])
+def test_get_nfts_by_owner_skips_malformed_chain(
+    mock_httpx_client, mock_settings, chains
+):
+    response = client.get(
+        f"/api/nft/v1/getNFTsForOwner?wallet_address=0x123&chains={chains}"
+    )
+    assert response.status_code == 200
+    assert response.json()["nfts"] == []
+    mock_httpx_client.get.assert_not_called()
+
+
 def test_get_nfts_by_owner_missing_api_key(mock_settings):
     # Override settings to simulate missing API key
     mock_settings.ALCHEMY_API_KEY = None
