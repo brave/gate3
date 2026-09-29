@@ -2,6 +2,19 @@
 
 from urllib.parse import parse_qs, urlencode, urlparse
 
+# Request kwargs for bodies that are not a JSON object; token endpoints that
+# read a JSON body must reject each with a 400.
+INVALID_JSON_OBJECT_BODIES = [
+    {"data": {"grant_type": "authorization_code", "code": "c"}},
+    {"content": b""},
+    {"content": b"not json"},
+    {"json": ["not", "an", "object"]},
+    # Non-finite numbers parse in Python but httpx cannot forward them
+    {"content": b'{"code": NaN}'},
+    {"content": b'{"code": -Infinity}'},
+    {"content": b'{"code": 1e1000}'},
+]
+
 
 def assert_redirect(
     actual_redirect_url: str,

@@ -5,7 +5,7 @@ from starlette.datastructures import URL
 
 from app.api.common.models import Tags
 from app.api.oauth.models import Environment
-from app.api.oauth.utils import set_query_params
+from app.api.oauth.utils import read_json_object, set_query_params
 from app.config import settings
 
 router = APIRouter(prefix="/bitflyer", tags=[Tags.OAUTH])
@@ -50,7 +50,7 @@ async def token(environment: Environment, request: Request) -> JSONResponse:
 
     url = f"{str(env_config.oauth_url).rstrip('/')}/api/link/v1/token"
 
-    body = await request.json()
+    body = await read_json_object(request)
     body["client_id"] = env_config.client_id
     body["client_secret"] = env_config.client_secret
 
