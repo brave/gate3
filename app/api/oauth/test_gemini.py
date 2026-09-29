@@ -5,7 +5,7 @@ import pytest
 import respx
 from fastapi.testclient import TestClient
 
-from app.api.oauth.test_helpers import assert_redirect
+from app.api.oauth.test_helpers import INVALID_JSON_OBJECT_BODIES, assert_redirect
 from app.main import app
 
 client = TestClient(app)
@@ -133,3 +133,15 @@ def test_gemini_token_exchange_error():
 
     # Should forward the error status code
     assert response.status_code == 418
+
+
+@pytest.mark.parametrize("kwargs", INVALID_JSON_OBJECT_BODIES)
+@respx.mock
+def test_gemini_token_rejects_non_json_object_body(kwargs):
+    """Non-JSON or non-object bodies return 400 without calling Gemini."""
+    route = respx.post("https://oauth.sandbox.gemini.test/auth/token")
+
+    response = client.post("/api/oauth/gemini/sandbox/token", **kwargs)
+
+    assert response.status_code == 400
+    assert not route.called
