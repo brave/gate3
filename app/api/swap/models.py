@@ -513,11 +513,18 @@ class SwapQuote(SwapBaseModel):
 
 class SwapStatusResponse(SwapBaseModel):
     status: SwapStatus = Field(description="Current status of the swap")
-    internal_status: str | None = Field(
-        default=None,
+    internal_status: str = Field(
+        default="",
         description="Provider-specific status of the swap",
     )
-    explorer_url: str | None = Field(
-        default=None,
+    explorer_url: str = Field(
+        default="",
         description="Block explorer URL for the swap transaction",
     )
+
+    # brave-core declares both fields as required strings, so a null fails
+    # parsing of the whole status response.
+    @field_validator("internal_status", "explorer_url", mode="before")
+    @classmethod
+    def none_to_empty_string(cls, v: str | None) -> str:
+        return "" if v is None else v
