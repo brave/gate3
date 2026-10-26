@@ -472,10 +472,16 @@ async def test_get_all_indicative_routes_raises_unsupported_network_for_disabled
     request.destination_coin = Chain.ZCASH.coin
     request.destination_chain_id = Chain.ZCASH.chain_id
 
-    with patch(
-        "app.api.swap.utils.get_supported_provider_clients",
-        new_callable=AsyncMock,
-        return_value=[],  # As returned for a disabled chain
+    with (
+        patch(
+            "app.api.swap.utils.SWAP_DISABLED_CHAINS",
+            frozenset({Chain.ZCASH}),
+        ),
+        patch(
+            "app.api.swap.utils.get_supported_provider_clients",
+            new_callable=AsyncMock,
+            return_value=[],  # As returned for a disabled chain
+        ),
     ):
         with pytest.raises(SwapError) as exc_info:
             await get_all_indicative_routes(request, token_manager=None)
@@ -576,10 +582,8 @@ def create_support_request(
 @pytest.mark.parametrize(
     "source_chain,destination_chain,expected",
     [
-        # Zcash is currently in SWAP_DISABLED_CHAINS; either side tripping it
-        # is enough, checked independently
-        (Chain.ETHEREUM, Chain.ZCASH, True),
-        (Chain.ZCASH, Chain.ETHEREUM, True),
+        (Chain.ETHEREUM, Chain.ZCASH, False),
+        (Chain.ZCASH, Chain.ETHEREUM, False),
         # Everything else is unaffected
         (Chain.ETHEREUM, Chain.SOLANA, False),
     ],
@@ -594,8 +598,12 @@ async def test_no_providers_returned_for_disabled_chain():
     """The support endpoint must offer nothing at all for a disabled chain."""
     request = create_support_request(Chain.ETHEREUM, Chain.ZCASH)
 
-    with patch("app.api.swap.utils.get_provider_client") as mock_get_client:
-        clients = await get_supported_provider_clients(request, AsyncMock())
+    with patch(
+        "app.api.swap.utils.SWAP_DISABLED_CHAINS",
+        frozenset({Chain.ZCASH}),
+    ):
+        with patch("app.api.swap.utils.get_provider_client") as mock_get_client:
+            clients = await get_supported_provider_clients(request, AsyncMock())
 
     assert clients == []
     # Short-circuits before any provider is even instantiated
@@ -614,6 +622,10 @@ async def test_explicit_provider_quote_rejected_for_disabled_chain():
     mock_client.has_support = AsyncMock(return_value=True)
 
     with (
+        patch(
+            "app.api.swap.utils.SWAP_DISABLED_CHAINS",
+            frozenset({Chain.ZCASH}),
+        ),
         patch(
             "app.api.swap.utils.get_provider_client",
             AsyncMock(return_value=mock_client),
