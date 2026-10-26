@@ -1090,7 +1090,7 @@ async def test_get_status_success(
     # Verify response
     assert result.status == SwapStatus.SUCCESS
     assert result.internal_status == "SUCCESS"
-    assert result.explorer_url is None
+    assert result.explorer_url == ""
 
 
 @pytest.mark.asyncio

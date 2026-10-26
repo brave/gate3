@@ -10,6 +10,8 @@ from app.api.swap.models import (
     SwapProviderEnum,
     SwapRoute,
     SwapRouteStep,
+    SwapStatus,
+    SwapStatusResponse,
     SwapStepToken,
     SwapTool,
 )
@@ -338,3 +340,40 @@ def test_indicative_quote_does_not_default_slippage_for_auto_slippage_providers(
 
     # Verify slippage was NOT defaulted (remains None)
     assert request_arg.slippage_percentage is None
+
+
+def test_status_response_has_no_nulls(mock_token_manager, mock_provider_client):
+    # brave-core fails to parse the whole response on a null field, e.g. a
+    # NEAR Intents swap still waiting for its destination payout.
+    mock_provider_client.get_status = AsyncMock(
+        return_value=SwapStatusResponse(
+            status=SwapStatus.PENDING,
+            internal_status=None,
+            explorer_url=None,
+        )
+    )
+
+    with patch(
+        "app.api.swap.routes.get_provider_client",
+        AsyncMock(return_value=mock_provider_client),
+    ):
+        response = client.post(
+            "/api/swap/v1/status",
+            json={
+                "routeId": "test-route-id",
+                "txHash": "test_hash",
+                "sourceCoin": "ETH",
+                "sourceChainId": "0x2105",
+                "destinationCoin": "ZEC",
+                "destinationChainId": "zcash_mainnet",
+                "depositAddress": "0x16fC8503EFEdFCB36781A378b45103B7C2f3C966",
+                "provider": "NEAR_INTENTS",
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "PENDING",
+        "internalStatus": "",
+        "explorerUrl": "",
+    }

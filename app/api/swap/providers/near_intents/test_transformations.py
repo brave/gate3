@@ -16,9 +16,10 @@ from .transformations import from_near_intents_status
             Chain.BITCOIN.chain_id,
             "https://www.blockchain.com/explorer/transactions/btc/dest_hash",
         ),
-        # No destination tx yet (pending/processing) -> no URL
-        ({"destinationChainTxHashes": []}, Chain.BITCOIN.chain_id, None),
-        ({}, Chain.BITCOIN.chain_id, None),
+        # No destination tx yet (pending/processing) -> no URL, as an empty
+        # string since brave-core rejects a null
+        ({"destinationChainTxHashes": []}, Chain.BITCOIN.chain_id, ""),
+        ({}, Chain.BITCOIN.chain_id, ""),
         # Unknown chain falls back to the explorer URL reported by NEAR Intents
         (
             {
