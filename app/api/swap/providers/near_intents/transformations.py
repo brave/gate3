@@ -1,5 +1,5 @@
 import uuid
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 
 from app.api.common.evm.gas import estimate_gas_limit
 from app.api.common.models import Chain, Coin, TokenInfo, TokenSource, TokenType
@@ -27,6 +27,8 @@ from .constants import (
     EVM_GAS_LIMIT_ERC20_TRANSFER,
     EVM_GAS_LIMIT_NATIVE_TRANSFER,
     NEAR_INTENTS_TOOL,
+    QUOTE_DEADLINE,
+    QUOTE_DEADLINE_BY_SOURCE_CHAIN,
 )
 from .models import (
     NearIntentsDepositMode,
@@ -121,9 +123,10 @@ def to_near_intents_request(
         amount=request.amount,
         refund_to=request.refund_to,
         recipient=request.recipient,
-        deadline=(datetime.now(UTC) + timedelta(minutes=10)).strftime(
-            "%Y-%m-%dT%H:%M:%SZ",
-        ),  # ISO 8601 format with Z suffix (UTC)
+        deadline=(
+            datetime.now(UTC)
+            + QUOTE_DEADLINE_BY_SOURCE_CHAIN.get(request.source_chain, QUOTE_DEADLINE)
+        ).strftime("%Y-%m-%dT%H:%M:%SZ"),  # ISO 8601 format with Z suffix (UTC)
     )
 
 
