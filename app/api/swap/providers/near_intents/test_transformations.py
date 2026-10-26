@@ -96,3 +96,29 @@ def test_to_near_intents_request_deadline_by_source_chain(
         < remaining
         <= timedelta(minutes=expected_minutes)
     )
+
+
+def test_from_near_intents_status_refund_links_source_chain():
+    response = NearIntentsStatusResponse.model_validate(
+        {
+            "status": "REFUNDED",
+            "swapDetails": {
+                "destinationChainTxHashes": [{"hash": "refund_hash", "explorerUrl": ""}]
+            },
+        }
+    )
+    request = SwapStatusRequest(
+        route_id="test-route-id",
+        tx_hash="test_hash",
+        source_coin=Chain.ZCASH.coin,
+        source_chain_id=Chain.ZCASH.chain_id,
+        destination_coin=Chain.OPTIMISM.coin,
+        destination_chain_id=Chain.OPTIMISM.chain_id,
+        deposit_address="t1hBhUcAdtMnnixpDsp8tpYQWMQ3Sxh9fJH",
+        provider=SwapProviderEnum.NEAR_INTENTS,
+    )
+
+    assert (
+        from_near_intents_status(response, request).explorer_url
+        == "https://3xpl.com/zcash/transaction/refund_hash"
+    )

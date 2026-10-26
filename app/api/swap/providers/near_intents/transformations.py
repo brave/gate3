@@ -393,7 +393,13 @@ def from_near_intents_status(
     explorer_url = None
     if txs := response.swap_details.destination_chain_tx_hashes:
         tx = txs[0]
-        chain = Chain.get(request.destination_coin.value, request.destination_chain_id)
+        # NEAR reports a refund here too, but it is paid on the source chain.
+        if response.status == "REFUNDED":
+            chain = Chain.get(request.source_coin.value, request.source_chain_id)
+        else:
+            chain = Chain.get(
+                request.destination_coin.value, request.destination_chain_id
+            )
         explorer_url = (
             chain.tx_explorer_url(tx.hash) if chain else None
         ) or tx.explorer_url
