@@ -1,7 +1,8 @@
 import asyncio
 import logging
-import subprocess
+import tomllib
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 import sentry_sdk
 from fastapi import FastAPI
@@ -30,9 +31,8 @@ logger = logging.getLogger(__name__)
 # Keep full wallet addresses and other PII out of uvicorn access logs.
 install_access_log_sanitizer()
 
-version = subprocess.run(
-    ["poetry", "version", "--short"], capture_output=True, text=True, check=True
-).stdout.strip()
+with (Path(__file__).resolve().parents[1] / "pyproject.toml").open("rb") as f:
+    version = tomllib.load(f)["project"]["version"]
 
 sentry_sdk.init(
     dsn=settings.SENTRY_DSN,
