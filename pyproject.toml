@@ -21,23 +21,21 @@ dependencies = [
 ]
 
 
-[build-system]
-requires = ["poetry-core>=2.0.0,<3.0.0"]
-build-backend = "poetry.core.masonry.api"
+[tool.uv]
+# Exclude packages published in the last 3 days during resolution
+# (supply-chain protection against freshly-uploaded malicious releases)
+exclude-newer = "3 days"
 
-[tool.poetry]
-package-mode = false
-
-[tool.poetry.requires-plugins]
-poethepoet = { version = "~0.38.0", extras = ["poetry_plugin"]}
-
-[tool.poetry.group.dev.dependencies]
-ruff = "0.15.20"
-ty = "0.0.89"
-pytest = "9.2.0"
-pytest-asyncio = "1.4.0"
-pytest-cov = "7.1.0"
-respx = "0.23.1"
+[dependency-groups]
+dev = [
+    "ruff==0.15.20",
+    "ty==0.0.89",
+    "pytest==9.2.0",
+    "pytest-asyncio==1.4.0",
+    "pytest-cov==7.1.0",
+    "respx==0.23.1",
+    "poethepoet==0.38.0",
+]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
@@ -72,9 +70,6 @@ unsupported-operator = "warn"
 include = ["**/test_*.py", "**/tests/**"]
 [tool.ty.overrides.rules]
 invalid-method-override = "warn"
-
-[tool.poe]
-poetry_command = ""
 
 [tool.poe.tasks]
 format = { shell = "ruff check --select I --fix . && ruff check --fix . && ruff format" }

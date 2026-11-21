@@ -12,7 +12,7 @@ A FastAPI-based gateway service for web3 applications at Brave.
 ## Prerequisites
 
 - Python 3.14 or higher
-- Poetry for dependency management
+- [uv](https://docs.astral.sh/uv/) for dependency management
 - Redis server
 
 ## Development
@@ -25,14 +25,14 @@ A FastAPI-based gateway service for web3 applications at Brave.
     cd gate3
     ```
 
-2. Install dependencies using Poetry:
+2. Install dependencies using uv:
     ```bash
-    poetry install
+    uv sync
     ```
 
 3. Run unit tests
     ```bash
-    poetry run pytest
+    uv run pytest
     ```
 
 4. Run Redis server
@@ -43,13 +43,13 @@ A FastAPI-based gateway service for web3 applications at Brave.
 
 5. Run the development server using FastAPI:
     ```bash
-    poetry run fastapi dev
+    uv run fastapi dev
     ```
 
 6. Format code
 
     ```bash
-    poetry format
+    uv run poe format
     ```
 
 ### Monitoring
