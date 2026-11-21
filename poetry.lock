@@ -45,14 +45,14 @@ trio = ["trio (>=0.32.0)"]
 
 [[package]]
 name = "cachetools"
-version = "7.1.7"
+version = "7.3.2"
 description = "Extensible memoizing collections and decorators"
 optional = false
 python-versions = ">=3.10"
 groups = ["main"]
 files = [
-    {file = "cachetools-7.1.7-py3-none-any.whl", hash = "sha256:ef98ef375ad188819ef2f9b3645e3987f4b8c5b7550e436ad998c2de78296df0"},
-    {file = "cachetools-7.1.7.tar.gz", hash = "sha256:a3e2a00b14d8f8a6b70c1dae7b4685e7ad3bc965c5b42124a2d6ce895da6cf50"},
+    {file = "cachetools-7.3.2-py3-none-any.whl", hash = "sha256:afb4b563cb37e7a121a6ea45a0deec42916c64eed58875cc15d8cf9eaca89fb2"},
+    {file = "cachetools-7.3.2.tar.gz", hash = "sha256:43e5db663b58c4337a9959069d93f54dd2e065fdd0438a504cd1100fbeb48beb"},
 ]
 
 [[package]]
@@ -2551,4 +2551,4 @@ files = [
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.14"
-content-hash = "3783a4fc97aeb8b3eeb865e9f80fed9b574e7e24b9d5da607bc0f96e22f5c43f"
+content-hash = "b452b18957d096f5f550f04b19fde52f79fe28ed3e2950d692d5d7ebe7586e5f"
